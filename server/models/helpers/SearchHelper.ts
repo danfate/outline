@@ -313,34 +313,30 @@ export default class SearchHelper {
     if (options.dateFilter) {
       dateFilter = `1 ${options.dateFilter}`;
     }
-
+    const keywords = `${"'" + query + "'"}`;
     // Build the SQL query to get documentIds, ranking, and search term context
     const whereClause = `
-    "searchVector" @@ to_tsquery('english', :query) AND
+    (text &@~ ${keywords} OR title &@~ ${keywords}) AND
     "teamId" = :teamId AND
-    ${
-      collectionIds.length
+    ${collectionIds.length
         ? `(
           "collectionId" IN(:collectionIds) OR
           ("collectionId" IS NULL AND "createdById" = :userId)
         ) AND`
         : '"collectionId" IS NULL AND "createdById" = :userId AND'
-    }
-    ${
-      options.dateFilter ? '"updatedAt" > now() - interval :dateFilter AND' : ""
-    }
-    ${
-      options.collaboratorIds
+      }
+    ${options.dateFilter ? '"updatedAt" > now() - interval :dateFilter AND' : ""
+      }
+    ${options.collaboratorIds
         ? '"collaboratorIds" @> ARRAY[:collaboratorIds]::uuid[] AND'
         : ""
-    }
+      }
     ${options.includeArchived ? "" : '"archivedAt" IS NULL AND'}
     "deletedAt" IS NULL AND
-    ${
-      options.includeDrafts
+    ${options.includeDrafts
         ? '("publishedAt" IS NOT NULL OR "createdById" = :userId)'
         : '"publishedAt" IS NOT NULL'
-    }
+      }
   `;
     const selectSql = `
   SELECT
