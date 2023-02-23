@@ -223,13 +223,12 @@ export default class SearchHelper {
 
     const where = await this.buildWhere(user, options);
 
-    where[Op.and].push(
-      Sequelize.fn(
-        `"searchVector" @@ to_tsquery`,
-        "english",
-        Sequelize.literal(":query")
-      )
-    );
+    const keywords = `${"'" + query + "'"}`;
+    const whereClause = `
+    (text &@~ ${keywords} OR title &@~ ${keywords})
+    `;
+    
+    where[Op.and].push(Sequelize.literal(whereClause));
 
     const queryReplacements = {
       query: this.webSearchQuery(query),
