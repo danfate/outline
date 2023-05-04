@@ -20,6 +20,7 @@ import {
   AllowNull,
   AfterUpdate,
 } from "sequelize-typescript";
+import { TeamPreferenceDefaults } from "@shared/constants";
 import {
   CollectionPermission,
   TeamPreference,
@@ -136,10 +137,6 @@ class Team extends ParanoidModel {
   @Column
   memberCollectionCreate: boolean;
 
-  @Default(true)
-  @Column
-  collaborativeEditing: boolean;
-
   @Default("member")
   @IsIn([["viewer", "member"]])
   @Column
@@ -200,15 +197,15 @@ class Team extends ParanoidModel {
   };
 
   /**
-   * Returns the passed preference value
+   * Returns the value of the given preference.
    *
-   * @param preference The user preference to retrieve
-   * @param fallback An optional fallback value, defaults to false.
-   * @returns The preference value if set, else undefined
+   * @param preference The team preference to retrieve
+   * @returns The preference value if set, else the default value
    */
-  public getPreference = (preference: TeamPreference, fallback = false) => {
-    return this.preferences?.[preference] ?? fallback;
-  };
+  public getPreference = (preference: TeamPreference) =>
+    this.preferences?.[preference] ??
+    TeamPreferenceDefaults[preference] ??
+    false;
 
   provisionFirstCollection = async (userId: string) => {
     await this.sequelize!.transaction(async (transaction) => {
@@ -255,7 +252,9 @@ class Team extends ParanoidModel {
           },
           { transaction }
         );
-        await document.publish(collection.createdById, { transaction });
+        await document.publish(collection.createdById, collection.id, {
+          transaction,
+        });
       }
     });
   };

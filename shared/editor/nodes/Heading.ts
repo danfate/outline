@@ -15,6 +15,7 @@ import toggleBlockType from "../commands/toggleBlockType";
 import { Command } from "../lib/Extension";
 import headingToSlug, { headingToPersistenceKey } from "../lib/headingToSlug";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
+import { FoldingHeadersPlugin } from "../plugins/FoldingHeaders";
 import Node from "./Node";
 
 export default class Heading extends Node {
@@ -57,9 +58,7 @@ export default class Heading extends Node {
           anchor.innerText = "#";
           anchor.type = "button";
           anchor.className = "heading-anchor";
-          anchor.addEventListener("click", (event) =>
-            this.handleCopyLink(event)
-          );
+          anchor.addEventListener("click", this.handleCopyLink);
 
           fold = document.createElement("button");
           fold.innerText = "";
@@ -114,9 +113,8 @@ export default class Heading extends Node {
   }
 
   commands({ type, schema }: { type: NodeType; schema: Schema }) {
-    return (attrs: Record<string, any>) => {
-      return toggleBlockType(type, schema.nodes.paragraph, attrs);
-    };
+    return (attrs: Record<string, any>) =>
+      toggleBlockType(type, schema.nodes.paragraph, attrs);
   }
 
   handleFoldContent = (event: MouseEvent) => {
@@ -181,8 +179,10 @@ export default class Heading extends Node {
 
     // the existing url might contain a hash already, lets make sure to remove
     // that rather than appending another one.
-    const urlWithoutHash = window.location.href.split("#")[0];
-    copy(urlWithoutHash + hash);
+    const normalizedUrl = window.location.href
+      .split("#")[0]
+      .replace("/edit", "");
+    copy(normalizedUrl + hash);
 
     this.options.onShowToast(this.options.dictionary.linkCopied);
   };
@@ -256,19 +256,16 @@ export default class Heading extends Node {
 
     const plugin: Plugin = new Plugin({
       state: {
-        init: (config, state) => {
-          return getAnchors(state.doc);
-        },
-        apply: (tr, oldState) => {
-          return tr.docChanged ? getAnchors(tr.doc) : oldState;
-        },
+        init: (config, state) => getAnchors(state.doc),
+        apply: (tr, oldState) =>
+          tr.docChanged ? getAnchors(tr.doc) : oldState,
       },
       props: {
         decorations: (state) => plugin.getState(state),
       },
     });
 
-    return [plugin];
+    return [new FoldingHeadersPlugin(this.editor.props.id), plugin];
   }
 
   inputRules({ type }: { type: NodeType }) {

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory, useRouteMatch } from "react-router-dom";
 import styled from "styled-components";
+import { s } from "@shared/styles";
 import User from "~/models/User";
 import Avatar from "~/components/Avatar";
 import { useDocumentContext } from "~/components/DocumentContext";
@@ -16,7 +17,7 @@ import Time from "~/components/Time";
 import useKeyDown from "~/hooks/useKeyDown";
 import useStores from "~/hooks/useStores";
 import useTextSelection from "~/hooks/useTextSelection";
-import { documentUrl } from "~/utils/routeHelpers";
+import { documentPath } from "~/utils/routeHelpers";
 import Sidebar from "./SidebarLayout";
 
 function Insights() {
@@ -33,7 +34,7 @@ function Insights() {
 
   const onCloseInsights = () => {
     if (document) {
-      history.push(documentUrl(document));
+      history.push(documentPath(document));
     }
   };
 
@@ -83,7 +84,7 @@ function Insights() {
             </Text>
           </Content>
           <Content column>
-            <Heading>{t("Collaborators")}</Heading>
+            <Heading>{t("Contributors")}</Heading>
             <Text type="secondary" size="small">
               {t(`Created`)} <Time dateTime={document.createdAt} addSuffix />.
               <br />
@@ -92,7 +93,7 @@ function Insights() {
             </Text>
             <ListSpacing>
               <PaginatedList
-                aria-label={t("Collaborators")}
+                aria-label={t("Contributors")}
                 items={document.collaborators}
                 renderItem={(model: User) => (
                   <ListItem
@@ -179,7 +180,7 @@ const List = styled("ul")`
     content: "·";
     display: inline-block;
     font-weight: 600;
-    color: ${(props) => props.theme.textTertiary};
+    color: ${s("textTertiary")};
     width: 10px;
   }
 `;

@@ -1,10 +1,5 @@
 import { observer } from "mobx-react";
-import {
-  EditIcon,
-  PrintIcon,
-  NewDocumentIcon,
-  RestoreIcon,
-} from "outline-icons";
+import { EditIcon, NewDocumentIcon, RestoreIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
@@ -12,6 +7,7 @@ import { useMenuState, MenuButton, MenuButtonHTMLProps } from "reakit/Menu";
 import { VisuallyHidden } from "reakit/VisuallyHidden";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import { s, ellipsis } from "@shared/styles";
 import { getEventFiles } from "@shared/utils/files";
 import Document from "~/models/Document";
 import ContextMenu from "~/components/ContextMenu";
@@ -40,6 +36,8 @@ import {
   openDocumentInsights,
   publishDocument,
   unpublishDocument,
+  printDocument,
+  openDocumentComments,
 } from "~/actions/definitions/documents";
 import useActionContext from "~/hooks/useActionContext";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
@@ -49,7 +47,7 @@ import useRequest from "~/hooks/useRequest";
 import useStores from "~/hooks/useStores";
 import useToasts from "~/hooks/useToasts";
 import { MenuItem } from "~/types";
-import { editDocumentUrl, newDocumentPath } from "~/utils/routeHelpers";
+import { documentEditPath, newDocumentPath } from "~/utils/routeHelpers";
 
 type Props = {
   document: Document;
@@ -125,19 +123,16 @@ function DocumentMenu({
     [showToast, t, document]
   );
 
-  const handlePrint = React.useCallback(() => {
-    menu.hide();
-    window.print();
-  }, [menu]);
-
-  const collection = collections.get(document.collectionId);
+  const collection = document.collectionId
+    ? collections.get(document.collectionId)
+    : undefined;
   const can = usePolicy(document);
   const restoreItems = React.useMemo(
     () => [
       ...collections.orderedData.reduce<MenuItem[]>((filtered, collection) => {
         const can = policies.abilities(collection.id);
 
-        if (can.update) {
+        if (can.createDocument) {
           filtered.push({
             type: "button",
             onClick: (ev) =>
@@ -267,7 +262,7 @@ function DocumentMenu({
             {
               type: "route",
               title: t("Edit"),
-              to: editDocumentUrl(document),
+              to: documentEditPath(document),
               visible: !!can.update && !team.seamlessEditing,
               icon: <EditIcon />,
             },
@@ -291,16 +286,11 @@ function DocumentMenu({
             {
               type: "separator",
             },
-            actionToMenuItem(downloadDocument, context),
+            actionToMenuItem(openDocumentComments, context),
             actionToMenuItem(openDocumentHistory, context),
             actionToMenuItem(openDocumentInsights, context),
-            {
-              type: "button",
-              title: t("Print"),
-              onClick: handlePrint,
-              visible: !!showDisplayOptions,
-              icon: <PrintIcon />,
-            },
+            actionToMenuItem(downloadDocument, context),
+            actionToMenuItem(printDocument, context),
             {
               type: "separator",
             },
@@ -350,7 +340,7 @@ function DocumentMenu({
 const ToggleMenuItem = styled(Switch)`
   * {
     font-weight: normal;
-    color: ${(props) => props.theme.textSecondary};
+    color: ${s("textSecondary")};
   }
 `;
 
@@ -364,9 +354,7 @@ const Style = styled.div`
 `;
 
 const CollectionName = styled.div`
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  ${ellipsis()}
 `;
 
 export default observer(DocumentMenu);

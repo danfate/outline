@@ -4,6 +4,7 @@ import {
   Team,
   User,
   Collection,
+  Comment,
   Document,
   Group,
 } from "@server/models";
@@ -12,10 +13,10 @@ import "./apiKey";
 import "./attachment";
 import "./authenticationProvider";
 import "./collection";
+import "./comment";
 import "./document";
 import "./fileOperation";
 import "./integration";
-import "./notificationSetting";
 import "./pins";
 import "./searchQuery";
 import "./share";
@@ -47,9 +48,10 @@ export function serialize(
   model: User,
   target:
     | Attachment
+    | Collection
+    | Comment
     | FileOperation
     | Team
-    | Collection
     | Document
     | User
     | Group

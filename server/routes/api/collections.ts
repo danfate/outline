@@ -148,10 +148,25 @@ router.post("collections.info", auth(), async (ctx: APIContext) => {
   };
 });
 
+router.post("collections.documents", auth(), async (ctx: APIContext) => {
+  const { id } = ctx.request.body;
+  assertPresent(id, "id is required");
+  const { user } = ctx.state.auth;
+  const collection = await Collection.scope({
+    method: ["withMembership", user.id],
+  }).findByPk(id);
+
+  authorize(user, "readDocument", collection);
+
+  ctx.body = {
+    data: collection.documentStructure || [],
+  };
+});
+
 router.post(
   "collections.import",
-  auth(),
   rateLimiter(RateLimiterStrategy.TenPerHour),
+  auth(),
   async (ctx: APIContext) => {
     const {
       attachmentId,
@@ -549,8 +564,8 @@ router.post(
 
 router.post(
   "collections.export",
-  auth(),
   rateLimiter(RateLimiterStrategy.TenPerHour),
+  auth(),
   async (ctx: APIContext) => {
     const { id } = ctx.request.body;
     const { format = FileOperationFormat.MarkdownZip } = ctx.request.body;
@@ -567,16 +582,16 @@ router.post(
     }).findByPk(id);
     authorize(user, "read", collection);
 
-    const fileOperation = await sequelize.transaction(async (transaction) => {
-      return collectionExporter({
+    const fileOperation = await sequelize.transaction(async (transaction) =>
+      collectionExporter({
         collection,
         user,
         team,
         format,
         ip: ctx.request.ip,
         transaction,
-      });
-    });
+      })
+    );
 
     ctx.body = {
       success: true,
@@ -589,8 +604,8 @@ router.post(
 
 router.post(
   "collections.export_all",
-  auth(),
   rateLimiter(RateLimiterStrategy.FivePerHour),
+  auth(),
   async (ctx: APIContext) => {
     const { format = FileOperationFormat.MarkdownZip } = ctx.request.body;
     const { user } = ctx.state.auth;
@@ -599,15 +614,15 @@ router.post(
 
     assertIn(format, Object.values(FileOperationFormat), "Invalid format");
 
-    const fileOperation = await sequelize.transaction(async (transaction) => {
-      return collectionExporter({
+    const fileOperation = await sequelize.transaction(async (transaction) =>
+      collectionExporter({
         user,
         team,
         format,
         ip: ctx.request.ip,
         transaction,
-      });
-    });
+      })
+    );
 
     ctx.body = {
       success: true,
@@ -641,7 +656,7 @@ router.post("collections.update", auth(), async (ctx: APIContext) => {
   authorize(user, "update", collection);
 
   // we're making this collection have no default access, ensure that the
-  // current user has a read-write membership so that at least they can edit it
+  // current user has an admin membership so that at least they can manage it.
   if (
     permission !== CollectionPermission.ReadWrite &&
     collection.permission === CollectionPermission.ReadWrite
@@ -652,7 +667,7 @@ router.post("collections.update", auth(), async (ctx: APIContext) => {
         userId: user.id,
       },
       defaults: {
-        permission: CollectionPermission.ReadWrite,
+        permission: CollectionPermission.Admin,
         createdById: user.id,
       },
     });

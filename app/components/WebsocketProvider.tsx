@@ -6,6 +6,7 @@ import * as React from "react";
 import { io, Socket } from "socket.io-client";
 import RootStore from "~/stores/RootStore";
 import Collection from "~/models/Collection";
+import Comment from "~/models/Comment";
 import Document from "~/models/Document";
 import FileOperation from "~/models/FileOperation";
 import Group from "~/models/Group";
@@ -84,6 +85,7 @@ class WebsocketProvider extends React.Component<Props> {
       memberships,
       policies,
       presence,
+      comments,
       views,
       subscriptions,
       fileOperations,
@@ -173,7 +175,7 @@ class WebsocketProvider extends React.Component<Props> {
                 id: document.collectionId,
               });
 
-              if (!existing) {
+              if (!existing && document.collectionId) {
                 event.collectionIds.push({
                   id: document.collectionId,
                 });
@@ -194,7 +196,7 @@ class WebsocketProvider extends React.Component<Props> {
             }
 
             try {
-              await collections.fetch(collectionId, {
+              await collection?.fetchDocuments({
                 force: true,
               });
             } catch (err) {
@@ -261,6 +263,20 @@ class WebsocketProvider extends React.Component<Props> {
       }
     );
 
+    this.socket.on("comments.create", (event: PartialWithId<Comment>) => {
+      comments.add(event);
+    });
+
+    this.socket.on("comments.update", (event: PartialWithId<Comment>) => {
+      comments.add(event);
+    });
+
+    this.socket.on("comments.delete", (event: WebsocketEntityDeletedEvent) => {
+      comments.inThread(event.modelId).forEach((comment) => {
+        comments.remove(comment.id);
+      });
+    });
+
     this.socket.on("groups.create", (event: PartialWithId<Group>) => {
       groups.add(event);
     });
@@ -277,15 +293,23 @@ class WebsocketProvider extends React.Component<Props> {
       collections.add(event);
     });
 
+    this.socket.on("collections.update", (event: PartialWithId<Collection>) => {
+      collections.add(event);
+    });
+
     this.socket.on(
       "collections.delete",
       action((event: WebsocketEntityDeletedEvent) => {
         const collectionId = event.modelId;
         const deletedAt = new Date().toISOString();
-
         const deletedDocuments = documents.inCollection(collectionId);
         deletedDocuments.forEach((doc) => {
-          doc.deletedAt = deletedAt;
+          if (!doc.publishedAt) {
+            // draft is to be detached from collection, not deleted
+            doc.collectionId = null;
+          } else {
+            doc.deletedAt = deletedAt;
+          }
           policies.remove(doc.id);
         });
         documents.removeCollectionDocuments(collectionId);
@@ -322,6 +346,13 @@ class WebsocketProvider extends React.Component<Props> {
     this.socket.on("stars.delete", (event: WebsocketEntityDeletedEvent) => {
       stars.remove(event.modelId);
     });
+
+    this.socket.on(
+      "user.typing",
+      (event: { userId: string; documentId: string; commentId: string }) => {
+        comments.setTyping(event);
+      }
+    );
 
     // received when a user is given access to a collection
     // if the user is us then we go ahead and load the collection from API.

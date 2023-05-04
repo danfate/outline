@@ -20,16 +20,11 @@ export interface GetScaleToWindow {
   (data: { width: number; height: number; offset: number }): number;
 }
 
-export const getScaleToWindow: GetScaleToWindow = ({
-  height,
-  offset,
-  width,
-}) => {
-  return Math.min(
+export const getScaleToWindow: GetScaleToWindow = ({ height, offset, width }) =>
+  Math.min(
     (window.innerWidth - offset * 2) / width, // scale X-axis
     (window.innerHeight - offset * 2) / height // scale Y-axis
   );
-};
 
 export interface GetScaleToWindowMax {
   (data: {
@@ -81,6 +76,9 @@ export const getScale: GetScale = ({
   targetHeight,
   targetWidth,
 }) => {
+  if (!containerHeight || !containerWidth) {
+    return 1;
+  }
   return !hasScalableSrc && targetHeight && targetWidth
     ? getScaleToWindowMax({
         containerHeight,

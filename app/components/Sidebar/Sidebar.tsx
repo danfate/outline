@@ -5,7 +5,7 @@ import { Portal } from "react-portal";
 import { useLocation } from "react-router-dom";
 import styled, { useTheme } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
-import { depths } from "@shared/styles";
+import { depths, s } from "@shared/styles";
 import Flex from "~/components/Flex";
 import useMenuContext from "~/hooks/useMenuContext";
 import usePrevious from "~/hooks/usePrevious";
@@ -35,7 +35,6 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(
     const previousLocation = usePrevious(location);
     const { isMenuOpen } = useMenuContext();
     const { user } = auth;
-
     const width = ui.sidebarWidth;
     const collapsed = ui.sidebarIsClosed && !isMenuOpen;
     const maxWidth = theme.sidebarMaxWidth;
@@ -225,7 +224,7 @@ const Backdrop = styled.a`
   right: 0;
   cursor: default;
   z-index: ${depths.sidebar - 1};
-  background: ${(props) => props.theme.backdrop};
+  background: ${s("backdrop")};
 `;
 
 type ContainerProps = {
@@ -240,16 +239,16 @@ const Container = styled(Flex)<ContainerProps>`
   top: 0;
   bottom: 0;
   width: 100%;
-  background: ${(props) => props.theme.sidebarBackground};
+  background: ${s("sidebarBackground")};
   transition: box-shadow 100ms ease-in-out, transform 100ms ease-out,
-    ${(props) => props.theme.backgroundTransition}
+    ${s("backgroundTransition")}
       ${(props: ContainerProps) =>
         props.$isAnimating ? `,width ${ANIMATION_MS}ms ease-out` : ""};
   transform: translateX(
     ${(props) => (props.$mobileSidebarVisible ? 0 : "-100%")}
   );
   z-index: ${depths.sidebar};
-  max-width: 70%;
+  max-width: 80%;
   min-width: 280px;
   padding-top: ${Desktop.hasInsetTitlebar() ? 36 : 0}px;
   ${draggableOnDesktop()}

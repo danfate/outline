@@ -1,5 +1,5 @@
 import Token from "markdown-it/lib/token";
-import { WarningIcon, InfoIcon, StarredIcon } from "outline-icons";
+import { WarningIcon, InfoIcon, StarredIcon, DoneIcon } from "outline-icons";
 import { wrappingInputRule } from "prosemirror-inputrules";
 import { NodeSpec, Node as ProsemirrorNode, NodeType } from "prosemirror-model";
 import * as React from "react";
@@ -14,6 +14,7 @@ export default class Notice extends Node {
     return Object.entries({
       info: this.options.dictionary.info,
       warning: this.options.dictionary.warning,
+      success: this.options.dictionary.success,
       tip: this.options.dictionary.tip,
     });
   }
@@ -47,6 +48,28 @@ export default class Notice extends Node {
               ? "tip"
               : dom.className.includes("warning")
               ? "warning"
+              : dom.className.includes("success")
+              ? "success"
+              : undefined,
+          }),
+        },
+        // Quill editor parsing
+        {
+          tag: "div.ql-hint",
+          preserveWhitespace: "full",
+          getAttrs: (dom: HTMLDivElement) => ({
+            style: dom.dataset.hint,
+          }),
+        },
+        // GitBook parsing
+        {
+          tag: "div.alert.theme-admonition",
+          preserveWhitespace: "full",
+          getAttrs: (dom: HTMLDivElement) => ({
+            style: dom.className.includes("warning")
+              ? "warning"
+              : dom.className.includes("success")
+              ? "success"
               : undefined,
           }),
         },
@@ -72,11 +95,13 @@ export default class Notice extends Node {
           let component;
 
           if (node.attrs.style === "tip") {
-            component = <StarredIcon color="currentColor" />;
+            component = <StarredIcon />;
           } else if (node.attrs.style === "warning") {
-            component = <WarningIcon color="currentColor" />;
+            component = <WarningIcon />;
+          } else if (node.attrs.style === "success") {
+            component = <DoneIcon />;
           } else {
-            component = <InfoIcon color="currentColor" />;
+            component = <InfoIcon />;
           }
 
           icon = document.createElement("div");

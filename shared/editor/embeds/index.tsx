@@ -4,7 +4,7 @@ import styled from "styled-components";
 import { IntegrationType } from "../../types";
 import type { IntegrationSettings } from "../../types";
 import { urlRegex } from "../../utils/urls";
-import Image from "../components/Image";
+import Image from "../components/Img";
 import Abstract from "./Abstract";
 import Airtable from "./Airtable";
 import Berrycast from "./Berrycast";
@@ -20,11 +20,11 @@ import Framer from "./Framer";
 import Gist from "./Gist";
 import Gliffy from "./Gliffy";
 import GoogleCalendar from "./GoogleCalendar";
-import GoogleDataStudio from "./GoogleDataStudio";
 import GoogleDocs from "./GoogleDocs";
 import GoogleDrawings from "./GoogleDrawings";
 import GoogleDrive from "./GoogleDrive";
 import GoogleForms from "./GoogleForms";
+import GoogleLookerStudio from "./GoogleLookerStudio";
 import GoogleSheets from "./GoogleSheets";
 import GoogleSlides from "./GoogleSlides";
 import Grist from "./Grist";
@@ -248,10 +248,12 @@ const embeds: EmbedDescriptor[] = [
     component: GoogleCalendar,
   }),
   new EmbedDescriptor({
-    title: "Google Data Studio",
+    title: "Google Looker Studio",
     keywords: "bi business intelligence",
-    icon: <Img src="/images/google-datastudio.png" alt="Google Data Studio" />,
-    component: GoogleDataStudio,
+    icon: (
+      <Img src="/images/google-lookerstudio.png" alt="Google Looker Studio" />
+    ),
+    component: GoogleLookerStudio,
   }),
   new EmbedDescriptor({
     title: "Google Forms",
@@ -349,10 +351,9 @@ const embeds: EmbedDescriptor[] = [
     component: Spotify,
   }),
   new EmbedDescriptor({
-    title: "Tldraw",
+    title: "Tldraw (beta)",
     keywords: "draw schematics diagrams",
-    visible: false,
-    icon: <Img src="/images/tldraw.png" alt="Tldraw" />,
+    icon: <Img src="/images/tldraw.png" alt="Tldraw (beta)" />,
     component: Tldraw,
   }),
   new EmbedDescriptor({

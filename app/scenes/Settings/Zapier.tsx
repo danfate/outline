@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { Trans } from "react-i18next";
 import Heading from "~/components/Heading";
 import ZapierIcon from "~/components/Icons/ZapierIcon";
@@ -14,14 +14,14 @@ function Zapier() {
   const appName = env.APP_NAME;
 
   return (
-    <Scene title="Zapier" icon={<ZapierIcon color="currentColor" />}>
+    <Scene title="Zapier" icon={<ZapierIcon />}>
       <Heading>Zapier</Heading>
       <Helmet>
         <script
           type="module"
           src="https://cdn.zapier.com/packages/partner-sdk/v0/zapier-elements/zapier-elements.esm.js"
           key="zapier-js"
-        ></script>
+        />
         <link
           rel="stylesheet"
           href="https://cdn.zapier.com/packages/partner-sdk/v0/zapier-elements/zapier-elements.css"

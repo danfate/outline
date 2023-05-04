@@ -7,12 +7,9 @@ import { DefaultTheme } from "styled-components";
 export type PlainTextSerializer = (node: ProsemirrorNode) => string;
 
 export enum EventType {
-  blockMenuOpen = "blockMenuOpen",
-  blockMenuClose = "blockMenuClose",
-  emojiMenuOpen = "emojiMenuOpen",
-  emojiMenuClose = "emojiMenuClose",
-  linkMenuOpen = "linkMenuOpen",
-  linkMenuClose = "linkMenuClose",
+  SuggestionsMenuOpen = "suggestionMenuOpen",
+  SuggestionsMenuClose = "suggestionMenuClose",
+  LinkToolbarOpen = "linkMenuOpen",
 }
 
 export type MenuItem = {
@@ -26,6 +23,7 @@ export type MenuItem = {
   attrs?: Record<string, any>;
   visible?: boolean;
   active?: (state: EditorState) => boolean;
+  appendSpace?: boolean;
 };
 
 export type ComponentProps = {

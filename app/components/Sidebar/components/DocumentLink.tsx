@@ -76,18 +76,20 @@ function InnerDocumentLink(
     [collection, node]
   );
 
-  const showChildren = React.useMemo(() => {
-    return !!(
-      hasChildDocuments &&
-      activeDocument &&
-      collection &&
-      (collection
-        .pathToDocument(activeDocument.id)
-        .map((entry) => entry.id)
-        .includes(node.id) ||
-        isActiveDocument)
-    );
-  }, [hasChildDocuments, activeDocument, isActiveDocument, node, collection]);
+  const showChildren = React.useMemo(
+    () =>
+      !!(
+        hasChildDocuments &&
+        activeDocument &&
+        collection &&
+        (collection
+          .pathToDocument(activeDocument.id)
+          .map((entry) => entry.id)
+          .includes(node.id) ||
+          isActiveDocument)
+      ),
+    [hasChildDocuments, activeDocument, isActiveDocument, node, collection]
+  );
 
   const [expanded, setExpanded] = React.useState(showChildren);
 
@@ -121,16 +123,11 @@ function InnerDocumentLink(
       if (!document) {
         return;
       }
-      await documents.update(
-        {
-          id: document.id,
-          text: document.text,
-          title,
-        },
-        {
-          lastRevision: document.revision,
-        }
-      );
+      await documents.update({
+        id: document.id,
+        text: document.text,
+        title,
+      });
     },
     [documents, document]
   );

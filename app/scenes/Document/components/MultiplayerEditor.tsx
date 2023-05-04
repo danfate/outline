@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
+import MultiplayerExtension from "@shared/editor/extensions/Multiplayer";
 import Editor, { Props as EditorProps } from "~/components/Editor";
 import env from "~/env";
 import useCurrentToken from "~/hooks/useCurrentToken";
@@ -14,7 +15,6 @@ import useIsMounted from "~/hooks/useIsMounted";
 import usePageVisibility from "~/hooks/usePageVisibility";
 import useStores from "~/hooks/useStores";
 import useToasts from "~/hooks/useToasts";
-import MultiplayerExtension from "~/multiplayer/MultiplayerExtension";
 import Logger from "~/utils/Logger";
 import { supportsPassiveListener } from "~/utils/browser";
 import { homePath } from "~/utils/routeHelpers";
@@ -36,7 +36,12 @@ type AwarenessChangeEvent = {
 
 type ConnectionStatusEvent = { status: ConnectionStatus };
 
-type MessageEvent = { message: string };
+type MessageEvent = {
+  message: string;
+  event: Event & {
+    code?: number;
+  };
+};
 
 function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
   const documentId = props.id;
@@ -138,6 +143,17 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
       setRemoteSynced(true);
     });
 
+    provider.on("close", (ev: MessageEvent) => {
+      if ("code" in ev.event && ev.event.code === 1009) {
+        provider.shouldConnect = false;
+        showToast(
+          t(
+            "Sorry, this document is too large - edits will no longer be persisted."
+          )
+        );
+      }
+    });
+
     if (debug) {
       provider.on("close", (ev: MessageEvent) =>
         Logger.debug("collaboration", "close", ev)
@@ -185,13 +201,14 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
     isMounted,
   ]);
 
-  const user = React.useMemo(() => {
-    return {
+  const user = React.useMemo(
+    () => ({
       id: currentUser.id,
       name: currentUser.name,
       color: currentUser.color,
-    };
-  }, [currentUser.id, currentUser.color, currentUser.name]);
+    }),
+    [currentUser.id, currentUser.color, currentUser.name]
+  );
 
   const extensions = React.useMemo(() => {
     if (!remoteProvider) {

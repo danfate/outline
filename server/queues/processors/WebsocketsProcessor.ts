@@ -2,6 +2,7 @@ import { subHours } from "date-fns";
 import { Op } from "sequelize";
 import { Server } from "socket.io";
 import {
+  Comment,
   Document,
   Collection,
   FileOperation,
@@ -14,6 +15,7 @@ import {
   Subscription,
 } from "@server/models";
 import {
+  presentComment,
   presentCollection,
   presentDocument,
   presentFileOperation,
@@ -29,6 +31,7 @@ export default class WebsocketsProcessor {
   async perform(event: Event, socketio: Server) {
     switch (event.name) {
       case "documents.publish":
+      case "documents.unpublish":
       case "documents.restore":
       case "documents.unarchive": {
         const document = await Document.findByPk(event.documentId, {
@@ -168,20 +171,30 @@ export default class WebsocketsProcessor {
         if (!collection) {
           return;
         }
-        return socketio.to(`team-${collection.teamId}`).emit("entities", {
-          event: event.name,
-          collectionIds: [
-            {
-              id: collection.id,
-              updatedAt: collection.updatedAt,
-            },
-          ],
-        });
+
+        return socketio
+          .to(
+            collection.permission
+              ? `collection-${event.collectionId}`
+              : `team-${collection.teamId}`
+          )
+          .emit(event.name, presentCollection(collection));
       }
 
       case "collections.delete": {
+        const collection = await Collection.findByPk(event.collectionId, {
+          paranoid: false,
+        });
+        if (!collection) {
+          return;
+        }
+
         return socketio
-          .to(`collection-${event.collectionId}`)
+          .to(
+            collection.permission
+              ? `collection-${event.collectionId}`
+              : `team-${collection.teamId}`
+          )
           .emit(event.name, {
             modelId: event.collectionId,
           });
@@ -350,6 +363,28 @@ export default class WebsocketsProcessor {
               ? `collection-${event.collectionId}`
               : `team-${event.teamId}`
           )
+          .emit(event.name, {
+            modelId: event.modelId,
+          });
+      }
+
+      case "comments.create":
+      case "comments.update": {
+        const comment = await Comment.scope([
+          "defaultScope",
+          "withDocument",
+        ]).findByPk(event.modelId);
+        if (!comment) {
+          return;
+        }
+        return socketio
+          .to(`collection-${comment.document.collectionId}`)
+          .emit(event.name, presentComment(comment));
+      }
+
+      case "comments.delete": {
+        return socketio
+          .to(`collection-${event.collectionId}`)
           .emit(event.name, {
             modelId: event.modelId,
           });

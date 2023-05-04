@@ -22,6 +22,7 @@ import {
   CollectionUser,
   CollectionGroup,
   GroupUser,
+  Comment,
 } from "@server/models";
 import {
   presentCollection,
@@ -39,12 +40,14 @@ import {
   presentMembership,
   presentGroupMembership,
   presentCollectionGroupMembership,
+  presentComment,
 } from "@server/presenters";
 import BaseTask from "@server/queues/tasks/BaseTask";
 import {
   CollectionEvent,
   CollectionGroupEvent,
   CollectionUserEvent,
+  CommentEvent,
   DocumentEvent,
   Event,
   FileOperationEvent,
@@ -99,6 +102,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       case "subscriptions.create":
       case "subscriptions.delete":
       case "authenticationProviders.update":
+      case "notifications.create":
         // Ignored
         return;
       case "users.create":
@@ -152,6 +156,11 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       case "collections.add_group":
       case "collections.remove_group":
         await this.handleCollectionGroupEvent(subscription, event);
+        return;
+      case "comments.create":
+      case "comments.update":
+      case "comments.delete":
+        await this.handleCommentEvent(subscription, event);
         return;
       case "groups.create":
       case "groups.update":
@@ -276,6 +285,23 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       payload: {
         id: event.modelId,
         model: model && presentShare(model),
+      },
+    });
+  }
+
+  private async handleCommentEvent(
+    subscription: WebhookSubscription,
+    event: CommentEvent
+  ): Promise<void> {
+    const model = await Comment.findByPk(event.modelId, {
+      paranoid: false,
+    });
+    await this.sendWebhook({
+      event,
+      subscription,
+      payload: {
+        id: event.modelId,
+        model: model && presentComment(model),
       },
     });
   }
@@ -622,11 +648,11 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       ]);
 
       if (createdBy && team) {
-        await WebhookDisabledEmail.schedule({
+        await new WebhookDisabledEmail({
           to: createdBy.email,
           teamUrl: team.url,
           webhookName: subscription.name,
-        });
+        }).schedule();
       }
     }
   }

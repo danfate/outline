@@ -43,29 +43,25 @@ export default class Attachment extends Node {
         {
           priority: 100,
           tag: "a.attachment",
-          getAttrs: (dom: HTMLAnchorElement) => {
-            return {
-              id: dom.id,
-              title: dom.innerText,
-              href: dom.getAttribute("href"),
-              size: parseInt(dom.dataset.size || "0", 10),
-            };
-          },
+          getAttrs: (dom: HTMLAnchorElement) => ({
+            id: dom.id,
+            title: dom.innerText,
+            href: dom.getAttribute("href"),
+            size: parseInt(dom.dataset.size || "0", 10),
+          }),
         },
       ],
-      toDOM: (node) => {
-        return [
-          "a",
-          {
-            class: `attachment`,
-            id: node.attrs.id,
-            href: sanitizeUrl(node.attrs.href),
-            download: node.attrs.title,
-            "data-size": node.attrs.size,
-          },
-          node.attrs.title,
-        ];
-      },
+      toDOM: (node) => [
+        "a",
+        {
+          class: `attachment`,
+          id: node.attrs.id,
+          href: sanitizeUrl(node.attrs.href),
+          download: node.attrs.title,
+          "data-size": node.attrs.size,
+        },
+        node.attrs.title,
+      ],
       toPlainText: (node) => node.attrs.title,
     };
   }
@@ -88,7 +84,7 @@ export default class Attachment extends Node {
         isSelected={isSelected}
         theme={theme}
       >
-        {node.attrs.href && <DownloadIcon color="currentColor" size={20} />}
+        {node.attrs.href && <DownloadIcon size={20} />}
       </Widget>
     );
   }

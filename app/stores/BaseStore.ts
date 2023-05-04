@@ -103,12 +103,13 @@ export default abstract class BaseStore<T extends BaseModel> {
 
   save(
     params: Partial<T>,
-    options?: Record<string, string | boolean | number | undefined>
+    options: Record<string, string | boolean | number | undefined> = {}
   ): Promise<T> {
-    if (params.id) {
-      return this.update(params, options);
+    const { isNew, ...rest } = options;
+    if (isNew || !params.id) {
+      return this.create(params, rest);
     }
-    return this.create(params, options);
+    return this.update(params, rest);
   }
 
   get(id: string): T | undefined {
@@ -171,6 +172,10 @@ export default abstract class BaseStore<T extends BaseModel> {
       throw new Error(`Cannot delete ${this.modelName}`);
     }
 
+    if (item.isNew) {
+      return this.remove(item.id);
+    }
+
     this.isSaving = true;
 
     try {
@@ -226,13 +231,14 @@ export default abstract class BaseStore<T extends BaseModel> {
       const res = await client.post(`/${this.apiEndpoint}.list`, params);
       invariant(res?.data, "Data not available");
 
+      let response: T[] = [];
+
       runInAction(`list#${this.modelName}`, () => {
         this.addPolicies(res.policies);
-        res.data.forEach(this.add);
+        response = res.data.map(this.add);
         this.isLoaded = true;
       });
 
-      const response = res.data;
       response[PAGINATION_SYMBOL] = res.pagination;
       return response;
     } finally {

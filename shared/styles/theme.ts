@@ -1,4 +1,4 @@
-import { darken, lighten } from "polished";
+import { darken, lighten, transparentize } from "polished";
 import { DefaultTheme, Colors } from "styled-components";
 import breakpoints from "./breakpoints";
 
@@ -38,19 +38,17 @@ const defaultColors: Colors = {
     purple: "#9E5CF7",
     blue: "#3633FF",
     marine: "#2BC2FF",
-    green: "#42DED1",
+    green: "#3ad984",
     yellow: "#F5BE31",
   },
 };
 
 const spacing = {
-  padding: "1.5vw 1.875vw",
-  vpadding: "1.5vw",
-  hpadding: "1.875vw",
   sidebarWidth: 260,
+  sidebarRightWidth: 300,
   sidebarCollapsedWidth: 16,
   sidebarMinWidth: 200,
-  sidebarMaxWidth: 400,
+  sidebarMaxWidth: 600,
 };
 
 const buildBaseTheme = (input: Partial<Colors>) => {
@@ -86,12 +84,15 @@ const buildBaseTheme = (input: Partial<Colors>) => {
     codePlaceholder: "#3d8fd1",
     codeInserted: "#202746",
     codeImportant: "#c94922",
-    noticeInfoBackground: colors.accent,
+    noticeInfoBackground: colors.brand.blue,
     noticeInfoText: colors.almostBlack,
     noticeTipBackground: "#F5BE31",
     noticeTipText: colors.almostBlack,
     noticeWarningBackground: "#d73a49",
     noticeWarningText: colors.almostBlack,
+    noticeSuccessBackground: colors.brand.green,
+    noticeSuccessText: colors.almostBlack,
+    tableSelectedBackground: transparentize(0.8, colors.accent),
     breakpoints,
     ...colors,
     ...spacing,
@@ -124,6 +125,8 @@ export const buildLightTheme = (input: Partial<Colors>): DefaultTheme => {
     backdrop: "rgba(0, 0, 0, 0.2)",
     shadow: "rgba(0, 0, 0, 0.2)",
 
+    commentBackground: colors.warmGrey,
+
     modalBackdrop: colors.black10,
     modalBackground: colors.white,
     modalShadow:
@@ -138,13 +141,13 @@ export const buildLightTheme = (input: Partial<Colors>): DefaultTheme => {
     inputBorder: colors.slateLight,
     inputBorderFocused: colors.slate,
     listItemHoverBackground: colors.warmGrey,
+    mentionBackground: colors.warmGrey,
     toolbarHoverBackground: colors.black,
     toolbarBackground: colors.almostBlack,
     toolbarInput: colors.white10,
     toolbarItem: colors.white,
     tableDivider: colors.smokeDark,
     tableSelected: colors.accent,
-    tableSelectedBackground: "#E5F7FF",
     buttonNeutralBackground: colors.white,
     buttonNeutralText: colors.almostBlack,
     buttonNeutralBorder: darken(0.15, colors.white),
@@ -189,6 +192,8 @@ export const buildDarkTheme = (input: Partial<Colors>): DefaultTheme => {
     backdrop: "rgba(0, 0, 0, 0.5)",
     shadow: "rgba(0, 0, 0, 0.6)",
 
+    commentBackground: "#1f232e",
+
     modalBackdrop: colors.black50,
     modalBackground: "#1f2128",
     modalShadow:
@@ -203,13 +208,13 @@ export const buildDarkTheme = (input: Partial<Colors>): DefaultTheme => {
     inputBorder: colors.slateDark,
     inputBorderFocused: colors.slate,
     listItemHoverBackground: colors.white10,
+    mentionBackground: colors.white10,
     toolbarHoverBackground: colors.slate,
     toolbarBackground: colors.white,
     toolbarInput: colors.black10,
     toolbarItem: colors.lightBlack,
     tableDivider: colors.lightBlack,
     tableSelected: colors.accent,
-    tableSelectedBackground: "#002333",
     buttonNeutralBackground: colors.almostBlack,
     buttonNeutralText: colors.white,
     buttonNeutralBorder: colors.slateDark,
@@ -220,13 +225,14 @@ export const buildDarkTheme = (input: Partial<Colors>): DefaultTheme => {
     quote: colors.almostWhite,
     code: colors.almostWhite,
     codeBackground: colors.black75,
-    codeBorder: colors.black50,
+    codeBorder: colors.white10,
     codeString: "#3d8fd1",
     embedBorder: colors.black50,
     horizontalRule: lighten(0.1, colors.almostBlack),
     noticeInfoText: colors.white,
     noticeTipText: colors.white,
     noticeWarningText: colors.white,
+    noticeSuccessText: colors.white,
     progressBarBackground: colors.slate,
     scrollbarBackground: colors.black,
     scrollbarThumb: colors.lightBlack,

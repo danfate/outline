@@ -254,21 +254,17 @@ class Collection extends ParanoidModel {
     model: Collection,
     options: { transaction: Transaction }
   ) {
-    if (model.permission !== CollectionPermission.ReadWrite) {
-      return CollectionUser.findOrCreate({
-        where: {
-          collectionId: model.id,
-          userId: model.createdById,
-        },
-        defaults: {
-          permission: CollectionPermission.ReadWrite,
-          createdById: model.createdById,
-        },
-        transaction: options.transaction,
-      });
-    }
-
-    return undefined;
+    return CollectionUser.findOrCreate({
+      where: {
+        collectionId: model.id,
+        userId: model.createdById,
+      },
+      defaults: {
+        permission: CollectionPermission.Admin,
+        createdById: model.createdById,
+      },
+      transaction: options.transaction,
+    });
   }
 
   // associations
@@ -396,6 +392,17 @@ class Collection extends ParanoidModel {
     });
   }
 
+  /**
+   * Convenience method to return if a collection is considered private.
+   * This means that a membership is required to view it rather than just being
+   * a workspace member.
+   *
+   * @returns boolean
+   */
+  get isPrivate() {
+    return !this.permission;
+  }
+
   getDocumentTree = (documentId: string): NavigationNode | null => {
     if (!this.documentStructure) {
       return null;
@@ -477,12 +484,10 @@ class Collection extends ParanoidModel {
       id: string
     ) => {
       children = await Promise.all(
-        children.map(async (childDocument) => {
-          return {
-            ...childDocument,
-            children: await removeFromChildren(childDocument.children, id),
-          };
-        })
+        children.map(async (childDocument) => ({
+          ...childDocument,
+          children: await removeFromChildren(childDocument.children, id),
+        }))
       );
       const match = find(children, {
         id,
@@ -562,8 +567,8 @@ class Collection extends ParanoidModel {
 
     const { id } = updatedDocument;
 
-    const updateChildren = (documents: NavigationNode[]) => {
-      return Promise.all(
+    const updateChildren = (documents: NavigationNode[]) =>
+      Promise.all(
         documents.map(async (document) => {
           if (document.id === id) {
             document = {
@@ -577,7 +582,6 @@ class Collection extends ParanoidModel {
           return document;
         })
       );
-    };
 
     this.documentStructure = await updateChildren(this.documentStructure);
     // Sequelize doesn't seem to set the value with splice on JSONB field
@@ -619,8 +623,8 @@ class Collection extends ParanoidModel {
       );
     } else {
       // Recursively place document
-      const placeDocument = (documentList: NavigationNode[]) => {
-        return documentList.map((childDocument) => {
+      const placeDocument = (documentList: NavigationNode[]) =>
+        documentList.map((childDocument) => {
           if (document.parentDocumentId === childDocument.id) {
             childDocument.children.splice(
               index !== undefined ? index : childDocument.children.length,
@@ -633,7 +637,6 @@ class Collection extends ParanoidModel {
 
           return childDocument;
         });
-      };
 
       this.documentStructure = placeDocument(this.documentStructure);
     }

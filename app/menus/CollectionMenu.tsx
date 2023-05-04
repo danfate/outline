@@ -200,14 +200,14 @@ function CollectionMenu({
       {
         type: "button",
         title: t("New document"),
-        visible: can.update,
+        visible: can.createDocument,
         onClick: handleNewDocument,
         icon: <NewDocumentIcon />,
       },
       {
         type: "button",
         title: t("Import document"),
-        visible: can.update,
+        visible: can.createDocument,
         onClick: handleImportDocument,
         icon: <ImportIcon />,
       },
@@ -220,11 +220,7 @@ function CollectionMenu({
         type: "submenu",
         title: t("Sort in sidebar"),
         visible: can.update,
-        icon: alphabeticalSort ? (
-          <AlphabeticalSortIcon color="currentColor" />
-        ) : (
-          <ManualSortIcon color="currentColor" />
-        ),
+        icon: alphabeticalSort ? <AlphabeticalSortIcon /> : <ManualSortIcon />,
         items: [
           {
             type: "button",
@@ -265,6 +261,7 @@ function CollectionMenu({
       collection,
       can.unstar,
       can.star,
+      can.createDocument,
       can.update,
       can.delete,
       handleStar,

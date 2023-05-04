@@ -32,7 +32,7 @@ import NewChildDocumentMenu from "~/menus/NewChildDocumentMenu";
 import TableOfContentsMenu from "~/menus/TableOfContentsMenu";
 import TemplatesMenu from "~/menus/TemplatesMenu";
 import { metaDisplay } from "~/utils/keyboard";
-import { newDocumentPath, editDocumentUrl } from "~/utils/routeHelpers";
+import { newDocumentPath, documentEditPath } from "~/utils/routeHelpers";
 import ObservingBanner from "./ObservingBanner";
 import PublicBreadcrumb from "./PublicBreadcrumb";
 import ShareButton from "./ShareButton";
@@ -115,7 +115,6 @@ function DocumentHeader({
           ui.tocVisible ? ui.hideTableOfContents : ui.showTableOfContents
         }
         icon={<TableOfContentsIcon />}
-        iconColor="currentColor"
         borderOnHover
         neutral
       />
@@ -134,7 +133,7 @@ function DocumentHeader({
         <Button
           as={Link}
           icon={<EditIcon />}
-          to={editDocumentUrl(document)}
+          to={documentEditPath(document)}
           neutral
         >
           {t("Edit")}
@@ -327,7 +326,6 @@ function DocumentHeader({
                     label={(props) => (
                       <Button
                         icon={<MoreIcon />}
-                        iconColor="currentColor"
                         {...props}
                         borderOnHover
                         neutral

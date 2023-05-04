@@ -1,4 +1,5 @@
 import { computed, observable } from "mobx";
+import { TeamPreferenceDefaults } from "@shared/constants";
 import { TeamPreference, TeamPreferences } from "@shared/types";
 import { stringToColor } from "@shared/utils/color";
 import BaseModel from "./BaseModel";
@@ -27,7 +28,7 @@ class Team extends BaseModel {
 
   @Field
   @observable
-  collaborativeEditing: boolean;
+  commenting: boolean;
 
   @Field
   @observable
@@ -88,25 +89,19 @@ class Team extends BaseModel {
    */
   @computed
   get seamlessEditing(): boolean {
-    return (
-      this.collaborativeEditing &&
-      !!this.getPreference(TeamPreference.SeamlessEdit, true)
-    );
+    return !!this.getPreference(TeamPreference.SeamlessEdit);
   }
 
   /**
-   * Get the value for a specific preference key, or return the fallback if
-   * none is set.
+   * Returns the value of the provided preference.
    *
-   * @param key The TeamPreference key to retrieve
-   * @param fallback An optional fallback value, defaults to false.
-   * @returns The value
+   * @param preference The team preference to retrieve
+   * @returns The preference value if set, else the default value
    */
   getPreference<T extends keyof TeamPreferences>(
-    key: T,
-    fallback = false
+    key: T
   ): TeamPreferences[T] | false {
-    return this.preferences?.[key] ?? fallback;
+    return this.preferences?.[key] ?? TeamPreferenceDefaults[key] ?? false;
   }
 
   /**

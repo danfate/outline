@@ -24,7 +24,7 @@ const LINK_INPUT_REGEX = /\[([^[]+)]\((\S+)\)$/;
 let icon: HTMLSpanElement;
 
 if (typeof window !== "undefined") {
-  const component = <OpenIcon color="currentColor" size={16} />;
+  const component = <OpenIcon size={16} />;
   icon = document.createElement("span");
   icon.className = "external-link";
   ReactDOM.render(component, icon);
@@ -113,15 +113,11 @@ export default class Link extends Mark {
     ];
   }
 
-  commands({ type }: { type: MarkType }) {
-    return ({ href } = { href: "" }) => toggleMark(type, { href });
-  }
-
   keys({ type }: { type: MarkType }) {
     return {
       "Mod-k": (state: EditorState, dispatch: Dispatch) => {
         if (state.selection.empty) {
-          this.editor.events.emit(EventType.linkMenuOpen);
+          this.editor.events.emit(EventType.LinkToolbarOpen);
           return true;
         }
 
@@ -202,12 +198,9 @@ export default class Link extends Mark {
 
     const plugin: Plugin = new Plugin({
       state: {
-        init: (config, state) => {
-          return getLinkDecorations(state);
-        },
-        apply: (tr, decorationSet, _oldState, newState) => {
-          return tr.docChanged ? getLinkDecorations(newState) : decorationSet;
-        },
+        init: (config, state) => getLinkDecorations(state),
+        apply: (tr, decorationSet, _oldState, newState) =>
+          tr.docChanged ? getLinkDecorations(newState) : decorationSet,
       },
       props: {
         decorations: (state: EditorState) => plugin.getState(state),

@@ -31,15 +31,20 @@ export default abstract class Mark extends Extension {
     return [];
   }
 
-  toMarkdown(state: MarkdownSerializerState, node: ProsemirrorNode) {
-    console.error("toMarkdown not implemented", state, node);
+  toMarkdown(_state: MarkdownSerializerState, _node: ProsemirrorNode) {
+    throw new Error("toMarkdown not implemented");
   }
 
   parseMarkdown(): TokenConfig | void {
     return undefined;
   }
 
-  commands({ type }: { type: MarkType; schema: Schema }): CommandFactory {
-    return () => toggleMark(type);
+  commands({
+    type,
+  }: {
+    type: MarkType;
+    schema: Schema;
+  }): Record<string, CommandFactory> | CommandFactory | undefined {
+    return (attrs) => toggleMark(type, attrs);
   }
 }

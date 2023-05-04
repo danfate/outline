@@ -1,6 +1,7 @@
 import * as React from "react";
 import styled from "styled-components";
 import { MenuItem } from "@shared/editor/types";
+import { s } from "@shared/styles";
 import { useEditor } from "./EditorContext";
 import ToolbarButton from "./ToolbarButton";
 import ToolbarSeparator from "./ToolbarSeparator";
@@ -11,7 +12,7 @@ type Props = {
 };
 
 const FlexibleWrapper = styled.div`
-  color: ${(props) => props.theme.toolbarItem};
+  color: ${s("toolbarItem")};
   display: flex;
   gap: 8px;
 `;
@@ -20,6 +21,17 @@ function ToolbarMenu(props: Props) {
   const { commands, view } = useEditor();
   const { items } = props;
   const { state } = view;
+
+  const handleClick = (item: MenuItem) => () => {
+    if (!item.name) {
+      return;
+    }
+
+    const attrs =
+      typeof item.attrs === "function" ? item.attrs(state) : item.attrs;
+
+    commands[item.name](attrs);
+  };
 
   return (
     <FlexibleWrapper>
@@ -34,11 +46,8 @@ function ToolbarMenu(props: Props) {
 
         return (
           <Tooltip tooltip={item.tooltip} key={index}>
-            <ToolbarButton
-              onClick={() => item.name && commands[item.name](item.attrs)}
-              active={isActive}
-            >
-              {React.cloneElement(item.icon, { color: "currentColor" })}
+            <ToolbarButton onClick={handleClick(item)} active={isActive}>
+              {item.icon}
             </ToolbarButton>
           </Tooltip>
         );

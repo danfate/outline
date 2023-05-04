@@ -1,6 +1,7 @@
 import isPrintableKeyEvent from "is-printable-key-event";
 import * as React from "react";
 import styled from "styled-components";
+import { s } from "@shared/styles";
 import useOnScreen from "~/hooks/useOnScreen";
 
 type Props = Omit<React.HTMLAttributes<HTMLSpanElement>, "ref" | "onChange"> & {
@@ -56,7 +57,13 @@ const ContentEditable = React.forwardRef(
 
     React.useImperativeHandle(ref, () => ({
       focus: () => {
-        contentRef.current?.focus();
+        if (contentRef.current) {
+          contentRef.current.focus();
+          // looks unnecessary but required because of https://github.com/outline/outline/issues/5198
+          if (!contentRef.current.innerText) {
+            placeCaret(contentRef.current, true);
+          }
+        }
       },
       focusAtStart: () => {
         if (contentRef.current) {
@@ -166,10 +173,10 @@ function placeCaret(element: HTMLElement, atStart: boolean) {
 }
 
 const Content = styled.span`
-  background: ${(props) => props.theme.background};
-  transition: ${(props) => props.theme.backgroundTransition};
-  color: ${(props) => props.theme.text};
-  -webkit-text-fill-color: ${(props) => props.theme.text};
+  background: ${s("background")};
+  transition: ${s("backgroundTransition")};
+  color: ${s("text")};
+  -webkit-text-fill-color: ${s("text")};
   outline: none;
   resize: none;
   cursor: text;
@@ -180,8 +187,8 @@ const Content = styled.span`
 
   &:empty::before {
     display: inline-block;
-    color: ${(props) => props.theme.placeholder};
-    -webkit-text-fill-color: ${(props) => props.theme.placeholder};
+    color: ${s("placeholder")};
+    -webkit-text-fill-color: ${s("placeholder")};
     content: attr(data-placeholder);
     pointer-events: none;
     height: 0;

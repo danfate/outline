@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import styled from "styled-components";
+import { ellipsis } from "@shared/styles";
 import { NavigationNode } from "@shared/types";
 import Document from "~/models/Document";
 import Button from "~/components/Button";
@@ -27,13 +28,15 @@ function DocumentMove({ document }: Props) {
     null
   );
 
-  const moveOptions = React.useMemo(() => {
-    // filter out the document itself and also its parent doc if any
+  const items = React.useMemo(() => {
+    // Filter out the document itself and its existing parent doc, if any.
     const nodes = flatten(collectionTrees.map(flattenTree)).filter(
       (node) => node.id !== document.id && node.id !== document.parentDocumentId
     );
+
+    // If the document we're moving is a template, only show collections as
+    // move targets.
     if (document.isTemplate) {
-      // only show collections with children stripped off to prevent node expansion
       return nodes
         .filter((node) => node.type === "collection")
         .map((node) => ({ ...node, children: [] }));
@@ -79,11 +82,7 @@ function DocumentMove({ document }: Props) {
 
   return (
     <FlexContainer column>
-      <DocumentExplorer
-        items={moveOptions}
-        onSubmit={move}
-        onSelect={selectPath}
-      />
+      <DocumentExplorer items={items} onSubmit={move} onSelect={selectPath} />
       <Footer justify="space-between" align="center" gap={8}>
         <StyledText type="secondary">
           {selectedPath ? (
@@ -123,9 +122,7 @@ const Footer = styled(Flex)`
 `;
 
 const StyledText = styled(Text)`
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  ${ellipsis()}
   margin-bottom: 0;
 `;
 

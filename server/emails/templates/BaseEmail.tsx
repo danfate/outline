@@ -1,3 +1,4 @@
+import Bull from "bull";
 import mailer from "@server/emails/mailer";
 import Logger from "@server/logging/Logger";
 import Metrics from "@server/logging/Metrics";
@@ -6,8 +7,8 @@ import { taskQueue } from "@server/queues";
 import { TaskPriority } from "@server/queues/tasks/BaseTask";
 import { NotificationMetadata } from "@server/types";
 
-interface EmailProps {
-  to: string;
+export interface EmailProps {
+  to: string | null;
 }
 
 export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
@@ -17,11 +18,11 @@ export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
   /**
    * Schedule this email type to be sent asyncronously by a worker.
    *
-   * @param props Properties to be used in the email template
+   * @param options Options to pass to the Bull queue
    * @returns A promise that resolves once the email is placed on the task queue
    */
-  public static schedule<T>(props: T, metadata?: NotificationMetadata) {
-    const templateName = this.name;
+  public schedule(options?: Bull.JobOptions) {
+    const templateName = this.constructor.name;
 
     Metrics.increment("email.scheduled", {
       templateName,
@@ -34,8 +35,8 @@ export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
         name: "EmailTask",
         props: {
           templateName,
-          ...metadata,
-          props,
+          ...this.metadata,
+          props: this.props,
         },
       },
       {
@@ -45,6 +46,7 @@ export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
           type: "exponential",
           delay: 60 * 1000,
         },
+        ...options,
       }
     );
   }
@@ -72,11 +74,21 @@ export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
       return;
     }
 
+    if (!this.props.to) {
+      Logger.info(
+        "email",
+        `Email ${templateName} not sent due to missing email address`,
+        this.props
+      );
+      return;
+    }
+
     const data = { ...this.props, ...(bsResponse ?? ({} as S)) };
 
     try {
       await mailer.sendMail({
         to: this.props.to,
+        fromName: this.fromName?.(data),
         subject: this.subject(data),
         previewText: this.preview(data),
         component: this.render(data),
@@ -163,4 +175,9 @@ export default abstract class BaseEmail<T extends EmailProps, S = unknown> {
    * @returns A promise resolving to additional data
    */
   protected beforeSend?(props: T): Promise<S | false>;
+
+  /**
+   * fromName hook allows overriding the "from" name of the email.
+   */
+  protected fromName?(props: T): string | undefined;
 }

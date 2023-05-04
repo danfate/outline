@@ -4,6 +4,7 @@ import presentAuthenticationProvider from "./authenticationProvider";
 import presentAvailableTeam from "./availableTeam";
 import presentCollection from "./collection";
 import presentCollectionGroupMembership from "./collectionGroupMembership";
+import presentComment from "./comment";
 import presentDocument from "./document";
 import presentEvent from "./event";
 import presentFileOperation from "./fileOperation";
@@ -11,7 +12,6 @@ import presentGroup from "./group";
 import presentGroupMembership from "./groupMembership";
 import presentIntegration from "./integration";
 import presentMembership from "./membership";
-import presentNotificationSetting from "./notificationSetting";
 import presentPin from "./pin";
 import presentPolicies from "./policy";
 import presentProviderConfig from "./providerConfig";
@@ -32,6 +32,7 @@ export {
   presentAvailableTeam,
   presentCollection,
   presentCollectionGroupMembership,
+  presentComment,
   presentDocument,
   presentEvent,
   presentFileOperation,
@@ -39,7 +40,6 @@ export {
   presentGroupMembership,
   presentIntegration,
   presentMembership,
-  presentNotificationSetting,
   presentPublicTeam,
   presentPin,
   presentPolicies,

@@ -8,7 +8,9 @@ const DocumentsSortParamsSchema = z.object({
   /** Specifies the attributes by which documents will be sorted in the list */
   sort: z
     .string()
-    .refine((val) => ["createdAt", "updatedAt", "index", "title"].includes(val))
+    .refine((val) =>
+      ["createdAt", "updatedAt", "publishedAt", "index", "title"].includes(val)
+    )
     .default("updatedAt"),
 
   /** Specifies the sort order with respect to sort field */
@@ -190,9 +192,6 @@ export const DocumentsUpdateSchema = BaseSchema.extend({
     /** Boolean to denote if the doc should be published */
     publish: z.boolean().optional(),
 
-    /** Revision to compare against document revision count */
-    lastRevision: z.number().optional(),
-
     /** Doc template Id */
     templateId: z.string().uuid().nullish(),
 
@@ -302,3 +301,12 @@ export const DocumentsCreateSchema = BaseSchema.extend({
   });
 
 export type DocumentsCreateReq = z.infer<typeof DocumentsCreateSchema>;
+
+export const DocumentsUsersSchema = BaseSchema.extend({
+  body: BaseIdSchema.extend({
+    /** Query term to search users by name */
+    query: z.string().optional(),
+  }),
+});
+
+export type DocumentsUsersReq = z.infer<typeof DocumentsUsersSchema>;

@@ -53,6 +53,8 @@ declare module "styled-components" {
     noticeTipText: string;
     noticeWarningBackground: string;
     noticeWarningText: string;
+    noticeSuccessBackground: string;
+    noticeSuccessText: string;
   }
 
   interface Colors {
@@ -107,10 +109,8 @@ declare module "styled-components" {
   }
 
   interface Spacing {
-    padding: string;
-    vpadding: string;
-    hpadding: string;
     sidebarWidth: number;
+    sidebarRightWidth: number;
     sidebarCollapsedWidth: number;
     sidebarMinWidth: number;
     sidebarMaxWidth: number;
@@ -136,6 +136,7 @@ declare module "styled-components" {
     textDiffDeleted: string;
     textDiffDeletedBackground: string;
     placeholder: string;
+    commentBackground: string;
     sidebarBackground: string;
     sidebarActiveBackground: string;
     sidebarControlHoverBackground: string;
@@ -155,6 +156,7 @@ declare module "styled-components" {
     inputBorder: string;
     inputBorderFocused: string;
     listItemHoverBackground: string;
+    mentionBackground: string;
     buttonNeutralBackground: string;
     buttonNeutralText: string;
     buttonNeutralBorder: string;

@@ -3,10 +3,10 @@ import * as React from "react";
 import EditorContainer from "@shared/editor/components/Styles";
 import Document from "~/models/Document";
 import Revision from "~/models/Revision";
-import DocumentMetaWithViews from "~/components/DocumentMetaWithViews";
 import { Props as EditorProps } from "~/components/Editor";
 import Flex from "~/components/Flex";
-import { documentUrl } from "~/utils/routeHelpers";
+import { documentPath } from "~/utils/routeHelpers";
+import { Meta as DocumentMeta } from "./DocumentMeta";
 
 type Props = Omit<EditorProps, "extensions"> & {
   id: string;
@@ -20,16 +20,15 @@ type Props = Omit<EditorProps, "extensions"> & {
  * Displays revision HTML pre-rendered on the server.
  */
 function RevisionViewer(props: Props) {
-  const { document, isDraft, shareId, children, revision } = props;
+  const { document, shareId, children, revision } = props;
 
   return (
     <Flex auto column>
       <h1 dir={revision.dir}>{revision.title}</h1>
       {!shareId && (
-        <DocumentMetaWithViews
-          isDraft={isDraft}
+        <DocumentMeta
           document={document}
-          to={documentUrl(document)}
+          to={documentPath(document)}
           rtl={revision.rtl}
         />
       )}
