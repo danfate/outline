@@ -13,7 +13,7 @@ import { colorPalette } from "@shared/utils/collections";
 import collectionExporter from "@server/commands/collectionExporter";
 import teamUpdater from "@server/commands/teamUpdater";
 import { sequelize } from "@server/database/sequelize";
-import { AuthorizationError, ValidationError } from "@server/errors";
+import { ValidationError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
@@ -406,10 +406,6 @@ router.post(
       lock: transaction.LOCK.UPDATE,
     });
 
-    if (userId === actor.id) {
-      throw AuthorizationError("You cannot add yourself to a collection");
-    }
-
     if (permission) {
       assertCollectionPermission(permission);
     }
@@ -765,12 +761,18 @@ router.post(
   auth(),
   pagination(),
   async (ctx: APIContext) => {
+    const { includeListOnly } = ctx.request.body;
     const { user } = ctx.state.auth;
     const collectionIds = await user.collectionIds();
-    const where: WhereOptions<Collection> = {
-      teamId: user.teamId,
-      id: collectionIds,
-    };
+    const where: WhereOptions<Collection> =
+      includeListOnly && user.isAdmin
+        ? {
+            teamId: user.teamId,
+          }
+        : {
+            teamId: user.teamId,
+            id: collectionIds,
+          };
     const collections = await Collection.scope({
       method: ["withMembership", user.id],
     }).findAll({
