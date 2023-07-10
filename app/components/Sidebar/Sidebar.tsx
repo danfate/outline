@@ -15,6 +15,8 @@ import { draggableOnDesktop, fadeOnDesktopBackgrounded } from "~/styles";
 import { fadeIn } from "~/styles/animations";
 import Desktop from "~/utils/Desktop";
 import Avatar from "../Avatar";
+import NotificationIcon from "../Notifications/NotificationIcon";
+import NotificationsPopover from "../Notifications/NotificationsPopover";
 import HeaderButton, { HeaderButtonProps } from "./components/HeaderButton";
 import ResizeBorder from "./components/ResizeBorder";
 import Toggle, { ToggleButton, Positioner } from "./components/Toggle";
@@ -184,7 +186,13 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(
                       showBorder={false}
                     />
                   }
-                />
+                >
+                  <NotificationsPopover>
+                    {(rest: HeaderButtonProps) => (
+                      <HeaderButton {...rest} image={<NotificationIcon />} />
+                    )}
+                  </NotificationsPopover>
+                </HeaderButton>
               )}
             </AccountMenu>
           )}

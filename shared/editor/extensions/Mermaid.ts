@@ -1,8 +1,8 @@
 import { Node } from "prosemirror-model";
 import { Plugin, PluginKey, Transaction } from "prosemirror-state";
-import { findBlockNodes } from "prosemirror-utils";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { v4 as uuidv4 } from "uuid";
+import { findBlockNodes } from "../queries/findChildren";
 
 type MermaidState = {
   decorationSet: DecorationSet;
@@ -62,7 +62,7 @@ function getNewState({
           element.classList.remove("diagram-hidden");
         }
 
-        import("mermaid").then((module) => {
+        void import("mermaid").then((module) => {
           module.default.initialize({
             startOnLoad: true,
             // TODO: Make dynamic based on the width of the editor or remove in
@@ -135,7 +135,7 @@ export default function Mermaid({
   return new Plugin({
     key: new PluginKey("mermaid"),
     state: {
-      init: (_: Plugin, { doc }) => {
+      init: (_, { doc }) => {
         const pluginState: MermaidState = {
           decorationSet: DecorationSet.create(doc, []),
           diagramVisibility: {},
@@ -164,9 +164,8 @@ export default function Mermaid({
         }
 
         if (diagramToggled) {
-          pluginState.diagramVisibility[
-            mermaidMeta.toggleDiagram
-          ] = !pluginState.diagramVisibility[mermaidMeta.toggleDiagram];
+          pluginState.diagramVisibility[mermaidMeta.toggleDiagram] =
+            !pluginState.diagramVisibility[mermaidMeta.toggleDiagram];
         }
 
         if (
@@ -209,7 +208,7 @@ export default function Mermaid({
     },
     props: {
       decorations(state) {
-        return this.getState(state).decorationSet;
+        return this.getState(state)?.decorationSet;
       },
     },
   });

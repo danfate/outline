@@ -15,6 +15,7 @@ import useIsMounted from "~/hooks/useIsMounted";
 import usePageVisibility from "~/hooks/usePageVisibility";
 import useStores from "~/hooks/useStores";
 import useToasts from "~/hooks/useToasts";
+import { AwarenessChangeEvent } from "~/types";
 import Logger from "~/utils/Logger";
 import { supportsPassiveListener } from "~/utils/browser";
 import { homePath } from "~/utils/routeHelpers";
@@ -29,10 +30,6 @@ export type ConnectionStatus =
   | "connected"
   | "disconnected"
   | void;
-
-type AwarenessChangeEvent = {
-  states: { user: { id: string }; cursor: any; scrollY: number | undefined }[];
-};
 
 type ConnectionStatusEvent = { status: ConnectionStatus };
 
@@ -51,10 +48,8 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
   const { presence, ui } = useStores();
   const token = useCurrentToken();
   const [showCursorNames, setShowCursorNames] = React.useState(false);
-  const [
-    remoteProvider,
-    setRemoteProvider,
-  ] = React.useState<HocuspocusProvider | null>(null);
+  const [remoteProvider, setRemoteProvider] =
+    React.useState<HocuspocusProvider | null>(null);
   const [isLocalSynced, setLocalSynced] = React.useState(false);
   const [isRemoteSynced, setRemoteSynced] = React.useState(false);
   const [ydoc] = React.useState(() => new Y.Doc());
@@ -108,17 +103,15 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
       history.replace(homePath());
     });
 
-    provider.on("awarenessChange", ({ states }: AwarenessChangeEvent) => {
-      states.forEach(({ user, cursor, scrollY }) => {
-        if (user) {
-          presence.touch(documentId, user.id, !!cursor);
+    provider.on("awarenessChange", (event: AwarenessChangeEvent) => {
+      presence.updateFromAwarenessChangeEvent(documentId, event);
 
-          if (scrollY !== undefined && user.id === ui.observingUserId) {
-            window.scrollTo({
-              top: scrollY * window.innerHeight,
-              behavior: "smooth",
-            });
-          }
+      event.states.forEach(({ user, scrollY }) => {
+        if (scrollY !== undefined && user?.id === ui.observingUserId) {
+          window.scrollTo({
+            top: scrollY * window.innerHeight,
+            behavior: "smooth",
+          });
         }
       });
     });
@@ -227,7 +220,7 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
 
   React.useEffect(() => {
     if (isLocalSynced && isRemoteSynced) {
-      onSynced?.();
+      void onSynced?.();
     }
   }, [onSynced, isLocalSynced, isRemoteSynced]);
 
@@ -243,14 +236,14 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
       !isVisible &&
       remoteProvider.status === WebSocketStatus.Connected
     ) {
-      remoteProvider.disconnect();
+      void remoteProvider.disconnect();
     }
 
     if (
       (!isIdle || isVisible) &&
       remoteProvider.status === WebSocketStatus.Disconnected
     ) {
-      remoteProvider.connect();
+      void remoteProvider.connect();
     }
   }, [remoteProvider, isIdle, isVisible]);
 
@@ -291,6 +284,7 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
           embedsDisabled={props.embedsDisabled}
           defaultValue={props.defaultValue}
           extensions={props.extensions}
+          scrollTo={props.scrollTo}
           readOnly
           ref={ref}
         />

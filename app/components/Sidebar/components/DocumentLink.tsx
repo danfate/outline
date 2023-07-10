@@ -67,7 +67,7 @@ function InnerDocumentLink(
 
   React.useEffect(() => {
     if (isActiveDocument && hasChildDocuments) {
-      fetchChildDocuments(node.id);
+      void fetchChildDocuments(node.id);
     }
   }, [fetchChildDocuments, node, hasChildDocuments, isActiveDocument]);
 
@@ -114,8 +114,8 @@ function InnerDocumentLink(
     [expanded]
   );
 
-  const handleMouseEnter = React.useCallback(() => {
-    prefetchDocument?.(node.id);
+  const handlePrefetch = React.useCallback(() => {
+    void prefetchDocument?.(node.id);
   }, [prefetchDocument, node]);
 
   const handleTitleChange = React.useCallback(
@@ -125,7 +125,6 @@ function InnerDocumentLink(
       }
       await documents.update({
         id: document.id,
-        text: document.text,
         title,
       });
     },
@@ -242,11 +241,11 @@ function InnerDocumentLink(
       }
 
       if (expanded) {
-        documents.move(item.id, collection.id, node.id, 0);
+        void documents.move(item.id, collection.id, node.id, 0);
         return;
       }
 
-      documents.move(item.id, collection.id, parentId, index + 1);
+      void documents.move(item.id, collection.id, parentId, index + 1);
     },
     collect: (monitor) => ({
       isOverReorder: monitor.isOver(),
@@ -317,7 +316,7 @@ function InnerDocumentLink(
               <SidebarLink
                 expanded={hasChildren ? isExpanded : undefined}
                 onDisclosureClick={handleDisclosureClick}
-                onMouseEnter={handleMouseEnter}
+                onClickIntent={handlePrefetch}
                 to={{
                   pathname: node.url,
                   state: {
@@ -335,7 +334,9 @@ function InnerDocumentLink(
                   />
                 }
                 isActive={(match, location: Location<{ starred?: boolean }>) =>
-                  !!match && location.state?.starred === inStarredSection
+                  ((document && location.pathname.endsWith(document.urlId)) ||
+                    !!match) &&
+                  location.state?.starred === inStarredSection
                 }
                 isActiveDrop={isOverReparent && canDropToReparent}
                 depth={depth}

@@ -76,9 +76,8 @@ function SearchPopover({ shareId }: Props) {
     [popover, cachedQuery]
   );
 
-  const searchInputRef = popover.unstable_referenceRef as React.RefObject<
-    HTMLInputElement
-  >;
+  const searchInputRef =
+    popover.unstable_referenceRef as React.RefObject<HTMLInputElement>;
 
   const firstSearchItem = React.useRef<HTMLAnchorElement>(null);
 
@@ -89,10 +88,14 @@ function SearchPopover({ shareId }: Props) {
 
   const handleSearchInputFocus = React.useCallback(() => {
     focusRef.current = searchInputRef.current;
-  }, []);
+  }, [searchInputRef]);
 
   const handleKeyDown = React.useCallback(
     (ev: React.KeyboardEvent<HTMLInputElement>) => {
+      if (ev.nativeEvent.isComposing) {
+        return;
+      }
+
       if (ev.key === "Enter") {
         if (searchResults) {
           popover.show();

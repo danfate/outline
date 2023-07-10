@@ -1,14 +1,12 @@
 import { some } from "lodash";
 import { EditorState, NodeSelection, TextSelection } from "prosemirror-state";
-import { CellSelection } from "prosemirror-tables";
 import * as React from "react";
 import createAndInsertLink from "@shared/editor/commands/createAndInsertLink";
 import filterExcessSeparators from "@shared/editor/lib/filterExcessSeparators";
-import getColumnIndex from "@shared/editor/queries/getColumnIndex";
 import getMarkRange from "@shared/editor/queries/getMarkRange";
-import getRowIndex from "@shared/editor/queries/getRowIndex";
 import isMarkActive from "@shared/editor/queries/isMarkActive";
 import isNodeActive from "@shared/editor/queries/isNodeActive";
+import { getColumnIndex, getRowIndex } from "@shared/editor/queries/table";
 import { MenuItem } from "@shared/editor/types";
 import { creatingUrlPrefix } from "@shared/utils/urls";
 import useBoolean from "~/hooks/useBoolean";
@@ -20,6 +18,7 @@ import useToasts from "~/hooks/useToasts";
 import getDividerMenuItems from "../menus/divider";
 import getFormattingMenuItems from "../menus/formatting";
 import getImageMenuItems from "../menus/image";
+import getReadOnlyMenuItems from "../menus/readOnly";
 import getTableMenuItems from "../menus/table";
 import getTableColMenuItems from "../menus/tableCol";
 import getTableRowMenuItems from "../menus/tableRow";
@@ -31,6 +30,8 @@ import ToolbarMenu from "./ToolbarMenu";
 type Props = {
   rtl: boolean;
   isTemplate: boolean;
+  readOnly?: boolean;
+  canComment?: boolean;
   onOpen: () => void;
   onClose: () => void;
   onSearchLink?: (term: string) => Promise<SearchResult[]>;
@@ -84,25 +85,25 @@ function useIsDragging() {
 }
 
 export default function SelectionToolbar(props: Props) {
-  const { onClose, onOpen } = props;
+  const { onClose, readOnly, onOpen } = props;
   const { view, commands } = useEditor();
   const { showToast: onShowToast } = useToasts();
   const dictionary = useDictionary();
   const menuRef = React.useRef<HTMLDivElement | null>(null);
   const isActive = useIsActive(view.state);
   const isDragging = useIsDragging();
-  const previousIsActuve = usePrevious(isActive);
+  const previousIsActive = usePrevious(isActive);
   const isMobile = useMobile();
 
   React.useEffect(() => {
     // Trigger callbacks when the toolbar is opened or closed
-    if (previousIsActuve && !isActive) {
+    if (previousIsActive && !isActive) {
       onClose();
     }
-    if (!previousIsActuve && isActive) {
+    if (!previousIsActive && isActive) {
       onOpen();
     }
-  }, [isActive, onClose, onOpen, previousIsActuve]);
+  }, [isActive, onClose, onOpen, previousIsActive]);
 
   React.useEffect(() => {
     const handleClickOutside = (ev: MouseEvent): void => {
@@ -113,12 +114,11 @@ export default function SelectionToolbar(props: Props) {
       ) {
         return;
       }
-
-      if (!isActive || document.activeElement?.tagName === "INPUT") {
+      if (view.dom.contains(ev.target as HTMLElement)) {
         return;
       }
 
-      if (view.hasFocus()) {
+      if (!isActive || document.activeElement?.tagName === "INPUT") {
         return;
       }
 
@@ -133,7 +133,7 @@ export default function SelectionToolbar(props: Props) {
     return () => {
       window.removeEventListener("mouseup", handleClickOutside);
     };
-  }, [isActive, view]);
+  }, [isActive, previousIsActive, readOnly, view]);
 
   const handleOnCreateLink = async (title: string): Promise<void> => {
     const { onCreateLink } = props;
@@ -145,7 +145,7 @@ export default function SelectionToolbar(props: Props) {
     const { dispatch, state } = view;
     const { from, to } = state.selection;
     if (from === to) {
-      // selection cannot be collapsed
+      // Do not display a selection toolbar for collapsed selections
       return;
     }
 
@@ -159,7 +159,7 @@ export default function SelectionToolbar(props: Props) {
         .addMark(from, to, markType.create({ href }))
     );
 
-    createAndInsertLink(view, title, href, {
+    return createAndInsertLink(view, title, href, {
       onCreateLink,
       onShowToast,
       dictionary,
@@ -186,7 +186,7 @@ export default function SelectionToolbar(props: Props) {
     );
   };
 
-  const { onCreateLink, isTemplate, rtl, ...rest } = props;
+  const { onCreateLink, isTemplate, rtl, canComment, ...rest } = props;
   const { state } = view;
   const { selection }: { selection: any } = state;
   const isCodeSelection = isNodeActive(state.schema.nodes.code_block)(state);
@@ -197,10 +197,13 @@ export default function SelectionToolbar(props: Props) {
     return null;
   }
 
-  const colIndex = getColumnIndex(
-    (state.selection as unknown) as CellSelection
-  );
-  const rowIndex = getRowIndex((state.selection as unknown) as CellSelection);
+  // no toolbar in this circumstance
+  if (readOnly && !canComment) {
+    return null;
+  }
+
+  const colIndex = getColumnIndex(state);
+  const rowIndex = getRowIndex(state);
   const isTableSelection = colIndex !== undefined && rowIndex !== undefined;
   const link = isMarkActive(state.schema.marks.link)(state);
   const range = getMarkRange(selection.$from, state.schema.marks.link);
@@ -217,6 +220,8 @@ export default function SelectionToolbar(props: Props) {
     items = getImageMenuItems(state, dictionary);
   } else if (isDividerSelection) {
     items = getDividerMenuItems(state, dictionary);
+  } else if (readOnly) {
+    items = getReadOnlyMenuItems(state, dictionary);
   } else {
     items = getFormattingMenuItems(state, isTemplate, isMobile, dictionary);
   }

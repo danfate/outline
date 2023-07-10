@@ -129,8 +129,13 @@ export default class PasteHandler extends Extension {
             // was pasted.
             const vscodeMeta = vscode ? JSON.parse(vscode) : undefined;
             const pasteCodeLanguage = vscodeMeta?.mode;
+            const supportsCodeBlock = !!view.state.schema.nodes.code_fence;
 
-            if (pasteCodeLanguage && pasteCodeLanguage !== "markdown") {
+            if (
+              supportsCodeBlock &&
+              pasteCodeLanguage &&
+              pasteCodeLanguage !== "markdown"
+            ) {
               event.preventDefault();
               view.dispatch(
                 view.state.tr
@@ -165,6 +170,10 @@ export default class PasteHandler extends Extension {
               const paste = this.editor.pasteParser.parse(
                 normalizePastedMarkdown(text)
               );
+              if (!paste) {
+                return false;
+              }
+
               const slice = paste.slice(0);
               const tr = view.state.tr;
               let currentPos = view.state.selection.from;

@@ -6,12 +6,11 @@ import {
   NodeType,
   Schema,
 } from "prosemirror-model";
-import { EditorState, TextSelection } from "prosemirror-state";
+import { Command, TextSelection } from "prosemirror-state";
 import Suggestion from "../extensions/Suggestion";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import { SuggestionsMenuType } from "../plugins/Suggestions";
 import emojiRule from "../rules/emoji";
-import { Dispatch } from "../types";
 
 export default class Emoji extends Suggestion {
   get type() {
@@ -22,7 +21,8 @@ export default class Emoji extends Suggestion {
     return {
       type: SuggestionsMenuType.Emoji,
       openRegex: /(?:^|\s):([0-9a-zA-Z_+-]+)?$/,
-      closeRegex: /(?:^|\s):(([0-9a-zA-Z_+-]*\s+)|(\s+[0-9a-zA-Z_+-]+)|[^0-9a-zA-Z_+-]+)$/,
+      closeRegex:
+        /(?:^|\s):(([0-9a-zA-Z_+-]*\s+)|(\s+[0-9a-zA-Z_+-]+)|[^0-9a-zA-Z_+-]+)$/,
       enabledInTable: true,
     };
   }
@@ -77,24 +77,22 @@ export default class Emoji extends Suggestion {
   }
 
   commands({ type }: { type: NodeType; schema: Schema }) {
-    return (attrs: Record<string, string>) => (
-      state: EditorState,
-      dispatch: Dispatch
-    ) => {
-      const { selection } = state;
-      const position =
-        selection instanceof TextSelection
-          ? selection.$cursor?.pos
-          : selection.$to.pos;
-      if (position === undefined) {
-        return false;
-      }
+    return (attrs: Record<string, string>): Command =>
+      (state, dispatch) => {
+        const { selection } = state;
+        const position =
+          selection instanceof TextSelection
+            ? selection.$cursor?.pos
+            : selection.$to.pos;
+        if (position === undefined) {
+          return false;
+        }
 
-      const node = type.create(attrs);
-      const transaction = state.tr.insert(position, node);
-      dispatch(transaction);
-      return true;
-    };
+        const node = type.create(attrs);
+        const transaction = state.tr.insert(position, node);
+        dispatch?.(transaction);
+        return true;
+      };
   }
 
   toMarkdown(state: MarkdownSerializerState, node: ProsemirrorNode) {

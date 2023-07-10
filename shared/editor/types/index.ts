@@ -1,5 +1,5 @@
 import { Node as ProsemirrorNode } from "prosemirror-model";
-import { EditorState, Transaction } from "prosemirror-state";
+import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import * as React from "react";
 import { DefaultTheme } from "styled-components";
@@ -19,6 +19,7 @@ export type MenuItem = {
   shortcut?: string;
   keywords?: string;
   tooltip?: string;
+  label?: string;
   defaultHidden?: boolean;
   attrs?: Record<string, any>;
   visible?: boolean;
@@ -34,5 +35,3 @@ export type ComponentProps = {
   isEditable: boolean;
   getPos: () => number;
 };
-
-export type Dispatch = (tr: Transaction) => void;

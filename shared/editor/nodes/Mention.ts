@@ -5,12 +5,11 @@ import {
   NodeType,
   Schema,
 } from "prosemirror-model";
-import { EditorState, TextSelection } from "prosemirror-state";
+import { Command, TextSelection } from "prosemirror-state";
 import Suggestion from "../extensions/Suggestion";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import { SuggestionsMenuType } from "../plugins/Suggestions";
 import mentionRule from "../rules/mention";
-import { Dispatch } from "../types";
 
 export default class Mention extends Suggestion {
   get type() {
@@ -80,24 +79,22 @@ export default class Mention extends Suggestion {
   }
 
   commands({ type }: { type: NodeType; schema: Schema }) {
-    return (attrs: Record<string, string>) => (
-      state: EditorState,
-      dispatch: Dispatch
-    ) => {
-      const { selection } = state;
-      const position =
-        selection instanceof TextSelection
-          ? selection.$cursor?.pos
-          : selection.$to.pos;
-      if (position === undefined) {
-        return false;
-      }
+    return (attrs: Record<string, string>): Command =>
+      (state, dispatch) => {
+        const { selection } = state;
+        const position =
+          selection instanceof TextSelection
+            ? selection.$cursor?.pos
+            : selection.$to.pos;
+        if (position === undefined) {
+          return false;
+        }
 
-      const node = type.create(attrs);
-      const transaction = state.tr.insert(position, node);
-      dispatch(transaction);
-      return true;
-    };
+        const node = type.create(attrs);
+        const transaction = state.tr.insert(position, node);
+        dispatch?.(transaction);
+        return true;
+      };
   }
 
   toMarkdown(state: MarkdownSerializerState, node: ProsemirrorNode) {

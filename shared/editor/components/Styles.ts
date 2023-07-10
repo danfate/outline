@@ -1,7 +1,6 @@
 /* eslint-disable no-irregular-whitespace */
 import { darken, lighten, transparentize } from "polished";
-import styled, { DefaultTheme } from "styled-components";
-import depths from "../../styles/depths";
+import styled, { DefaultTheme, css } from "styled-components";
 
 export type Props = {
   rtl: boolean;
@@ -12,98 +11,115 @@ export type Props = {
   theme: DefaultTheme;
 };
 
-const mathStyle = (props: Props) => `
-/* Based on https://github.com/benrbray/prosemirror-math/blob/master/style/math.css */
+const codeMarkCursor = () => css`
+  /* Based on https://github.com/curvenote/editor/blob/main/packages/prosemirror-codemark/src/codemark.css */
+  .no-cursor {
+    caret-color: transparent;
+  }
 
-.math-node {
-  min-width: 1em;
-  min-height: 1em;
-  font-size: 0.95em;
-  font-family: ${props.theme.fontFamilyMono};
-  cursor: auto;
-}
+  div:focus .fake-cursor,
+  span:focus .fake-cursor {
+    margin-right: -1px;
+    border-left-width: 1px;
+    border-left-style: solid;
+    animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+    position: relative;
+    z-index: 1;
+  }
+`;
 
-.math-node.empty-math .math-render::before {
-  content: "(empty math)";
-  color: ${props.theme.brand.red};
-}
+const mathStyle = (props: Props) => css`
+  /* Based on https://github.com/benrbray/prosemirror-math/blob/master/style/math.css */
 
-.math-node .math-render.parse-error::before {
-  content: "(math error)";
-  color: ${props.theme.brand.red};
-  cursor: help;
-}
+  .math-node {
+    min-width: 1em;
+    min-height: 1em;
+    font-size: 0.95em;
+    font-family: ${props.theme.fontFamilyMono};
+    cursor: auto;
+  }
 
-.math-node.ProseMirror-selectednode {
-  outline: none;
-}
+  .math-node.empty-math .math-render::before {
+    content: "(empty math)";
+    color: ${props.theme.brand.red};
+  }
 
-.math-node .math-src {
-  display: none;
-  color: ${props.theme.codeStatement};
-  tab-size: 4;
-}
+  .math-node .math-render.parse-error::before {
+    content: "(math error)";
+    color: ${props.theme.brand.red};
+    cursor: help;
+  }
 
-.math-node.ProseMirror-selectednode .math-src {
-  display: inline;
-}
+  .math-node.ProseMirror-selectednode {
+    outline: none;
+  }
 
-.math-node.ProseMirror-selectednode .math-render {
-  display: none;
-}
+  .math-node .math-src {
+    display: none;
+    color: ${props.theme.codeStatement};
+    tab-size: 4;
+  }
 
-math-inline {
-  display: inline; white-space: nowrap;
+  .math-node.ProseMirror-selectednode .math-src {
+    display: inline;
+  }
 
-}
+  .math-node.ProseMirror-selectednode .math-render {
+    display: none;
+  }
 
-math-inline .math-render {
-  display: inline-block;
-  font-size: 0.85em;
-}
+  math-inline {
+    display: inline;
+    white-space: nowrap;
+  }
 
-math-inline .math-src .ProseMirror {
-  display: inline;
-  margin: 0px 3px;
-}
+  math-inline .math-render {
+    display: inline-block;
+    font-size: 0.85em;
+  }
 
-math-block {
-  display: block;
-}
+  math-inline .math-src .ProseMirror {
+    display: inline;
+    margin: 0px 3px;
+  }
 
-math-block .math-render {
-  display: block;
-}
+  math-block {
+    display: block;
+  }
 
-math-block.ProseMirror-selectednode {
-  border-radius: 4px;
-  border: 1px solid ${props.theme.codeBorder};
-  background: ${props.theme.codeBackground};
-  padding: 0.75em 1em;
-  font-family: ${props.theme.fontFamilyMono};
-  font-size: 90%;
-}
+  math-block .math-render {
+    display: block;
+  }
 
-math-block .math-src .ProseMirror {
-  width: 100%;
-  display: block;
-}
+  math-block.ProseMirror-selectednode {
+    border-radius: 4px;
+    border: 1px solid ${props.theme.codeBorder};
+    background: ${props.theme.codeBackground};
+    padding: 0.75em 1em;
+    font-family: ${props.theme.fontFamilyMono};
+    font-size: 90%;
+  }
 
-math-block .katex-display {
-  margin: 0;
-}
+  math-block .math-src .ProseMirror {
+    width: 100%;
+    display: block;
+  }
 
-.katex-html *::selection {
-  background-color: none !important;
-}
+  math-block .katex-display {
+    margin: 0;
+  }
 
-.math-node.math-select .math-render {
-  background-color: #c0c0c0ff;
-}
+  .katex-html *::selection {
+    background-color: none !important;
+  }
 
-math-inline.math-select .math-render {
-  padding-top: 2px;
-}
+  .math-node.math-select .math-render {
+    background-color: #c0c0c0ff;
+  }
+
+  math-inline.math-select .math-render {
+    padding-top: 2px;
+  }
 `;
 
 const style = (props: Props) => `
@@ -501,7 +517,6 @@ h6:not(.placeholder):before {
 
 .heading-actions {
   opacity: 0;
-  z-index: ${depths.editorHeadingActions};
   background: ${props.theme.background};
   margin-${props.rtl ? "right" : "left"}: -26px;
   flex-direction: ${props.rtl ? "row-reverse" : "row"};
@@ -578,6 +593,7 @@ h6 {
   border-radius: 2px;
 
   &:hover {
+    ${props.readOnly ? "cursor: var(--pointer);" : ""}
     background: ${transparentize(0.5, props.theme.brand.marine)};
   }
 }
@@ -740,7 +756,7 @@ a:hover {
 ul,
 ol {
   margin: ${props.rtl ? "0 -26px 0 0.1em" : "0 0.1em 0 -26px"};
-  padding: ${props.rtl ? "0 44px 0 0" : "0 0 0 44px"};
+  padding: ${props.rtl ? "0 48px 0 0" : "0 0 0 48px"};
 }
 
 ol ol {
@@ -1245,7 +1261,7 @@ table {
      * https://github.com/ProseMirror/prosemirror/issues/947 */
     &::after {
       content: "";
-      cursor: pointer;
+      cursor: var(--pointer);
       position: absolute;
       top: -16px;
       ${props.rtl ? "right" : "left"}: 0;
@@ -1273,7 +1289,7 @@ table {
   .grip-row {
     &::after {
       content: "";
-      cursor: pointer;
+      cursor: var(--pointer);
       position: absolute;
       ${props.rtl ? "right" : "left"}: -16px;
       top: 0;
@@ -1302,7 +1318,7 @@ table {
   .grip-table {
     &::after {
       content: "";
-      cursor: pointer;
+      cursor: var(--pointer);
       background: ${props.theme.tableDivider};
       width: 13px;
       height: 13px;
@@ -1514,8 +1530,9 @@ del[data-operation-index] {
 `;
 
 const EditorContainer = styled.div<Props>`
-  ${style};
-  ${mathStyle};
+  ${style}
+  ${mathStyle}
+  ${codeMarkCursor}
 `;
 
 export default EditorContainer;

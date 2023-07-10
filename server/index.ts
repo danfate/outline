@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-misused-promises */
 /* eslint-disable import/order */
 import env from "./env";
 
@@ -53,7 +54,7 @@ async function master() {
   await checkPendingMigrations();
 
   if (env.TELEMETRY && env.ENVIRONMENT === "production") {
-    checkUpdates();
+    void checkUpdates();
     setInterval(checkUpdates, 24 * 3600 * 1000);
   }
 }
@@ -93,13 +94,17 @@ async function start(id: number, disconnect: () => void) {
     try {
       await sequelize.query("SELECT 1");
     } catch (err) {
-      throw new Error("Database connection failed");
+      Logger.error("Database connection failed", err);
+      ctx.status = 500;
+      return;
     }
 
     try {
       await RedisAdapter.defaultClient.ping();
     } catch (err) {
-      throw new Error("Redis ping failed");
+      Logger.error("Redis ping failed", err);
+      ctx.status = 500;
+      return;
     }
 
     ctx.body = "OK";
@@ -162,7 +167,7 @@ async function start(id: number, disconnect: () => void) {
   process.once("SIGINT", () => ShutdownHelper.execute());
 }
 
-throng({
+void throng({
   master,
   worker: start,
   count: processCount,

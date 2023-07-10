@@ -167,8 +167,8 @@ class Collection extends ParanoidModel {
   color: string | null;
 
   @Length({
-    max: 50,
-    msg: `index must 50 characters or less`,
+    max: 100,
+    msg: `index must be 100 characters or less`,
   })
   @Column
   index: string | null;
@@ -457,10 +457,11 @@ class Collection extends ParanoidModel {
           parentDocumentId: documentId,
         },
       });
-      childDocuments.forEach(async (child) => {
+
+      for (const child of childDocuments) {
         await loopChildren(child.id, opts);
         await child.destroy(opts);
-      });
+      }
     };
 
     await loopChildren(document.id, options);

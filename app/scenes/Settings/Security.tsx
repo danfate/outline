@@ -38,13 +38,15 @@ function Security() {
     inviteRequired: team.inviteRequired,
   });
 
-  const { data: providers, loading, request } = useRequest(() =>
-    authenticationProviders.fetchPage({})
-  );
+  const {
+    data: providers,
+    loading,
+    request,
+  } = useRequest(() => authenticationProviders.fetchPage({}));
 
   React.useEffect(() => {
     if (!providers && !loading) {
-      request();
+      void request();
     }
   }, [loading, providers, request]);
 

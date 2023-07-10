@@ -527,8 +527,9 @@ class Document extends ParanoidModel {
     const getChildDocumentIds = async (
       ...parentDocumentId: string[]
     ): Promise<string[]> => {
-      const childDocuments = await (this
-        .constructor as typeof Document).findAll({
+      const childDocuments = await (
+        this.constructor as typeof Document
+      ).findAll({
         attributes: ["id"],
         where: {
           parentDocumentId,
@@ -560,18 +561,19 @@ class Document extends ParanoidModel {
 
     // Helper to archive all child documents for a document
     const archiveChildren = async (parentDocumentId: string) => {
-      const childDocuments = await (this
-        .constructor as typeof Document).findAll({
+      const childDocuments = await (
+        this.constructor as typeof Document
+      ).findAll({
         where: {
           parentDocumentId,
         },
       });
-      childDocuments.forEach(async (child) => {
+      for (const child of childDocuments) {
         await archiveChildren(child.id);
         child.archivedAt = archivedAt;
         child.lastModifiedById = userId;
         await child.save(options);
-      });
+      }
     };
 
     await archiveChildren(this.id);

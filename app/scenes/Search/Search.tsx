@@ -24,6 +24,7 @@ import Scene from "~/components/Scene";
 import Switch from "~/components/Switch";
 import Text from "~/components/Text";
 import withStores from "~/components/withStores";
+import { hover } from "~/styles";
 import Logger from "~/utils/Logger";
 import { searchPath } from "~/utils/routeHelpers";
 import { decodeURIComponentSafe } from "~/utils/urls";
@@ -93,7 +94,7 @@ class Search extends React.Component<Props> {
   handleKeyDown = (ev: React.KeyboardEvent<HTMLInputElement>) => {
     if (ev.key === "Enter") {
       this.updateLocation(ev.currentTarget.value);
-      this.fetchResults();
+      void this.fetchResults();
       return;
     }
 
@@ -142,7 +143,7 @@ class Search extends React.Component<Props> {
     this.allowLoadMore = true;
     // To prevent "no results" showing before debounce kicks in
     this.isLoading = true;
-    this.fetchResults();
+    void this.fetchResults();
   };
 
   handleTermChange = () => {
@@ -152,7 +153,7 @@ class Search extends React.Component<Props> {
     this.allowLoadMore = true;
     // To prevent "no results" showing before debounce kicks in
     this.isLoading = true;
-    this.fetchResults();
+    void this.fetchResults();
   };
 
   handleFilterChange = (search: {
@@ -453,7 +454,7 @@ const Filters = styled(Flex)`
     padding: 0;
   `};
 
-  &:hover {
+  &: ${hover} {
     opacity: 1;
   }
 `;

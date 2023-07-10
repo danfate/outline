@@ -28,11 +28,8 @@ import UserStatusFilter from "./components/UserStatusFilter";
 function Members() {
   const location = useLocation();
   const history = useHistory();
-  const [
-    inviteModalOpen,
-    handleInviteModalOpen,
-    handleInviteModalClose,
-  ] = useBoolean();
+  const [inviteModalOpen, handleInviteModalOpen, handleInviteModalClose] =
+    useBoolean();
   const team = useCurrentTeam();
   const { users } = useStores();
   const { t } = useTranslation();
@@ -71,7 +68,7 @@ function Members() {
       }
     };
 
-    fetchData();
+    void fetchData();
   }, [query, sort, filter, page, direction, users, users.counts.all]);
 
   React.useEffect(() => {

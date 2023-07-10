@@ -26,11 +26,12 @@ import useToasts from "~/hooks/useToasts";
 import { NotFoundError } from "~/utils/errors";
 import { uploadFile } from "~/utils/files";
 import { isModKey } from "~/utils/keyboard";
+import lazyWithRetry from "~/utils/lazyWithRetry";
 import { sharedDocumentPath } from "~/utils/routeHelpers";
 import { isHash } from "~/utils/urls";
 import DocumentBreadcrumb from "./DocumentBreadcrumb";
 
-const LazyLoadedEditor = React.lazy(() => import("~/editor"));
+const LazyLoadedEditor = lazyWithRetry(() => import("~/editor"));
 
 export type Props = Optional<
   EditorProps,
@@ -67,10 +68,8 @@ function Editor(props: Props, ref: React.RefObject<SharedEditor> | null) {
   const localRef = React.useRef<SharedEditor>();
   const preferences = auth.user?.preferences;
   const previousHeadings = React.useRef<Heading[] | null>(null);
-  const [
-    activeLinkElement,
-    setActiveLink,
-  ] = React.useState<HTMLAnchorElement | null>(null);
+  const [activeLinkElement, setActiveLink] =
+    React.useState<HTMLAnchorElement | null>(null);
   const previousCommentIds = React.useRef<string[]>();
 
   const handleLinkActive = React.useCallback((element: HTMLAnchorElement) => {

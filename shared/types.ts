@@ -171,6 +171,7 @@ export type CollectionSort = {
 export enum NotificationEventType {
   PublishDocument = "documents.publish",
   UpdateDocument = "documents.update",
+  CreateRevision = "revisions.create",
   CreateCollection = "collections.create",
   CreateComment = "comments.create",
   MentionedInDocument = "documents.mentioned",
@@ -207,3 +208,6 @@ export const NotificationEventDefaults = {
   [NotificationEventType.Features]: true,
   [NotificationEventType.ExportCompleted]: true,
 };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ProsemirrorData = Record<string, any>;

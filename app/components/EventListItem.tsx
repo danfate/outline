@@ -7,7 +7,6 @@ import {
   PublishIcon,
   MoveIcon,
   UnpublishIcon,
-  LightningIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +24,7 @@ import Item, { Actions } from "~/components/List/Item";
 import Time from "~/components/Time";
 import useStores from "~/hooks/useStores";
 import RevisionMenu from "~/menus/RevisionMenu";
+import { hover } from "~/styles";
 import Logger from "~/utils/Logger";
 import { documentHistoryPath } from "~/utils/routeHelpers";
 
@@ -51,27 +51,24 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
     ref.current?.focus();
   };
 
-  const prefetchRevision = () => {
+  const prefetchRevision = async () => {
     if (event.name === "revisions.create" && event.modelId) {
-      revisions.fetch(event.modelId);
+      await revisions.fetch(event.modelId);
     }
   };
 
   switch (event.name) {
     case "revisions.create":
       icon = <EditIcon size={16} />;
-      meta = t("{{userName}} edited", opts);
+      meta = latest ? (
+        <>
+          {t("Current version")} &middot; {event.actor.name}
+        </>
+      ) : (
+        t("{{userName}} edited", opts)
+      );
       to = {
-        pathname: documentHistoryPath(document, event.modelId || ""),
-        state: { retainScrollPosition: true },
-      };
-      break;
-
-    case "documents.live_editing":
-      icon = <LightningIcon size={16} />;
-      meta = t("Latest");
-      to = {
-        pathname: documentHistoryPath(document),
+        pathname: documentHistoryPath(document, event.modelId || "latest"),
         state: { retainScrollPosition: true },
       };
       break;
@@ -152,7 +149,7 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
         </Subtitle>
       }
       actions={
-        isRevision && isActive && event.modelId ? (
+        isRevision && isActive && event.modelId && !latest ? (
           <RevisionMenu document={document} revisionId={event.modelId} />
         ) : undefined
       }
@@ -220,7 +217,7 @@ const ItemStyle = css`
   ${Actions} {
     opacity: 0.5;
 
-    &:hover {
+    &: ${hover} {
       opacity: 1;
     }
   }

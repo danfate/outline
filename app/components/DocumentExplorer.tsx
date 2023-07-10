@@ -45,9 +45,8 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
   const [selectedNode, selectNode] = React.useState<NavigationNode | null>(
     null
   );
-  const [initialScrollOffset, setInitialScrollOffset] = React.useState<number>(
-    0
-  );
+  const [initialScrollOffset, setInitialScrollOffset] =
+    React.useState<number>(0);
   const [activeNode, setActiveNode] = React.useState<number>(0);
   const [expandedNodes, setExpandedNodes] = React.useState<string[]>([]);
   const [itemRefs, setItemRefs] = React.useState<
@@ -165,7 +164,7 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
         (collection) => expandedNodes.includes(collection.id) || searchTerm
       )
       .forEach((collection) => {
-        collection.fetchDocuments();
+        void collection.fetchDocuments();
       });
   }, [collections, expandedNodes, searchTerm]);
 

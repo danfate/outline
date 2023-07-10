@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { t } from "i18next";
 import Router from "koa-router";
 import { escapeRegExp } from "lodash";
@@ -18,6 +17,7 @@ import {
 } from "@server/models";
 import SearchHelper from "@server/models/helpers/SearchHelper";
 import { APIContext } from "@server/types";
+import { safeEqual } from "@server/utils/crypto";
 import { opts } from "@server/utils/i18n";
 import { assertPresent } from "@server/validation";
 import presentMessageAttachment from "../presenters/messageAttachment";
@@ -32,13 +32,7 @@ function verifySlackToken(token: string) {
     );
   }
 
-  if (
-    token.length !== env.SLACK_VERIFICATION_TOKEN.length ||
-    !crypto.timingSafeEqual(
-      Buffer.from(env.SLACK_VERIFICATION_TOKEN),
-      Buffer.from(token)
-    )
-  ) {
+  if (!safeEqual(env.SLACK_VERIFICATION_TOKEN, token)) {
     throw AuthenticationError("Invalid token");
   }
 }
@@ -159,6 +153,7 @@ router.post("hooks.slack", async (ctx: APIContext) => {
   verifySlackToken(token);
 
   let user, team;
+
   // attempt to find the corresponding team for this request based on the team_id
   team = await Team.findOne({
     include: [
@@ -305,13 +300,17 @@ router.post("hooks.slack", async (ctx: APIContext) => {
   const { results, totalCount } = user
     ? await SearchHelper.searchForUser(user, text, options)
     : await SearchHelper.searchForTeam(team, text, options);
-  SearchQuery.create({
+
+  void SearchQuery.create({
     userId: user ? user.id : null,
     teamId: team.id,
     source: "slack",
     query: text,
     results: totalCount,
+  }).catch((err) => {
+    Logger.error("Failed to create search query", err);
   });
+
   const haventSignedIn = t(
     `It looks like you haven’t signed in to {{ appName }} yet, so results may be limited`,
     {
