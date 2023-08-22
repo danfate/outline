@@ -1,14 +1,14 @@
 import { HocuspocusProvider, WebSocketStatus } from "@hocuspocus/provider";
-import { throttle } from "lodash";
+import throttle from "lodash/throttle";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import { IndexeddbPersistence } from "y-indexeddb";
 import * as Y from "yjs";
 import MultiplayerExtension from "@shared/editor/extensions/Multiplayer";
+import { supportsPassiveListener } from "@shared/utils/browser";
 import Editor, { Props as EditorProps } from "~/components/Editor";
 import env from "~/env";
-import useCurrentToken from "~/hooks/useCurrentToken";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useIdle from "~/hooks/useIdle";
 import useIsMounted from "~/hooks/useIsMounted";
@@ -17,7 +17,6 @@ import useStores from "~/hooks/useStores";
 import useToasts from "~/hooks/useToasts";
 import { AwarenessChangeEvent } from "~/types";
 import Logger from "~/utils/Logger";
-import { supportsPassiveListener } from "~/utils/browser";
 import { homePath } from "~/utils/routeHelpers";
 
 type Props = EditorProps & {
@@ -45,8 +44,7 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
   const history = useHistory();
   const { t } = useTranslation();
   const currentUser = useCurrentUser();
-  const { presence, ui } = useStores();
-  const token = useCurrentToken();
+  const { presence, auth, ui } = useStores();
   const [showCursorNames, setShowCursorNames] = React.useState(false);
   const [remoteProvider, setRemoteProvider] =
     React.useState<HocuspocusProvider | null>(null);
@@ -54,6 +52,7 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
   const [isRemoteSynced, setRemoteSynced] = React.useState(false);
   const [ydoc] = React.useState(() => new Y.Doc());
   const { showToast } = useToasts();
+  const token = auth.collaborationToken;
   const isIdle = useIdle();
   const isVisible = usePageVisibility();
   const isMounted = useIsMounted();
@@ -95,23 +94,22 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
     );
 
     provider.on("authenticationFailed", () => {
-      showToast(
-        t(
-          "Sorry, it looks like you don’t have permission to access the document"
-        )
-      );
-      history.replace(homePath());
+      void auth.fetch().catch(() => {
+        history.replace(homePath());
+      });
     });
 
     provider.on("awarenessChange", (event: AwarenessChangeEvent) => {
       presence.updateFromAwarenessChangeEvent(documentId, event);
 
       event.states.forEach(({ user, scrollY }) => {
-        if (scrollY !== undefined && user?.id === ui.observingUserId) {
-          window.scrollTo({
-            top: scrollY * window.innerHeight,
-            behavior: "smooth",
-          });
+        if (user) {
+          if (scrollY !== undefined && user.id === ui.observingUserId) {
+            window.scrollTo({
+              top: scrollY * window.innerHeight,
+              behavior: "smooth",
+            });
+          }
         }
       });
     });
@@ -137,13 +135,10 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
     });
 
     provider.on("close", (ev: MessageEvent) => {
-      if ("code" in ev.event && ev.event.code === 1009) {
-        provider.shouldConnect = false;
-        showToast(
-          t(
-            "Sorry, this document is too large - edits will no longer be persisted."
-          )
-        );
+      if ("code" in ev.event) {
+        provider.shouldConnect =
+          ev.event.code !== 1009 && ev.event.code !== 4401;
+        ui.setMultiplayerStatus("disconnected", ev.event.code);
       }
     });
 
@@ -166,9 +161,11 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
       );
     }
 
-    provider.on("status", (ev: ConnectionStatusEvent) =>
-      ui.setMultiplayerStatus(ev.status)
-    );
+    provider.on("status", (ev: ConnectionStatusEvent) => {
+      if (ui.multiplayerStatus !== ev.status) {
+        ui.setMultiplayerStatus(ev.status, undefined);
+      }
+    });
 
     setRemoteProvider(provider);
 
@@ -177,9 +174,9 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
       window.removeEventListener("wheel", finishObserving);
       window.removeEventListener("scroll", syncScrollPosition);
       provider?.destroy();
-      localProvider?.destroy();
+      void localProvider?.destroy();
       setRemoteProvider(null);
-      ui.setMultiplayerStatus(undefined);
+      ui.setMultiplayerStatus(undefined, undefined);
     };
   }, [
     history,
@@ -188,10 +185,11 @@ function MultiplayerEditor({ onSynced, ...props }: Props, ref: any) {
     documentId,
     ui,
     presence,
-    token,
     ydoc,
+    token,
     currentUser.id,
     isMounted,
+    auth,
   ]);
 
   const user = React.useMemo(

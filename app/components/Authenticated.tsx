@@ -2,9 +2,9 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Redirect } from "react-router-dom";
-import LoadingIndicator from "~/components/LoadingIndicator";
 import useStores from "~/hooks/useStores";
 import { changeLanguage } from "~/utils/language";
+import LoadingIndicator from "./LoadingIndicator";
 
 type Props = {
   children: JSX.Element;
@@ -22,13 +22,11 @@ const Authenticated = ({ children }: Props) => {
   }, [i18n, language]);
 
   if (auth.authenticated) {
-    const { user, team } = auth;
-
-    if (!team || !user) {
-      return <LoadingIndicator />;
-    }
-
     return children;
+  }
+
+  if (auth.isFetching) {
+    return <LoadingIndicator />;
   }
 
   void auth.logout(true);

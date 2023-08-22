@@ -1,4 +1,4 @@
-import { debounce } from "lodash";
+import debounce from "lodash/debounce";
 import { action, observable } from "mobx";
 import { observer } from "mobx-react";
 import { AllSelection } from "prosemirror-state";
@@ -305,7 +305,7 @@ class DocumentScene extends React.Component<Props> {
     this.isPublishing = !!options.publish;
 
     try {
-      const savedDocument = await document.save(options);
+      const savedDocument = await document.save(undefined, options);
       this.isEditorDirty = false;
 
       if (options.done) {
