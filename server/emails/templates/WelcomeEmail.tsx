@@ -17,10 +17,7 @@ type Props = EmailProps & {
  * Email sent to a user when their account has just been created, or they signed
  * in for the first time from an invite.
  */
-export default class WelcomeEmail extends BaseEmail<
-  Props,
-  Record<string, any>
-> {
+export default class WelcomeEmail extends BaseEmail<Props> {
   protected subject() {
     return `Welcome to ${env.APP_NAME}`;
   }
@@ -44,8 +41,10 @@ ${teamUrl}/home
   }
 
   protected render({ teamUrl }: Props) {
+    const welcomLink = `${teamUrl}/home?ref=welcome-email`;
+
     return (
-      <EmailTemplate>
+      <EmailTemplate previewText={this.preview()}>
         <Header />
 
         <Body>
@@ -65,9 +64,7 @@ ${teamUrl}/home
           </p>
           <EmptySpace height={10} />
           <p>
-            <Button href={`${teamUrl}/home?ref=welcome-email`}>
-              Open {env.APP_NAME}
-            </Button>
+            <Button href={welcomLink}>Open {env.APP_NAME}</Button>
           </p>
         </Body>
 

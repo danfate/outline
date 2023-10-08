@@ -249,14 +249,25 @@ const findAndReplaceStyle = () => css`
   }
 `;
 
+const emailStyle = (props: Props) => css`
+  .attachment {
+    display: block;
+    color: ${props.theme.text} !important;
+    box-shadow: 0 0 0 1px ${props.theme.divider};
+    white-space: nowrap;
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+`;
+
 const style = (props: Props) => `
 flex-grow: ${props.grow ? 1 : 0};
 justify-content: start;
 color: ${props.theme.text};
 font-family: ${props.theme.fontFamily};
-font-weight: ${props.theme.fontWeight};
+font-weight: ${props.theme.fontWeightRegular};
 font-size: 1em;
-line-height: 1.6em;
+line-height: -0.011;
 width: 100%;
 
 .mention {
@@ -285,9 +296,6 @@ width: 100%;
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
-  -webkit-font-variant-ligatures: none;
-  font-variant-ligatures: none;
-  font-feature-settings: "liga" 0; /* the above doesn't seem to work in Edge */
   padding: ${props.editorStyle?.padding ?? "initial"};
   margin: ${props.editorStyle?.margin ?? "initial"};
 
@@ -329,12 +337,12 @@ width: 100%;
 
   // all of heading sizes are stepped down one from global styles, except h1
   // which is between h1 and h2
-  h1 { font-size: 1.75em; }
-  h2 { font-size: 1.25em; }
-  h3 { font-size: 1em; }
-  h4 { font-size: 0.875em; }
-  h5 { font-size: 0.75em; }
-  h6 { font-size: 0.75em; }
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; }
+  h3 { font-size: 18px; }
+  h4 { font-size: 16px; }
+  h5 { font-size: 15px; }
+  h6 { font-size: 15px; }
 
   .ProseMirror-yjs-cursor {
     position: relative;
@@ -393,7 +401,8 @@ li {
   position: relative;
 }
 
-.image {
+.image,
+.video {
   line-height: 0;
   text-align: center;
   max-width: 100%;
@@ -401,7 +410,8 @@ li {
   position: relative;
   z-index: 1;
 
-  img {
+  img,
+  video {
     pointer-events: ${props.readOnly ? "initial" : "none"};
     display: inline-block;
     max-width: 100%;
@@ -412,13 +422,55 @@ li {
   }
 }
 
-.image.placeholder {
+.image.placeholder,
+.video.placeholder {
   position: relative;
   background: ${props.theme.background};
   margin-bottom: calc(28px + 1.2em);
 
-  img {
+  img,
+  video {
     opacity: 0.5;
+  }
+
+  video {
+    border-radius: 8px;
+  }
+}
+
+.file.placeholder {
+  display: flex;
+  align-items: center;
+  background: ${props.theme.background};
+  box-shadow: 0 0 0 1px ${props.theme.divider};
+  white-space: nowrap;
+  border-radius: 8px;
+  padding: 6px 8px;
+  max-width: 840px;
+  cursor: default;
+
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+
+  .title,
+  .subtitle {
+    margin-left: 8px;
+  }
+
+  .title {
+    font-weight: 600;
+    font-size: 14px;
+    color:  ${props.theme.text};
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: ${props.theme.textTertiary};
+    line-height: 0;
+  }
+
+  span {
+    font-family: ${props.theme.fontFamilyMono};
   }
 }
 
@@ -453,7 +505,7 @@ li {
 
   img {
     max-width: 100vw;
-    max-height: 50vh;
+    max-height: min(450px, 50vh);
     object-fit: cover;
     object-position: center;
   }
@@ -1505,6 +1557,7 @@ const EditorContainer = styled.div<Props>`
   ${codeMarkCursor}
   ${codeBlockStyle}
   ${findAndReplaceStyle}
+  ${emailStyle}
 `;
 
 export default EditorContainer;

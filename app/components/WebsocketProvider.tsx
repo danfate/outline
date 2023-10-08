@@ -254,9 +254,7 @@ class WebsocketProvider extends React.Component<Props> {
     });
 
     this.socket.on("comments.delete", (event: WebsocketEntityDeletedEvent) => {
-      comments.inThread(event.modelId).forEach((comment) => {
-        comments.remove(comment.id);
-      });
+      comments.remove(event.modelId);
     });
 
     this.socket.on("groups.create", (event: PartialWithId<Group>) => {
@@ -317,7 +315,7 @@ class WebsocketProvider extends React.Component<Props> {
         });
       }
 
-      auth.team?.updateFromJson(event);
+      auth.team?.updateData(event);
     });
 
     this.socket.on(

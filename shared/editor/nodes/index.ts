@@ -49,6 +49,7 @@ import TableCell from "./TableCell";
 import TableHeadCell from "./TableHeadCell";
 import TableRow from "./TableRow";
 import Text from "./Text";
+import Video from "./Video";
 
 type Nodes = (typeof Node | typeof Mark | typeof Extension)[];
 
@@ -97,6 +98,7 @@ export const richExtensions: Nodes = [
   Embed,
   ListItem,
   Attachment,
+  Video,
   Notice,
   Heading,
   HorizontalRule,
@@ -116,4 +118,4 @@ export const richExtensions: Nodes = [
 /**
  * Add commenting and mentions to a set of nodes
  */
-export const withComments = (nodes: Nodes) => [Mention, Comment, ...nodes];
+export const withComments = (nodes: Nodes) => [...nodes, Mention, Comment];

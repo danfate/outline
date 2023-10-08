@@ -16,10 +16,7 @@ type Props = EmailProps & {
 /**
  * Email sent to a user when they request to delete their account.
  */
-export default class ConfirmUserDeleteEmail extends BaseEmail<
-  Props,
-  Record<string, any>
-> {
+export default class ConfirmUserDeleteEmail extends BaseEmail<Props> {
   protected subject() {
     return `Your account deletion request`;
   }
@@ -38,7 +35,7 @@ Code: ${deleteConfirmationCode}
 
   protected render({ deleteConfirmationCode }: Props) {
     return (
-      <EmailTemplate>
+      <EmailTemplate previewText={this.preview()}>
         <Header />
 
         <Body>

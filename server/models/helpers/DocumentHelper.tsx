@@ -6,22 +6,24 @@ import { JSDOM } from "jsdom";
 import escapeRegExp from "lodash/escapeRegExp";
 import startCase from "lodash/startCase";
 import { Node } from "prosemirror-model";
+import { Transaction } from "sequelize";
 import * as Y from "yjs";
 import textBetween from "@shared/editor/lib/textBetween";
+import { AttachmentPreset } from "@shared/types";
 import {
   getCurrentDateAsString,
   getCurrentDateTimeAsString,
   getCurrentTimeAsString,
   unicodeCLDRtoBCP47,
 } from "@shared/utils/date";
+import attachmentCreator from "@server/commands/attachmentCreator";
 import { parser, schema } from "@server/editor";
 import { trace } from "@server/logging/tracing";
-import type Document from "@server/models/Document";
-import type Revision from "@server/models/Revision";
-import User from "@server/models/User";
+import { Document, Revision, User } from "@server/models";
 import FileStorage from "@server/storage/files";
 import diff from "@server/utils/diff";
 import parseAttachmentIds from "@server/utils/parseAttachmentIds";
+import parseImages from "@server/utils/parseImages";
 import Attachment from "../Attachment";
 import ProsemirrorHelper from "./ProsemirrorHelper";
 
@@ -108,10 +110,19 @@ export default class DocumentHelper {
       centered: options?.centered,
     });
 
-    if (options?.signedUrls && "teamId" in document) {
+    if (options?.signedUrls) {
+      const teamId =
+        document instanceof Document
+          ? document.teamId
+          : (await document.$get("document"))?.teamId;
+
+      if (!teamId) {
+        return output;
+      }
+
       output = await DocumentHelper.attachmentsToSignedUrls(
         output,
-        document.teamId,
+        teamId,
         typeof options.signedUrls === "number" ? options.signedUrls : undefined
       );
     }
@@ -141,10 +152,10 @@ export default class DocumentHelper {
   static async diff(
     before: Document | Revision | null,
     after: Revision,
-    options?: HTMLOptions
+    { signedUrls, ...options }: HTMLOptions = {}
   ) {
     if (!before) {
-      return await DocumentHelper.toHTML(after, options);
+      return await DocumentHelper.toHTML(after, { ...options, signedUrls });
     }
 
     const beforeHTML = await DocumentHelper.toHTML(before, options);
@@ -154,10 +165,26 @@ export default class DocumentHelper {
 
     // Extract the content from the article tag and diff the HTML, we don't
     // care about the surrounding layout and stylesheets.
-    const diffedContentAsHTML = diff(
+    let diffedContentAsHTML = diff(
       beforeDOM.window.document.getElementsByTagName("article")[0].innerHTML,
       afterDOM.window.document.getElementsByTagName("article")[0].innerHTML
     );
+
+    // Sign only the URLS in the diffed content
+    if (signedUrls) {
+      const teamId =
+        before instanceof Document
+          ? before.teamId
+          : (await before.$get("document"))?.teamId;
+
+      if (teamId) {
+        diffedContentAsHTML = await DocumentHelper.attachmentsToSignedUrls(
+          diffedContentAsHTML,
+          teamId,
+          typeof signedUrls === "number" ? signedUrls : undefined
+        );
+      }
+    }
 
     // Inject the diffed content into the original document with styling and
     // serialize back to a string.
@@ -314,6 +341,7 @@ export default class DocumentHelper {
     expiresIn = 3000
   ) {
     const attachmentIds = parseAttachmentIds(text);
+
     await Promise.all(
       attachmentIds.map(async (id) => {
         const attachment = await Attachment.findOne({
@@ -328,6 +356,7 @@ export default class DocumentHelper {
             attachment.key,
             expiresIn
           );
+
           text = text.replace(
             new RegExp(escapeRegExp(attachment.redirectUrl), "g"),
             signedUrl
@@ -351,9 +380,58 @@ export default class DocumentHelper {
       : undefined;
 
     return text
-      .replace("{date}", startCase(getCurrentDateAsString(locales)))
-      .replace("{time}", startCase(getCurrentTimeAsString(locales)))
-      .replace("{datetime}", startCase(getCurrentDateTimeAsString(locales)));
+      .replace(/{date}/g, startCase(getCurrentDateAsString(locales)))
+      .replace(/{time}/g, startCase(getCurrentTimeAsString(locales)))
+      .replace(/{datetime}/g, startCase(getCurrentDateTimeAsString(locales)));
+  }
+
+  /**
+   * Replaces remote and base64 encoded images in the given text with attachment
+   * urls and uploads the images to the storage provider.
+   *
+   * @param text The text to replace the images in
+   * @param user The user context
+   * @param ip The IP address of the user
+   * @param transaction The transaction to use for the database operations
+   * @returns The text with the images replaced
+   */
+  static async replaceImagesWithAttachments(
+    text: string,
+    user: User,
+    ip?: string,
+    transaction?: Transaction
+  ) {
+    let output = text;
+    const images = parseImages(text);
+
+    await Promise.all(
+      images.map(async (image) => {
+        // Skip attempting to fetch images that are not valid urls
+        try {
+          new URL(image.src);
+        } catch {
+          return;
+        }
+
+        const attachment = await attachmentCreator({
+          name: image.alt ?? "image",
+          url: image.src,
+          preset: AttachmentPreset.DocumentAttachment,
+          user,
+          ip,
+          transaction,
+        });
+
+        if (attachment) {
+          output = output.replace(
+            new RegExp(escapeRegExp(image.src), "g"),
+            attachment.redirectUrl
+          );
+        }
+      })
+    );
+
+    return output;
   }
 
   /**
