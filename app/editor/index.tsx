@@ -133,8 +133,6 @@ export type Props = {
   userPreferences?: UserPreferences | null;
   /** Whether embeds should be rendered without an iframe */
   embedsDisabled?: boolean;
-  /** Callback when a toast message is triggered (eg "link copied") */
-  onShowToast: (message: string) => void;
   className?: string;
   /** Optional style overrides for the container*/
   style?: React.CSSProperties;
@@ -302,7 +300,7 @@ export class Editor extends React.PureComponent<
 
   public componentWillUnmount(): void {
     window.removeEventListener("theme-changed", this.dispatchThemeChanged);
-    this.view.destroy();
+    this.view?.destroy();
     this.mutationObserver?.disconnect();
   }
 
@@ -468,6 +466,9 @@ export class Editor extends React.PureComponent<
       handleDOMEvents: {
         blur: this.handleEditorBlur,
         focus: this.handleEditorFocus,
+      },
+      attributes: {
+        translate: this.props.readOnly ? "yes" : "no",
       },
       state: this.createState(this.props.value),
       editable: () => !this.props.readOnly,

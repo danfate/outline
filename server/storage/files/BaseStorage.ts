@@ -1,6 +1,7 @@
 import { Blob } from "buffer";
 import { Readable } from "stream";
 import { PresignedPost } from "aws-sdk/clients/s3";
+import { isBase64Url } from "@shared/utils/urls";
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
 import fetch from "@server/utils/fetch";
@@ -131,13 +132,12 @@ export default abstract class BaseStorage {
       return;
     }
 
-    let buffer, contentLength, contentType;
-    const match = url.match(/data:(.*);base64,(.*)/);
+    let buffer, contentType;
+    const match = isBase64Url(url);
 
     if (match) {
       contentType = match[1];
       buffer = Buffer.from(match[2], "base64");
-      contentLength = buffer.byteLength;
     } else {
       try {
         const res = await fetch(url, {
@@ -155,7 +155,6 @@ export default abstract class BaseStorage {
 
         contentType =
           res.headers.get("content-type") ?? "application/octet-stream";
-        contentLength = parseInt(res.headers.get("content-length") ?? "0", 10);
       } catch (err) {
         Logger.error("Error fetching URL to upload", err, {
           url,
@@ -166,6 +165,7 @@ export default abstract class BaseStorage {
       }
     }
 
+    const contentLength = buffer.byteLength;
     if (contentLength === 0) {
       return;
     }
@@ -173,7 +173,6 @@ export default abstract class BaseStorage {
     try {
       const result = await this.store({
         body: buffer,
-        contentLength,
         contentType,
         key,
         acl,
@@ -182,8 +181,8 @@ export default abstract class BaseStorage {
       return result
         ? {
             url: result,
-            contentType,
             contentLength,
+            contentType,
           }
         : undefined;
     } catch (err) {

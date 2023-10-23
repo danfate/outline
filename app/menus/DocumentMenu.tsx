@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import { useMenuState, MenuButton, MenuButtonHTMLProps } from "reakit/Menu";
 import { VisuallyHidden } from "reakit/VisuallyHidden";
+import { toast } from "sonner";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import { s, ellipsis } from "@shared/styles";
@@ -47,7 +48,6 @@ import useMobile from "~/hooks/useMobile";
 import usePolicy from "~/hooks/usePolicy";
 import useRequest from "~/hooks/useRequest";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
 import { MenuItem } from "~/types";
 import { documentEditPath } from "~/utils/routeHelpers";
 
@@ -61,6 +61,7 @@ type Props = {
   showToggleEmbeds?: boolean;
   showPin?: boolean;
   label?: (props: MenuButtonHTMLProps) => React.ReactNode;
+  onRename?: () => void;
   onOpen?: () => void;
   onClose?: () => void;
 };
@@ -72,12 +73,12 @@ function DocumentMenu({
   showToggleEmbeds,
   showDisplayOptions,
   label,
+  onRename,
   onOpen,
   onClose,
 }: Props) {
   const user = useCurrentUser();
   const { policies, collections, documents, subscriptions } = useStores();
-  const { showToast } = useToasts();
   const menu = useMenuState({
     modal,
     unstable_preventOverflow: true,
@@ -118,11 +119,9 @@ function DocumentMenu({
       }
     ) => {
       await document.restore(options);
-      showToast(t("Document restored"), {
-        type: "success",
-      });
+      toast.success(t("Document restored"));
     },
-    [showToast, t, document]
+    [t, document]
   );
 
   const collection = document.collectionId
@@ -185,13 +184,11 @@ function DocumentMenu({
         );
         history.push(importedDocument.url);
       } catch (err) {
-        showToast(err.message, {
-          type: "error",
-        });
+        toast.error(err.message);
         throw err;
       }
     },
-    [history, showToast, collection, documents, document.id]
+    [history, collection, documents, document.id]
   );
 
   return (
@@ -267,6 +264,13 @@ function DocumentMenu({
               to: documentEditPath(document),
               visible:
                 !!can.update && user.separateEditMode && !document.template,
+              icon: <EditIcon />,
+            },
+            {
+              type: "button",
+              title: `${t("Rename")}…`,
+              visible: !!can.update && !user.separateEditMode && !!onRename,
+              onClick: () => onRename?.(),
               icon: <EditIcon />,
             },
             actionToMenuItem(createNestedDocument, context),
