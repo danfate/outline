@@ -574,26 +574,32 @@ router.post(
 
     await Promise.all(
       attachments.map(async (attachment) => {
-        try {
-          const location = path.join(
-            "attachments",
-            `${attachment.id}.${mime.extension(attachment.contentType)}`
-          );
-          zip.file(location, attachment.buffer, {
+        const location = path.join(
+          "attachments",
+          `${attachment.id}.${mime.extension(attachment.contentType)}`
+        );
+        zip.file(
+          location,
+          new Promise<Buffer>((resolve) => {
+            attachment.buffer.then(resolve).catch((err) => {
+              Logger.warn(`Failed to read attachment from storage`, {
+                attachmentId: attachment.id,
+                teamId: attachment.teamId,
+                error: err.message,
+              });
+              resolve(Buffer.from(""));
+            });
+          }),
+          {
             date: attachment.updatedAt,
             createFolders: true,
-          });
+          }
+        );
 
-          content = content.replace(
-            new RegExp(escapeRegExp(attachment.redirectUrl), "g"),
-            location
-          );
-        } catch (err) {
-          Logger.error(
-            `Failed to add attachment to archive: ${attachment.id}`,
-            err
-          );
-        }
+        content = content.replace(
+          new RegExp(escapeRegExp(attachment.redirectUrl), "g"),
+          location
+        );
       })
     );
 
@@ -885,46 +891,61 @@ router.post(
   auth({ member: true }),
   rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
   validate(T.DocumentsTemplatizeSchema),
+  transaction(),
   async (ctx: APIContext<T.DocumentsTemplatizeReq>) => {
     const { id } = ctx.input.body;
     const { user } = ctx.state.auth;
+    const { transaction } = ctx.state;
 
     const original = await Document.findByPk(id, {
       userId: user.id,
+      transaction,
     });
+
     authorize(user, "update", original);
 
-    const document = await Document.create({
-      editorVersion: original.editorVersion,
-      collectionId: original.collectionId,
-      teamId: original.teamId,
-      userId: user.id,
-      publishedAt: new Date(),
-      lastModifiedById: user.id,
-      createdById: user.id,
-      template: true,
-      emoji: original.emoji,
-      title: original.title,
-      text: original.text,
-    });
-    await Event.create({
-      name: "documents.create",
-      documentId: document.id,
-      collectionId: document.collectionId,
-      teamId: document.teamId,
-      actorId: user.id,
-      data: {
-        title: document.title,
+    const document = await Document.create(
+      {
+        editorVersion: original.editorVersion,
+        collectionId: original.collectionId,
+        teamId: original.teamId,
+        userId: user.id,
+        publishedAt: new Date(),
+        lastModifiedById: user.id,
+        createdById: user.id,
         template: true,
+        emoji: original.emoji,
+        title: original.title,
+        text: original.text,
       },
-      ip: ctx.request.ip,
-    });
+      {
+        transaction,
+      }
+    );
+    await Event.create(
+      {
+        name: "documents.create",
+        documentId: document.id,
+        collectionId: document.collectionId,
+        teamId: document.teamId,
+        actorId: user.id,
+        data: {
+          title: document.title,
+          template: true,
+        },
+        ip: ctx.request.ip,
+      },
+      {
+        transaction,
+      }
+    );
 
     // reload to get all of the data needed to present (user, collection etc)
     const reloaded = await Document.findByPk(document.id, {
       userId: user.id,
-      rejectOnEmpty: true,
+      transaction,
     });
+    invariant(reloaded, "document not found");
 
     ctx.body = {
       data: await presentDocument(reloaded),
@@ -1311,17 +1332,23 @@ router.post(
     }
 
     const content = await fs.readFile(file.filepath);
+    const fileName = file.originalFilename ?? file.newFilename;
+    const mimeType = file.mimetype ?? "";
+
     const { text, state, title, emoji } = await documentImporter({
       user,
-      fileName: file.originalFilename ?? file.newFilename,
-      mimeType: file.mimetype ?? "",
+      fileName,
+      mimeType,
       content,
       ip: ctx.request.ip,
       transaction,
     });
 
     const document = await documentCreator({
-      source: "import",
+      sourceMetadata: {
+        fileName,
+        mimeType,
+      },
       title,
       emoji,
       text,

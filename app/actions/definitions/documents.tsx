@@ -246,13 +246,17 @@ export const unpublishDocument = createAction({
       return;
     }
 
-    await document.unpublish();
+    try {
+      await document.unpublish();
 
-    toast.message(
-      t("Unpublished {{ documentName }}", {
-        documentName: document.noun,
-      })
-    );
+      toast.success(
+        t("Unpublished {{ documentName }}", {
+          documentName: document.noun,
+        })
+      );
+    } catch (err) {
+      toast.error(err.message);
+    }
   },
 });
 
@@ -777,8 +781,7 @@ export const openDocumentComments = createAction({
     const can = stores.policies.abilities(activeDocumentId ?? "");
     return (
       !!activeDocumentId &&
-      can.read &&
-      !can.restore &&
+      can.comment &&
       !!stores.auth.team?.getPreference(TeamPreference.Commenting)
     );
   },

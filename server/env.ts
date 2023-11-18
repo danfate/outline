@@ -687,6 +687,14 @@ export class Environment {
   public IFRAMELY_API_KEY = this.toOptionalString(process.env.IFRAMELY_API_KEY);
 
   /**
+   * Enable unsafe-inline in script-src CSP directive
+   */
+  @IsBoolean()
+  public DEVELOPMENT_UNSAFE_INLINE_CSP = this.toBoolean(
+    process.env.DEVELOPMENT_UNSAFE_INLINE_CSP ?? "false"
+  );
+
+  /**
    * The product name
    */
   public APP_NAME = "Outline";
@@ -701,6 +709,27 @@ export class Environment {
       "https://app.outline.dev",
       "https://app.outline.dev:3000",
     ].includes(this.URL);
+  }
+
+  /**
+   * Returns true if the current installation is running in production.
+   */
+  public get isProduction() {
+    return this.ENVIRONMENT === "production";
+  }
+
+  /**
+   * Returns true if the current installation is running in the development environment.
+   */
+  public get isDevelopment() {
+    return this.ENVIRONMENT === "development";
+  }
+
+  /**
+   * Returns true if the current installation is running in a test environment.
+   */
+  public get isTest() {
+    return this.ENVIRONMENT === "test";
   }
 
   private toOptionalString(value: string | undefined) {
@@ -724,7 +753,13 @@ export class Environment {
    * @returns A boolean
    */
   private toBoolean(value: string) {
-    return value ? !!JSON.parse(value) : false;
+    try {
+      return value ? !!JSON.parse(value) : false;
+    } catch (err) {
+      throw new Error(
+        `"${value}" could not be parsed as a boolean, must be "true" or "false"`
+      );
+    }
   }
 }
 
