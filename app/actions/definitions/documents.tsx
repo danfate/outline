@@ -1,3 +1,4 @@
+import copy from "copy-to-clipboard";
 import invariant from "invariant";
 import {
   DownloadIcon,
@@ -23,11 +24,15 @@ import {
   UnpublishIcon,
   PublishIcon,
   CommentIcon,
+  GlobeIcon,
+  CopyIcon,
 } from "outline-icons";
 import * as React from "react";
 import { toast } from "sonner";
 import { ExportContentType, TeamPreference } from "@shared/types";
+import MarkdownHelper from "@shared/utils/MarkdownHelper";
 import { getEventFiles } from "@shared/utils/files";
+import SharePopover from "~/scenes/Document/components/SharePopover";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
@@ -107,6 +112,23 @@ export const createDocumentFromTemplate = createAction({
         starred: inStarredSection,
       }
     ),
+});
+
+export const copyDocumentAsMarkdown = createAction({
+  name: ({ t }) => t("Copy as Markdown"),
+  section: DocumentSection,
+  icon: <CopyIcon />,
+  keywords: "clipboard",
+  visible: ({ activeDocumentId }) => !!activeDocumentId,
+  perform: ({ stores, activeDocumentId, t }) => {
+    const document = activeDocumentId
+      ? stores.documents.get(activeDocumentId)
+      : undefined;
+    if (document) {
+      copy(MarkdownHelper.toMarkdown(document));
+      toast.success(t("Markdown copied to clipboard"));
+    }
+  },
 });
 
 export const createNestedDocument = createAction({
@@ -317,6 +339,40 @@ export const unsubscribeDocument = createAction({
     await document?.unsubscribe(currentUserId);
 
     toast.success(t("Unsubscribed from document notifications"));
+  },
+});
+
+export const shareDocument = createAction({
+  name: ({ t }) => t("Share"),
+  analyticsName: "Share document",
+  section: DocumentSection,
+  icon: <GlobeIcon />,
+  perform: async ({ activeDocumentId, stores, currentUserId, t }) => {
+    if (!activeDocumentId || !currentUserId) {
+      return;
+    }
+
+    const document = stores.documents.get(activeDocumentId);
+    const share = stores.shares.getByDocumentId(activeDocumentId);
+    const sharedParent = stores.shares.getByDocumentParents(activeDocumentId);
+    if (!document) {
+      return;
+    }
+
+    stores.dialogs.openModal({
+      title: t("Share this document"),
+      isCentered: true,
+      content: (
+        <SharePopover
+          document={document}
+          share={share}
+          sharedParent={sharedParent}
+          onRequestClose={stores.dialogs.closeAllModals}
+          hideTitle
+          visible
+        />
+      ),
+    });
   },
 });
 
@@ -853,6 +909,7 @@ export const rootDocumentActions = [
   deleteDocument,
   importDocument,
   downloadDocument,
+  copyDocumentAsMarkdown,
   starDocument,
   unstarDocument,
   publishDocument,
