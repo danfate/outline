@@ -60,7 +60,7 @@ function Security() {
   const saveData = React.useCallback(
     async (newData) => {
       try {
-        setData(newData);
+        setData((prev) => ({ ...prev, ...newData }));
         await team.save(newData);
         showSuccessMessage();
       } catch (err) {
@@ -72,16 +72,16 @@ function Security() {
 
   const handleChange = React.useCallback(
     async (ev: React.ChangeEvent<HTMLInputElement>) => {
-      await saveData({ ...data, [ev.target.id]: ev.target.checked });
+      await saveData({ [ev.target.id]: ev.target.checked });
     },
-    [data, saveData]
+    [saveData]
   );
 
   const handleDefaultRoleChange = React.useCallback(
     async (newDefaultRole: string) => {
-      await saveData({ ...data, defaultUserRole: newDefaultRole });
+      await saveData({ defaultUserRole: newDefaultRole });
     },
-    [data, saveData]
+    [saveData]
   );
 
   const handlePreferenceChange = React.useCallback(
@@ -102,14 +102,12 @@ function Security() {
 
       if (inviteRequired) {
         dialogs.openModal({
-          isCentered: true,
           title: t("Are you sure you want to require invites?"),
           content: (
             <ConfirmationDialog
               onSubmit={async () => {
                 await saveData(newData);
               }}
-              submitText={t("I’m sure")}
               savingText={`${t("Saving")}…`}
               danger
             >
@@ -136,7 +134,7 @@ function Security() {
   return (
     <Scene title={t("Security")} icon={<PadlockIcon />}>
       <Heading>{t("Security")}</Heading>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Settings that impact the access, security, and content of your
           workspace.
@@ -165,7 +163,7 @@ function Security() {
                 color={provider.isActive ? theme.accent : undefined}
                 checked={provider.isActive}
               />{" "}
-              <Text type="secondary">
+              <Text as="p" type="secondary">
                 {provider.isActive ? t("Connected") : t("Disabled")}
               </Text>
             </Flex>
@@ -194,6 +192,17 @@ function Security() {
       </SettingRow>
 
       <h2>{t("Access")}</h2>
+      <SettingRow
+        label={t("Allow users to send invites")}
+        name={TeamPreference.MembersCanInvite}
+        description={t("Allow editors to invite other people to the workspace")}
+      >
+        <Switch
+          id={TeamPreference.MembersCanInvite}
+          checked={team.getPreference(TeamPreference.MembersCanInvite)}
+          onChange={handlePreferenceChange}
+        />
+      </SettingRow>
       {isCloudHosted && (
         <SettingRow
           label={t("Require invites")}
@@ -227,7 +236,7 @@ function Security() {
             value={data.defaultUserRole}
             options={[
               {
-                label: t("Member"),
+                label: t("Editor"),
                 value: "member",
               },
               {
@@ -282,7 +291,7 @@ function Security() {
         label={t("Collection creation")}
         name="memberCollectionCreate"
         description={t(
-          "Allow members to create new collections within the workspace"
+          "Allow editors to create new collections within the workspace"
         )}
       >
         <Switch

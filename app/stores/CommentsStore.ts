@@ -1,11 +1,6 @@
-import invariant from "invariant";
-import filter from "lodash/filter";
 import orderBy from "lodash/orderBy";
-import { action, runInAction, computed } from "mobx";
+import { action, computed } from "mobx";
 import Comment from "~/models/Comment";
-import Document from "~/models/Document";
-import { PaginationParams } from "~/types";
-import { client } from "~/utils/ApiClient";
 import RootStore from "./RootStore";
 import Store from "./base/Store";
 
@@ -22,8 +17,9 @@ export default class CommentsStore extends Store<Comment> {
    * @returns Array of comments
    */
   threadsInDocument(documentId: string): Comment[] {
-    return this.inDocument(documentId).filter(
-      (comment) => !comment.parentCommentId
+    return this.filter(
+      (comment: Comment) =>
+        comment.documentId === documentId && !comment.parentCommentId
     );
   }
 
@@ -34,23 +30,9 @@ export default class CommentsStore extends Store<Comment> {
    * @returns Array of comments
    */
   inThread(threadId: string): Comment[] {
-    return filter(
-      this.orderedData,
-      (comment) =>
+    return this.filter(
+      (comment: Comment) =>
         comment.parentCommentId === threadId || comment.id === threadId
-    );
-  }
-
-  /**
-   * Returns a list of comments in a document.
-   *
-   * @param documentId ID of the document to get comments for
-   * @returns Array of comments
-   */
-  inDocument(documentId: string): Comment[] {
-    return filter(
-      this.orderedData,
-      (comment) => comment.documentId === documentId
     );
   }
 
@@ -67,30 +49,6 @@ export default class CommentsStore extends Store<Comment> {
       comment.typingUsers.set(userId, new Date());
     }
   }
-
-  @action
-  fetchDocumentComments = async (
-    documentId: string,
-    options?: PaginationParams | undefined
-  ): Promise<Document[]> => {
-    this.isFetching = true;
-
-    try {
-      const res = await client.post(`/comments.list`, {
-        documentId,
-        ...options,
-      });
-      invariant(res && res.data, "Comment list not available");
-
-      runInAction("CommentsStore#fetchDocumentComments", () => {
-        res.data.forEach(this.add);
-        this.addPolicies(res.policies);
-      });
-      return res.data;
-    } finally {
-      this.isFetching = false;
-    }
-  };
 
   @computed
   get orderedData(): Comment[] {

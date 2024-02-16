@@ -2,8 +2,7 @@ import * as React from "react";
 import Frame from "../components/Frame";
 import { EmbedProps as Props } from ".";
 
-function YouTube(props: Props) {
-  const { matches } = props.attrs;
+function YouTube({ matches, ...props }: Props) {
   const videoId = matches[1];
 
   let start;
@@ -11,7 +10,7 @@ function YouTube(props: Props) {
     const url = new URL(props.attrs.href);
     const searchParams = new URLSearchParams(url.search);
     start = searchParams.get("t")?.replace(/s$/, "");
-  } catch {
+  } catch (_e) {
     // noop
   }
 
@@ -25,9 +24,5 @@ function YouTube(props: Props) {
     />
   );
 }
-
-YouTube.ENABLED = [
-  /(?:https?:\/\/)?(?:www\.)?youtu\.?be(?:\.com)?\/?.*(?:watch|embed)?(?:.*v=|v\/|\/)([a-zA-Z0-9_-]{11})([\&\?](.*))?$/i,
-];
 
 export default YouTube;

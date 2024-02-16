@@ -3,7 +3,13 @@ import compact from "lodash/compact";
 import isNil from "lodash/isNil";
 import uniq from "lodash/uniq";
 import randomstring from "randomstring";
-import type { Identifier, NonNullFindOptions, SaveOptions } from "sequelize";
+import type {
+  Identifier,
+  InferAttributes,
+  InferCreationAttributes,
+  NonNullFindOptions,
+  SaveOptions,
+} from "sequelize";
 import {
   Sequelize,
   Transaction,
@@ -33,9 +39,14 @@ import {
   IsNumeric,
   IsDate,
   AllowNull,
+  BelongsToMany,
 } from "sequelize-typescript";
 import isUUID from "validator/lib/isUUID";
-import type { NavigationNode, SourceMetadata } from "@shared/types";
+import type {
+  NavigationNode,
+  ProsemirrorData,
+  SourceMetadata,
+} from "@shared/types";
 import getTasks from "@shared/utils/getTasks";
 import slugify from "@shared/utils/slugify";
 import { SLUG_URL_REGEX } from "@shared/utils/urlHelpers";
@@ -48,6 +59,7 @@ import Revision from "./Revision";
 import Star from "./Star";
 import Team from "./Team";
 import User from "./User";
+import UserMembership from "./UserMembership";
 import View from "./View";
 import ParanoidModel from "./base/ParanoidModel";
 import Fix from "./decorators/Fix";
@@ -90,33 +102,20 @@ type AdditionalFindOptions = {
   },
 }))
 @Scopes(() => ({
-  withCollectionPermissions: (userId: string, paranoid = true) => {
-    if (userId) {
-      return {
-        include: [
-          {
-            attributes: ["id", "permission", "sharing", "teamId", "deletedAt"],
-            model: Collection.scope({
+  withCollectionPermissions: (userId: string, paranoid = true) => ({
+    include: [
+      {
+        attributes: ["id", "permission", "sharing", "teamId", "deletedAt"],
+        model: userId
+          ? Collection.scope({
               method: ["withMembership", userId],
-            }),
-            as: "collection",
-            paranoid,
-          },
-        ],
-      };
-    }
-
-    return {
-      include: [
-        {
-          attributes: ["id", "permission", "sharing", "teamId", "deletedAt"],
-          model: Collection,
-          as: "collection",
-          paranoid,
-        },
-      ],
-    };
-  },
+            })
+          : Collection,
+        as: "collection",
+        paranoid,
+      },
+    ],
+  }),
   withoutState: {
     attributes: {
       exclude: ["state"],
@@ -179,10 +178,29 @@ type AdditionalFindOptions = {
       ],
     };
   },
+  withMembership: (userId: string) => {
+    if (!userId) {
+      return {};
+    }
+    return {
+      include: [
+        {
+          association: "memberships",
+          where: {
+            userId,
+          },
+          required: false,
+        },
+      ],
+    };
+  },
 }))
 @Table({ tableName: "documents", modelName: "document" })
 @Fix
-class Document extends ParanoidModel {
+class Document extends ParanoidModel<
+  InferAttributes<Document>,
+  Partial<InferCreationAttributes<Document>>
+> {
   @SimpleLength({
     min: 10,
     max: 10,
@@ -204,17 +222,20 @@ class Document extends ParanoidModel {
 
   @IsNumeric
   @Column(DataType.SMALLINT)
-  version: number;
+  version?: number | null;
 
+  @Default(false)
   @Column
   template: boolean;
 
+  @Default(false)
   @Column
   fullWidth: boolean;
 
   @Column
   insightsEnabled: boolean;
 
+  /** The version of the editor last used to edit this document. */
   @SimpleLength({
     max: 255,
     msg: `editorVersion must be 255 characters or less`,
@@ -222,6 +243,7 @@ class Document extends ParanoidModel {
   @Column
   editorVersion: string;
 
+  /** An emoji to use as the document icon. */
   @Length({
     max: 1,
     msg: `Emoji must be a single character`,
@@ -229,39 +251,70 @@ class Document extends ParanoidModel {
   @Column
   emoji: string | null;
 
+  /**
+   * The content of the document as Markdown.
+   *
+   * @deprecated Use `content` instead, or `DocumentHelper.toMarkdown` if exporting lossy markdown.
+   * This column will be removed in a future migration.
+   */
   @Column(DataType.TEXT)
   text: string;
 
+  /**
+   * The content of the document as JSON, this is a snapshot at the last time the state was saved.
+   */
+  @Column(DataType.JSONB)
+  content: ProsemirrorData;
+
+  /**
+   * The content of the document as YJS collaborative state, this column can be quite large and
+   * should only be selected from the DB when the `content` snapshot cannot be used.
+   */
   @SimpleLength({
     max: DocumentValidation.maxStateLength,
     msg: `Document collaborative state is too large, you must create a new document`,
   })
   @Column(DataType.BLOB)
-  state: Uint8Array;
+  state?: Uint8Array | null;
 
+  /** Whether this document is part of onboarding. */
   @Default(false)
   @Column
   isWelcome: boolean;
 
+  /** How many versions there are in the history of this document. */
   @IsNumeric
   @Default(0)
   @Column(DataType.INTEGER)
   revisionCount: number;
 
+  /** Whether the document is archvied, and if so when. */
   @IsDate
   @Column
   archivedAt: Date | null;
 
+  /** Whether the document is published, and if so when. */
   @IsDate
   @Column
   publishedAt: Date | null;
 
+  /** An array of user IDs that have edited this document. */
   @Column(DataType.ARRAY(DataType.UUID))
   collaboratorIds: string[] = [];
 
   // getters
 
+  /**
+   * The frontend path to this document.
+   *
+   * @deprecated Use `path` instead.
+   */
   get url() {
+    return this.path;
+  }
+
+  /** The frontend path to this document. */
+  get path() {
     if (!this.title) {
       return `/doc/untitled-${this.urlId}`;
     }
@@ -348,19 +401,23 @@ class Document extends ParanoidModel {
     // ensure documents have a title
     model.title = model.title || "";
 
-    if (model.previous("title") && model.previous("title") !== model.title) {
+    const previousTitle = model.previous("title");
+    if (previousTitle && previousTitle !== model.title) {
       if (!model.previousTitles) {
         model.previousTitles = [];
       }
 
-      model.previousTitles = uniq(
-        model.previousTitles.concat(model.previous("title"))
-      );
+      model.previousTitles = uniq(model.previousTitles.concat(previousTitle));
     }
 
     // add the current user as a collaborator on this doc
     if (!model.collaboratorIds) {
       model.collaboratorIds = [];
+    }
+
+    // backfill content if it's missing
+    if (!model.content) {
+      model.content = DocumentHelper.toJSON(model);
     }
 
     // ensure the last modifying user is a collaborator
@@ -449,9 +506,15 @@ class Document extends ParanoidModel {
   @BelongsTo(() => Collection, "collectionId")
   collection: Collection | null | undefined;
 
+  @BelongsToMany(() => User, () => UserMembership)
+  users: User[];
+
   @ForeignKey(() => Collection)
   @Column(DataType.UUID)
   collectionId?: string | null;
+
+  @HasMany(() => UserMembership)
+  memberships: UserMembership[];
 
   @HasMany(() => Revision)
   revisions: Revision[];
@@ -472,7 +535,15 @@ class Document extends ParanoidModel {
     const viewScope: Readonly<ScopeOptions> = {
       method: ["withViews", userId],
     };
-    return this.scope(["defaultScope", collectionScope, viewScope]);
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", userId],
+    };
+    return this.scope([
+      "defaultScope",
+      collectionScope,
+      viewScope,
+      membershipScope,
+    ]);
   }
 
   /**
@@ -511,6 +582,9 @@ class Document extends ParanoidModel {
       },
       {
         method: ["withViews", userId],
+      },
+      {
+        method: ["withMembership", userId],
       },
     ]);
 
@@ -588,6 +662,22 @@ class Document extends ParanoidModel {
   get isTrialImport() {
     return !!(this.importId && this.sourceMetadata?.trial);
   }
+
+  /**
+   * Revert the state of the document to match the passed revision.
+   *
+   * @param revision The revision to revert to.
+   */
+  restoreFromRevision = (revision: Revision) => {
+    if (revision.documentId !== this.id) {
+      throw new Error("Revision does not belong to this document");
+    }
+
+    this.content = revision.content;
+    this.text = revision.text;
+    this.title = revision.title;
+    this.emoji = revision.emoji;
+  };
 
   /**
    * Get a list of users that have collaborated on this document
@@ -720,9 +810,51 @@ class Document extends ParanoidModel {
       }
     }
 
+    const parentDocumentPermissions = this.parentDocumentId
+      ? await UserMembership.findAll({
+          where: {
+            documentId: this.parentDocumentId,
+          },
+          transaction,
+        })
+      : [];
+
+    await Promise.all(
+      parentDocumentPermissions.map((permission) =>
+        UserMembership.create(
+          {
+            documentId: this.id,
+            userId: permission.userId,
+            sourceId: permission.sourceId ?? permission.id,
+            permission: permission.permission,
+            createdById: permission.createdById,
+          },
+          {
+            transaction,
+          }
+        )
+      )
+    );
+
     this.lastModifiedById = userId;
     this.publishedAt = new Date();
     return this.save({ transaction });
+  };
+
+  isCollectionDeleted = async () => {
+    if (this.deletedAt || this.archivedAt) {
+      if (this.collectionId) {
+        const collection =
+          this.collection ??
+          (await Collection.findByPk(this.collectionId, {
+            attributes: ["deletedAt"],
+            paranoid: false,
+          }));
+
+        return !!collection?.deletedAt;
+      }
+    }
+    return false;
   };
 
   unpublish = async (userId: string) => {
@@ -791,12 +923,9 @@ class Document extends ParanoidModel {
         const parent = await (this.constructor as typeof Document).findOne({
           where: {
             id: this.parentDocumentId,
-            archivedAt: {
-              [Op.is]: null,
-            },
           },
         });
-        if (!parent) {
+        if (parent?.isDraft || !parent?.isActive) {
           this.parentDocumentId = null;
         }
       }
@@ -877,22 +1006,25 @@ class Document extends ParanoidModel {
   toNavigationNode = async (
     options?: FindOptions<Document>
   ): Promise<NavigationNode> => {
-    const childDocuments = await (this.constructor as typeof Document)
-      .unscoped()
-      .scope("withoutState")
-      .findAll({
-        where: {
-          teamId: this.teamId,
-          parentDocumentId: this.id,
-          archivedAt: {
-            [Op.is]: null,
-          },
-          publishedAt: {
-            [Op.ne]: null,
-          },
-        },
-        transaction: options?.transaction,
-      });
+    // Checking if the record is new is a performance optimization – new docs cannot have children
+    const childDocuments = this.isNewRecord
+      ? []
+      : await (this.constructor as typeof Document)
+          .unscoped()
+          .scope("withoutState")
+          .findAll({
+            where: {
+              teamId: this.teamId,
+              parentDocumentId: this.id,
+              archivedAt: {
+                [Op.is]: null,
+              },
+              publishedAt: {
+                [Op.ne]: null,
+              },
+            },
+            transaction: options?.transaction,
+          });
 
     const children = await Promise.all(
       childDocuments.map((child) => child.toNavigationNode(options))

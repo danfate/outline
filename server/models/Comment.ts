@@ -1,10 +1,10 @@
+import { InferAttributes, InferCreationAttributes } from "sequelize";
 import {
   DataType,
   BelongsTo,
   ForeignKey,
   Column,
   Table,
-  Scopes,
   Length,
   DefaultScope,
 } from "sequelize-typescript";
@@ -25,20 +25,12 @@ import TextLength from "./validators/TextLength";
     },
   ],
 }))
-@Scopes(() => ({
-  withDocument: {
-    include: [
-      {
-        model: Document,
-        as: "document",
-        required: true,
-      },
-    ],
-  },
-}))
 @Table({ tableName: "comments", modelName: "comment" })
 @Fix
-class Comment extends ParanoidModel {
+class Comment extends ParanoidModel<
+  InferAttributes<Comment>,
+  Partial<InferCreationAttributes<Comment>>
+> {
   @TextLength({
     max: CommentValidation.maxLength,
     msg: `Comment must be less than ${CommentValidation.maxLength} characters`,

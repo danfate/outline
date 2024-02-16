@@ -1,7 +1,7 @@
 import { Transaction } from "sequelize";
 import { Optional } from "utility-types";
 import { Document, Event, User } from "@server/models";
-import DocumentHelper from "@server/models/helpers/DocumentHelper";
+import TextHelper from "@server/models/helpers/TextHelper";
 
 type Props = Optional<
   Pick<
@@ -78,7 +78,6 @@ export default async function documentCreator({
       editorVersion,
       collectionId,
       teamId: user.teamId,
-      userId: user.id,
       createdAt,
       updatedAt: updatedAt ?? createdAt,
       lastModifiedById: user.id,
@@ -90,12 +89,12 @@ export default async function documentCreator({
       sourceMetadata,
       fullWidth: templateDocument ? templateDocument.fullWidth : fullWidth,
       emoji: templateDocument ? templateDocument.emoji : emoji,
-      title: DocumentHelper.replaceTemplateVariables(
+      title: TextHelper.replaceTemplateVariables(
         templateDocument ? templateDocument.title : title,
         user
       ),
-      text: await DocumentHelper.replaceImagesWithAttachments(
-        DocumentHelper.replaceTemplateVariables(
+      text: await TextHelper.replaceImagesWithAttachments(
+        TextHelper.replaceTemplateVariables(
           templateDocument ? templateDocument.text : text,
           user
         ),
@@ -157,7 +156,10 @@ export default async function documentCreator({
   // reload to get all of the data needed to present (user, collection etc)
   // we need to specify publishedAt to bypass default scope that only returns
   // published documents
-  return await Document.findOne({
+  return await Document.scope([
+    "withDrafts",
+    { method: ["withMembership", user.id] },
+  ]).findOne({
     where: {
       id: document.id,
       publishedAt: document.publishedAt,

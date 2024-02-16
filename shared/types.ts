@@ -62,7 +62,7 @@ export type PublicEnv = {
   APP_NAME: string;
   ROOT_SHARE_ID?: string;
   analytics: {
-    service?: IntegrationService;
+    service?: IntegrationService | UserCreatableIntegrationService;
     settings?: IntegrationSettings<IntegrationType.Analytics>;
   };
 };
@@ -87,10 +87,21 @@ export enum IntegrationService {
   GoogleAnalytics = "google-analytics",
 }
 
+export enum UserCreatableIntegrationService {
+  Diagrams = "diagrams",
+  Grist = "grist",
+  GoogleAnalytics = "google-analytics",
+}
+
 export enum CollectionPermission {
   Read = "read",
   ReadWrite = "read_write",
   Admin = "admin",
+}
+
+export enum DocumentPermission {
+  Read = "read",
+  ReadWrite = "read_write",
 }
 
 export type IntegrationSettings<T> = T extends IntegrationType.Embed
@@ -152,6 +163,8 @@ export enum TeamPreference {
   PublicBranding = "publicBranding",
   /** Whether viewers should see download options. */
   ViewersCanExport = "viewersCanExport",
+  /** Whether members can invite new users. */
+  MembersCanInvite = "membersCanInvite",
   /** Whether users can comment on documents. */
   Commenting = "commenting",
   /** The custom theme for the team. */
@@ -162,6 +175,7 @@ export type TeamPreferences = {
   [TeamPreference.SeamlessEdit]?: boolean;
   [TeamPreference.PublicBranding]?: boolean;
   [TeamPreference.ViewersCanExport]?: boolean;
+  [TeamPreference.MembersCanInvite]?: boolean;
   [TeamPreference.Commenting]?: boolean;
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
 };
@@ -192,6 +206,8 @@ export type CollectionSort = {
 export enum NotificationEventType {
   PublishDocument = "documents.publish",
   UpdateDocument = "documents.update",
+  AddUserToDocument = "documents.add_user",
+  AddUserToCollection = "collections.add_user",
   CreateRevision = "revisions.create",
   CreateCollection = "collections.create",
   CreateComment = "comments.create",
@@ -228,6 +244,8 @@ export const NotificationEventDefaults = {
   [NotificationEventType.Onboarding]: true,
   [NotificationEventType.Features]: true,
   [NotificationEventType.ExportCompleted]: true,
+  [NotificationEventType.AddUserToDocument]: true,
+  [NotificationEventType.AddUserToCollection]: true,
 };
 
 export enum UnfurlType {
@@ -250,5 +268,15 @@ export type Unfurl<T = OEmbedType> = {
   meta?: Record<string, string>;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ProsemirrorData = Record<string, any>;
+export type JSONValue =
+  | string
+  | number
+  | boolean
+  | undefined
+  | null
+  | { [x: string]: JSONValue }
+  | Array<JSONValue>;
+
+export type JSONObject = { [x: string]: JSONValue };
+
+export type ProsemirrorData = JSONObject;

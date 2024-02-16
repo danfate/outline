@@ -69,6 +69,7 @@ const buildBaseTheme = (input: Partial<Colors>) => {
     selected: colors.accent,
     textHighlight: "#FDEA9B",
     textHighlightForeground: colors.almostBlack,
+    commentMarkBackground: transparentize(0.5, "#2BC2FF"),
     code: colors.lightBlack,
     codeComment: "#6a737d",
     codePunctuation: "#5e6687",
@@ -129,7 +130,7 @@ export const buildLightTheme = (input: Partial<Colors>): DefaultTheme => {
 
     commentBackground: colors.warmGrey,
 
-    modalBackdrop: colors.black10,
+    modalBackdrop: "rgba(0, 0, 0, 0.15)",
     modalBackground: colors.white,
     modalShadow:
       "0 4px 8px rgb(0 0 0 / 8%), 0 2px 4px rgb(0 0 0 / 0%), 0 30px 40px rgb(0 0 0 / 8%)",

@@ -14,6 +14,7 @@ import Button, { Inner } from "~/components/Button";
 import Text from "~/components/Text";
 import useMenuHeight from "~/hooks/useMenuHeight";
 import useMobile from "~/hooks/useMobile";
+import useOnClickOutside from "~/hooks/useOnClickOutside";
 import { fadeAndScaleIn } from "~/styles/animations";
 import {
   Position,
@@ -42,9 +43,16 @@ export type Props = {
   labelHidden?: boolean;
   icon?: React.ReactNode;
   options: Option[];
+  /** @deprecated Removing soon, do not use. */
   note?: React.ReactNode;
   onChange?: (value: string | null) => void;
 };
+
+export interface InputSelectRef {
+  value: string | null;
+  focus: () => void;
+  blur: () => void;
+}
 
 interface InnerProps extends React.HTMLAttributes<HTMLDivElement> {
   placement: Placement;
@@ -53,7 +61,7 @@ interface InnerProps extends React.HTMLAttributes<HTMLDivElement> {
 const getOptionFromValue = (options: Option[], value: string | null) =>
   options.find((option) => option.value === value);
 
-const InputSelect = (props: Props) => {
+const InputSelect = (props: Props, ref: React.RefObject<InputSelectRef>) => {
   const {
     value = null,
     label,
@@ -66,6 +74,7 @@ const InputSelect = (props: Props) => {
     disabled,
     note,
     icon,
+    nude,
     ...rest
   } = props;
 
@@ -75,9 +84,9 @@ const InputSelect = (props: Props) => {
     selectedValue: value,
   });
 
-  const popOver = useSelectPopover({
+  const popover = useSelectPopover({
     ...select,
-    hideOnClickOutside: true,
+    hideOnClickOutside: false,
     preventBodyScroll: true,
     disabled,
   });
@@ -105,6 +114,35 @@ const InputSelect = (props: Props) => {
   const selectedValueIndex = options.findIndex(
     (option) => option.value === select.selectedValue
   );
+
+  // Custom click outside handling rather than using `hideOnClickOutside` from reakit so that we can
+  // prevent event bubbling.
+  useOnClickOutside(
+    contentRef,
+    (event) => {
+      if (select.visible) {
+        event.stopPropagation();
+        event.preventDefault();
+        select.hide();
+      }
+    },
+    { capture: true }
+  );
+
+  React.useImperativeHandle(ref, () => ({
+    focus: () => {
+      buttonRef.current?.focus();
+    },
+    blur: () => {
+      buttonRef.current?.blur();
+    },
+    value: select.selectedValue,
+  }));
+
+  React.useEffect(() => {
+    previousValue.current = value;
+    select.setSelectedValue(value);
+  }, [value]);
 
   React.useEffect(() => {
     if (previousValue.current === select.selectedValue) {
@@ -142,6 +180,7 @@ const InputSelect = (props: Props) => {
               disclosure
               className={className}
               icon={icon}
+              $nude={nude}
               {...props}
             >
               {getOptionFromValue(options, select.selectedValue)?.label || (
@@ -150,7 +189,7 @@ const InputSelect = (props: Props) => {
             </StyledButton>
           )}
         </Select>
-        <SelectPopover {...select} {...popOver} aria-label={ariaLabel}>
+        <SelectPopover {...select} {...popover} aria-label={ariaLabel}>
           {(props: InnerProps) => {
             const topAnchor = props.style?.top === "0";
             const rightAnchor = props.placement === "bottom-end";
@@ -163,6 +202,7 @@ const InputSelect = (props: Props) => {
                   topAnchor={topAnchor}
                   rightAnchor={rightAnchor}
                   hiddenScrollbars
+                  maxWidth={400}
                   style={
                     maxHeight && topAnchor
                       ? {
@@ -200,7 +240,7 @@ const InputSelect = (props: Props) => {
         </SelectPopover>
       </Wrapper>
       {note && (
-        <Text type="secondary" size="small">
+        <Text as="p" type="secondary" size="small">
           {note}
         </Text>
       )}
@@ -223,7 +263,7 @@ const Spacer = styled.div`
   flex-shrink: 0;
 `;
 
-const StyledButton = styled(Button)<{ nude?: boolean }>`
+const StyledButton = styled(Button)<{ $nude?: boolean }>`
   font-weight: normal;
   text-transform: none;
   margin-bottom: 16px;
@@ -236,7 +276,7 @@ const StyledButton = styled(Button)<{ nude?: boolean }>`
   }
 
   ${(props) =>
-    props.nude &&
+    props.$nude &&
     css`
       border-color: transparent;
       box-shadow: none;
@@ -244,8 +284,8 @@ const StyledButton = styled(Button)<{ nude?: boolean }>`
 
   ${Inner} {
     line-height: 28px;
-    padding-left: 16px;
-    padding-right: 8px;
+    padding-left: 12px;
+    padding-right: 4px;
   }
 
   svg {
@@ -267,7 +307,7 @@ const Wrapper = styled.label<{ short?: boolean }>`
   max-width: ${(props) => (props.short ? "350px" : "100%")};
 `;
 
-const Positioner = styled(Position)`
+export const Positioner = styled(Position)`
   &.focus-visible {
     ${StyledSelectOption} {
       &[aria-selected="true"] {
@@ -284,4 +324,4 @@ const Positioner = styled(Position)`
   }
 `;
 
-export default InputSelect;
+export default React.forwardRef(InputSelect);

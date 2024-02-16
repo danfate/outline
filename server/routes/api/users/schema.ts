@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NotificationEventType, UserPreference, UserRole } from "@shared/types";
 import User from "@server/models/User";
-import BaseSchema from "../BaseSchema";
+import { BaseSchema } from "../schema";
 
 const BaseIdSchema = z.object({
   id: z.string().uuid(),
@@ -69,7 +69,7 @@ export const UsersUpdateSchema = BaseSchema.extend({
   body: z.object({
     id: z.string().uuid().optional(),
     name: z.string().optional(),
-    avatarUrl: z.string().optional(),
+    avatarUrl: z.string().nullish(),
     language: z.string().optional(),
     preferences: z.record(z.nativeEnum(UserPreference), z.boolean()).optional(),
   }),

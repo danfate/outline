@@ -32,12 +32,12 @@ function TitleDocumentMeta({ to, document, revision, ...rest }: Props) {
   const totalViewers = documentViews.length;
   const onlyYou = totalViewers === 1 && documentViews[0].userId;
   const viewsLoadedOnMount = React.useRef(totalViewers > 0);
-  const can = usePolicy(document.id);
+  const can = usePolicy(document);
 
   const Wrapper = viewsLoadedOnMount.current ? React.Fragment : Fade;
 
   const insightsPath = documentInsightsPath(document);
-  const commentsCount = comments.inDocument(document.id).length;
+  const commentsCount = comments.filter({ documentId: document.id }).length;
 
   return (
     <Meta document={document} revision={revision} to={to} replace {...rest}>

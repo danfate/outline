@@ -71,15 +71,9 @@ export default class CollectionGroupMembershipsStore extends Store<CollectionGro
       id: collectionId,
       groupId,
     });
-    this.remove(`${groupId}-${collectionId}`);
-  }
-
-  @action
-  removeCollectionMemberships = (collectionId: string) => {
-    this.data.forEach((membership, key) => {
-      if (key.includes(collectionId)) {
-        this.remove(key);
-      }
+    this.removeAll({
+      collectionId,
+      groupId,
     });
-  };
+  }
 }
