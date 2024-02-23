@@ -2979,10 +2979,10 @@
   resolved "https://registry.yarnpkg.com/@types/http-errors/-/http-errors-1.8.1.tgz#e81ad28a60bee0328c6d2384e029aec626f1ae67"
   integrity "sha1-6BrSimC+4DKMbSOE4Cmuxibxrmc= sha512-e+2rjEwK6KDaNOm5Aa9wNGgyS9oSZU/4pfSMMPYNOfjvFI0WVXm29+ITRFr6aKDvvKo7uU1jV68MW4ScsfDi7Q=="
 
-"@types/invariant@^2.2.35":
-  version "2.2.35"
-  resolved "https://registry.yarnpkg.com/@types/invariant/-/invariant-2.2.35.tgz#cd3ebf581a6557452735688d8daba6cf0bd5a3be"
-  integrity "sha1-zT6/WBplV0UnNWiNjaumzwvVo74= sha512-DxX1V9P8zdJPYQat1gHyY0xj3efl8gnMVjiM9iCY6y27lj+PoQWkgjt8jDqmovPqULkKVpKRg8J36iQiA+EtEg=="
+"@types/invariant@^2.2.37":
+  version "2.2.37"
+  resolved "https://registry.yarnpkg.com/@types/invariant/-/invariant-2.2.37.tgz#1709741e534364d653c87dff22fc76fa94aa7bc0"
+  integrity sha512-IwpIMieE55oGWiXkQPSBY1nw1nFs6bsKXTFskNY8sdS17K24vyEBRQZEwlRS7ZmXCWnJcQtbxWzly+cODWGs2A==
 
 "@types/istanbul-lib-coverage@*", "@types/istanbul-lib-coverage@^2.0.0", "@types/istanbul-lib-coverage@^2.0.1":
   version "2.0.3"
@@ -3003,10 +3003,10 @@
   dependencies:
     "@types/istanbul-lib-report" "*"
 
-"@types/jest@^29.4.0":
-  version "29.4.0"
-  resolved "https://registry.yarnpkg.com/@types/jest/-/jest-29.4.0.tgz#a8444ad1704493e84dbf07bb05990b275b3b9206"
-  integrity "sha1-qERK0XBEk+hNvwe7BZkLJ1s7kgY= sha512-VaywcGQ9tPorCX/Jkkni7RWGFfI11whqzs8dvxF41P17Z+z872thvEvlIbznjPJ02kl1HMX3LmLOonsj2n7HeQ=="
+"@types/jest@^29.5.12":
+  version "29.5.12"
+  resolved "https://registry.yarnpkg.com/@types/jest/-/jest-29.5.12.tgz#7f7dc6eb4cf246d2474ed78744b05d06ce025544"
+  integrity sha512-eDC8bTvT/QhYdxJAulQikueigY5AsdBRH2yDKW3yveW7svY3+DzN84/2NUgkw10RTiJbWqZrTtoGVdYlvFJdLw==
   dependencies:
     expect "^29.0.0"
     pretty-format "^29.0.0"
@@ -7561,10 +7561,10 @@ humanize-number@0.0.2:
   resolved "https://registry.yarnpkg.com/humanize-number/-/humanize-number-0.0.2.tgz#11c0af6a471643633588588048f1799541489c18"
   integrity "sha1-EcCvakcWQ2M1iFiASPF5lUFInBg= sha512-un3ZAcNQGI7RzaWGZzQDH47HETM4Wrj6z6E4TId8Yeq9w5ZKUVB1nrT2jwFheTUjEmqcgTjXDc959jum+ai1kQ=="
 
-husky@^8.0.2:
-  version "8.0.2"
-  resolved "https://registry.yarnpkg.com/husky/-/husky-8.0.2.tgz#5816a60db02650f1f22c8b69b928fd6bcd77a236"
-  integrity "sha1-WBamDbAmUPHyLItpuSj9a813ojY= sha512-Tkv80jtvbnkK3mYWxPZePGFpQ/tT3HNSs/sasF9P2YfkMezDl3ON37YN6jUUI4eTg5LcyVynlb6r4eyvOmspvg=="
+husky@^8.0.3:
+  version "8.0.3"
+  resolved "https://registry.yarnpkg.com/husky/-/husky-8.0.3.tgz#4936d7212e46d1dea28fef29bb3a108872cd9184"
+  integrity sha512-+dQSyqPh4x1hlO1swXBiNb2HzTDN1I2IGLQx1GrBuiqFJfoMrnZWwVmatvSiO+Iz8fBUnf+lekwNo4c2LlXItg==
 
 i18next-fs-backend@^2.3.1:
   version "2.3.1"
@@ -10452,10 +10452,10 @@ pg-protocol@^1.6.0:
   resolved "https://registry.yarnpkg.com/pg-protocol/-/pg-protocol-1.6.0.tgz#4c91613c0315349363af2084608db843502f8833"
   integrity "sha1-TJFhPAMVNJNjryCEYI24Q1AviDM= sha512-M+PDm637OY5WM307051+bsDia5Xej6d9IR4GwJse1qA1DIhiKlksvrneZOYQq42OM+spubpcNYEo2FcKQrDk+Q=="
 
-pg-tsquery@^8.4.1:
-  version "8.4.1"
-  resolved "https://registry.yarnpkg.com/pg-tsquery/-/pg-tsquery-8.4.1.tgz#7346aefd90983f321c59382e1468f192b1b10894"
-  integrity "sha1-c0au/ZCYPzIcWTguFGjxkrGxCJQ= sha512-GoeRhw6o4Bpt7awdUwHq6ITOw40IWSrb5IC2qR6dF9ZECtHFGdSpnjHOl9Rumd8Rx12kLI2T9TGV0gvxD5pFgA=="
+pg-tsquery@^8.4.2:
+  version "8.4.2"
+  resolved "https://registry.yarnpkg.com/pg-tsquery/-/pg-tsquery-8.4.2.tgz#f28e6242f15f4d8535ac08a0f9083ce04e42e1e4"
+  integrity sha512-waJSlBIKE+shDhuDpuQglTH6dG5zakDhnrnxu8XB8V5c7yoDSuy4pOxY6t2dyoxTjaKMcMmlByJN7n9jx9eqMA==
 
 pg-types@^2.1.0:
   version "2.2.0"
@@ -11601,10 +11601,10 @@ rollup-plugin-terser@^7.0.0:
     serialize-javascript "^4.0.0"
     terser "^5.0.0"
 
-rollup-plugin-webpack-stats@^0.2.2:
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/rollup-plugin-webpack-stats/-/rollup-plugin-webpack-stats-0.2.2.tgz#ccede6110f7e8e0cd0ddbffee2d7cea0ad51c3c8"
-  integrity "sha1-zO3mEQ9+jgzQ3b/+4tfOoK1Rw8g= sha512-JX3zLRNvGZPOr2HAVhfPtgNB2vHLUIfZset1OfVn9LgjmdG20iVgoPnL4j1sPYt7bJGuVGaGL9A+I4TEzdh5Rg=="
+rollup-plugin-webpack-stats@^0.2.4:
+  version "0.2.4"
+  resolved "https://registry.yarnpkg.com/rollup-plugin-webpack-stats/-/rollup-plugin-webpack-stats-0.2.4.tgz#79e8cdcbd8be87310506fb9f86e49fb16de06962"
+  integrity sha512-bWGNGWpCFXB662mdIN2OHCrxXFBIgG+wS4UEksmORlT670F2ucLFYrrOVFTU6wjifGwPPRWwJMx5Z03rbDisWw==
 
 rollup@^0.41.4, rollup@^2.43.1, rollup@^4.2.0, rollup@^4.5.1:
   version "4.5.1"

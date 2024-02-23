@@ -157,7 +157,7 @@
     "passport-slack-oauth2": "^1.2.0",
     "patch-package": "^7.0.2",
     "pg": "^8.11.1",
-    "pg-tsquery": "^8.4.1",
+    "pg-tsquery": "^8.4.2",
     "pluralize": "^8.0.0",
     "png-chunks-extract": "^1.0.0",
     "polished": "^4.2.2",
@@ -254,8 +254,8 @@
     "@types/fuzzy-search": "^2.1.5",
     "@types/glob": "^8.0.1",
     "@types/google.analytics": "^0.0.42",
-    "@types/invariant": "^2.2.35",
-    "@types/jest": "^29.4.0",
+    "@types/invariant": "^2.2.37",
+    "@types/jest": "^29.5.12",
     "@types/jsonwebtoken": "^8.5.9",
     "@types/katex": "^0.16.0",
     "@types/koa": "^2.14.0",
@@ -326,7 +326,7 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "husky": "^8.0.2",
+    "husky": "^8.0.3",
     "i18next-parser": "^7.9.0",
     "jest-cli": "^29.7.0",
     "jest-environment-jsdom": "^29.6.4",
@@ -337,7 +337,7 @@
     "prettier": "^2.8.8",
     "react-refresh": "^0.14.0",
     "rimraf": "^2.5.4",
-    "rollup-plugin-webpack-stats": "^0.2.2",
+    "rollup-plugin-webpack-stats": "^0.2.4",
     "terser": "^5.19.2",
     "typescript": "^5.3.3",
     "vite-plugin-static-copy": "^0.17.0",
@@ -354,5 +354,5 @@
     "qs": "6.9.7",
     "rollup": "^4.5.1"
   },
-  "version": "0.75.0"
+  "version": "0.75.2"
 }
