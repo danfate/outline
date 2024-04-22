@@ -60,7 +60,7 @@ export type StructuredImportData = {
     id: string;
     urlId?: string;
     title: string;
-    emoji?: string;
+    emoji?: string | null;
     /**
      * The document text. To reference an attachment or image use the special
      * formatting <<attachmentId>>. It will be replaced with a reference to the
@@ -78,6 +78,7 @@ export type StructuredImportData = {
     publishedAt?: Date | null;
     parentDocumentId?: string | null;
     createdById?: string;
+    createdByName?: string;
     createdByEmail?: string | null;
     path: string;
     mimeType: string;
@@ -390,7 +391,11 @@ export default abstract class ImportTask extends BaseTask<Props> {
                 teamId: fileOperation.teamId,
                 createdById: fileOperation.userId,
                 name,
-                permission: item.permission ?? CollectionPermission.ReadWrite,
+                permission:
+                  item.permission ??
+                  fileOperation.options?.permission !== undefined
+                    ? fileOperation.options?.permission
+                    : CollectionPermission.ReadWrite,
                 importId: fileOperation.id,
               },
               { transaction }
@@ -467,6 +472,7 @@ export default abstract class ImportTask extends BaseTask<Props> {
                 fileName: path.basename(item.path),
                 mimeType: item.mimeType,
                 externalId: item.externalId,
+                createdByName: item.createdByName,
               },
               id: item.id,
               title: item.title,
