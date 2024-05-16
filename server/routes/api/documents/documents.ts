@@ -5,6 +5,7 @@ import invariant from "invariant";
 import JSZip from "jszip";
 import Router from "koa-router";
 import escapeRegExp from "lodash/escapeRegExp";
+import uniq from "lodash/uniq";
 import mime from "mime-types";
 import { Op, ScopeOptions, Sequelize, WhereOptions } from "sequelize";
 import { v4 as uuidv4 } from "uuid";
@@ -210,17 +211,7 @@ router.post(
     const { sort, direction } = ctx.input.body;
     const { user } = ctx.state.auth;
     const collectionIds = await user.collectionIds();
-    const collectionScope: Readonly<ScopeOptions> = {
-      method: ["withCollectionPermissions", user.id],
-    };
-    const viewScope: Readonly<ScopeOptions> = {
-      method: ["withViews", user.id],
-    };
-    const documents = await Document.scope([
-      "defaultScope",
-      collectionScope,
-      viewScope,
-    ]).findAll({
+    const documents = await Document.defaultScopeWithUser(user.id).findAll({
       where: {
         teamId: user.teamId,
         collectionId: collectionIds,
@@ -256,6 +247,9 @@ router.post(
     const collectionIds = await user.collectionIds({
       paranoid: false,
     });
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user.id],
+    };
     const collectionScope: Readonly<ScopeOptions> = {
       method: ["withCollectionPermissions", user.id],
     };
@@ -263,6 +257,7 @@ router.post(
       method: ["withViews", user.id],
     };
     const documents = await Document.scope([
+      membershipScope,
       collectionScope,
       viewScope,
       "withDrafts",
@@ -482,35 +477,45 @@ router.post(
       },
     };
 
-    if (document.collectionId) {
-      const collection = await document.$get("collection");
+    const [collection, memberIds, collectionMemberIds] = await Promise.all([
+      document.$get("collection"),
+      Document.membershipUserIds(document.id),
+      document.collectionId
+        ? Collection.membershipUserIds(document.collectionId)
+        : [],
+    ]);
 
-      if (!collection?.permission) {
-        const memberIds = await Collection.membershipUserIds(
-          document.collectionId
-        );
-        where = {
-          ...where,
+    where = {
+      ...where,
+      [Op.or]: [
+        {
           id: {
-            [Op.in]: memberIds,
+            [Op.in]: uniq([...memberIds, ...collectionMemberIds]),
           },
-        };
-      }
+        },
+        collection?.permission
+          ? {
+              role: {
+                [Op.ne]: UserRole.Guest,
+              },
+            }
+          : {},
+      ],
+    };
 
-      if (query) {
-        where = {
-          ...where,
-          name: {
-            [Op.iLike]: `%${query}%`,
-          },
-        };
-      }
-
-      [users, total] = await Promise.all([
-        User.findAll({ where, offset, limit }),
-        User.count({ where }),
-      ]);
+    if (query) {
+      where = {
+        ...where,
+        name: {
+          [Op.iLike]: `%${query}%`,
+        },
+      };
     }
+
+    [users, total] = await Promise.all([
+      User.findAll({ where, offset, limit }),
+      User.count({ where }),
+    ]);
 
     ctx.body = {
       pagination: { ...ctx.state.pagination, total },
@@ -785,6 +790,7 @@ router.post(
     const {
       query,
       collectionId,
+      documentId,
       userId,
       dateFilter,
       statusFilter = [],
@@ -853,6 +859,18 @@ router.post(
         authorize(user, "readDocument", collection);
       }
 
+      let documentIds = undefined;
+      if (documentId) {
+        const document = await Document.findByPk(documentId, {
+          userId: user.id,
+        });
+        authorize(user, "read", document);
+        documentIds = [
+          documentId,
+          ...(await document.findAllChildDocumentIds()),
+        ];
+      }
+
       let collaboratorIds = undefined;
 
       if (userId) {
@@ -862,6 +880,7 @@ router.post(
       response = await SearchHelper.searchForUser(user, query, {
         collaboratorIds,
         collectionId,
+        documentIds,
         dateFilter,
         statusFilter,
         offset,
