@@ -81,7 +81,7 @@ export default class WebsocketsProcessor {
         if (!document) {
           return;
         }
-        const data = await presentDocument(document);
+        const data = await presentDocument(undefined, document);
         const channels = await this.getDocumentEventChannels(event, document);
         return socketio.to(channels).emit(event.name, data);
       }
@@ -182,7 +182,7 @@ export default class WebsocketsProcessor {
               ? `team-${collection.teamId}`
               : `user-${collection.createdById}`
           )
-          .emit(event.name, presentCollection(collection));
+          .emit(event.name, await presentCollection(undefined, collection));
 
         return socketio
           .to(
@@ -210,7 +210,7 @@ export default class WebsocketsProcessor {
               ? `collection-${event.collectionId}`
               : `team-${collection.teamId}`
           )
-          .emit(event.name, presentCollection(collection));
+          .emit(event.name, await presentCollection(undefined, collection));
       }
 
       case "collections.delete": {
@@ -452,7 +452,7 @@ export default class WebsocketsProcessor {
           return;
         }
 
-        const data = await presentNotification(notification);
+        const data = await presentNotification(undefined, notification);
         return socketio.to(`user-${event.userId}`).emit(event.name, data);
       }
 

@@ -17,12 +17,6 @@ function InputSelectPermission(
 ) {
   const { value, onChange, ...rest } = props;
   const { t } = useTranslation();
-  const handleChange = React.useCallback(
-    (value) => {
-      onChange?.(value === EmptySelectValue ? null : value);
-    },
-    [onChange]
-  );
 
   return (
     <InputSelect
@@ -30,21 +24,22 @@ function InputSelectPermission(
       label={t("Permission")}
       options={[
         {
-          label: t("Can edit"),
-          value: CollectionPermission.ReadWrite,
-        },
-        {
           label: t("View only"),
           value: CollectionPermission.Read,
         },
         {
+          label: t("Can edit"),
+          value: CollectionPermission.ReadWrite,
+        },
+        {
+          divider: true,
           label: t("No access"),
           value: EmptySelectValue,
         },
       ]}
       ariaLabel={t("Default access")}
       value={value || EmptySelectValue}
-      onChange={handleChange}
+      onChange={onChange}
       {...rest}
     />
   );

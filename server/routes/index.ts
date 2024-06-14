@@ -18,6 +18,7 @@ import { getTeamFromContext } from "@server/utils/passport";
 import { robotsResponse } from "@server/utils/robots";
 import apexRedirect from "../middlewares/apexRedirect";
 import { renderApp, renderShare } from "./app";
+import { renderEmbed } from "./embeds";
 import errors from "./errors";
 
 const koa = new Koa();
@@ -128,6 +129,9 @@ router.get("/s/:shareId", shareDomains(), renderShare);
 router.get("/s/:shareId/doc/:documentSlug", shareDomains(), renderShare);
 router.get("/s/:shareId/*", shareDomains(), renderShare);
 
+router.get("/embeds/gitlab", renderEmbed);
+router.get("/embeds/github", renderEmbed);
+
 // catch all for application
 router.get("*", shareDomains(), async (ctx, next) => {
   if (ctx.state?.rootShare) {
@@ -143,13 +147,13 @@ router.get("*", shareDomains(), async (ctx, next) => {
   }
 
   const analytics = team
-    ? await Integration.findOne({
+    ? await Integration.findAll({
         where: {
           teamId: team.id,
           type: IntegrationType.Analytics,
         },
       })
-    : undefined;
+    : [];
 
   return renderApp(ctx, next, {
     analytics,

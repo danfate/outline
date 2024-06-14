@@ -428,7 +428,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       subscription,
       payload: {
         id: event.collectionId,
-        model: model && presentCollection(model),
+        model: model && (await presentCollection(undefined, model)),
       },
     });
   }
@@ -454,7 +454,8 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       payload: {
         id: event.modelId,
         model: model && presentMembership(model),
-        collection: model && presentCollection(model.collection!),
+        collection:
+          model && (await presentCollection(undefined, model.collection!)),
         user: model && presentUser(model.user),
       },
     });
@@ -481,7 +482,8 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       payload: {
         id: event.modelId,
         model: model && presentCollectionGroupMembership(model),
-        collection: model && presentCollection(model.collection!),
+        collection:
+          model && (await presentCollection(undefined, model.collection!)),
         group: model && presentGroup(model.group),
       },
     });
@@ -518,7 +520,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       subscription,
       payload: {
         id: event.documentId,
-        model: model && (await presentDocument(model)),
+        model: model && (await presentDocument(undefined, model)),
       },
     });
   }
@@ -544,7 +546,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       payload: {
         id: event.modelId,
         model: model && presentMembership(model),
-        document: model && (await presentDocument(model.document!)),
+        document: model && (await presentDocument(undefined, model.document!)),
         user: model && presentUser(model.user),
       },
     });

@@ -52,9 +52,9 @@ export enum MentionType {
 export type PublicEnv = {
   ROOT_SHARE_ID?: string;
   analytics: {
-    service?: IntegrationService;
-    settings?: IntegrationSettings<IntegrationType.Analytics>;
-  };
+    service: IntegrationService;
+    settings: IntegrationSettings<IntegrationType.Analytics>;
+  }[];
 };
 
 export enum AttachmentPreset {
@@ -82,6 +82,7 @@ export enum IntegrationService {
   Grist = "grist",
   Slack = "slack",
   GoogleAnalytics = "google-analytics",
+  Matomo = "matomo",
   GitHub = "github",
 }
 
@@ -90,12 +91,14 @@ export type UserCreatableIntegrationService = Extract<
   | IntegrationService.Diagrams
   | IntegrationService.Grist
   | IntegrationService.GoogleAnalytics
+  | IntegrationService.Matomo
 >;
 
 export const UserCreatableIntegrationService = {
   Diagrams: IntegrationService.Diagrams,
   Grist: IntegrationService.Grist,
   GoogleAnalytics: IntegrationService.GoogleAnalytics,
+  Matomo: IntegrationService.Matomo,
 } as const;
 
 export enum CollectionPermission {
@@ -107,6 +110,7 @@ export enum CollectionPermission {
 export enum DocumentPermission {
   Read = "read",
   ReadWrite = "read_write",
+  Admin = "admin",
 }
 
 export type IntegrationSettings<T> = T extends IntegrationType.Embed
@@ -120,7 +124,7 @@ export type IntegrationSettings<T> = T extends IntegrationType.Embed
       };
     }
   : T extends IntegrationType.Analytics
-  ? { measurementId: string }
+  ? { measurementId: string; instanceUrl?: string }
   : T extends IntegrationType.Post
   ? { url: string; channel: string; channelId: string }
   : T extends IntegrationType.Command
@@ -189,6 +193,8 @@ export enum TeamPreference {
   ViewersCanExport = "viewersCanExport",
   /** Whether members can invite new users. */
   MembersCanInvite = "membersCanInvite",
+  /** Whether members can create API keys. */
+  MembersCanCreateApiKey = "membersCanCreateApiKey",
   /** Whether users can comment on documents. */
   Commenting = "commenting",
   /** The custom theme for the team. */
@@ -200,6 +206,7 @@ export type TeamPreferences = {
   [TeamPreference.PublicBranding]?: boolean;
   [TeamPreference.ViewersCanExport]?: boolean;
   [TeamPreference.MembersCanInvite]?: boolean;
+  [TeamPreference.MembersCanCreateApiKey]?: boolean;
   [TeamPreference.Commenting]?: boolean;
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
 };
@@ -374,4 +381,18 @@ export type JSONValue =
 
 export type JSONObject = { [x: string]: JSONValue };
 
-export type ProsemirrorData = JSONObject;
+export type ProsemirrorData = {
+  type: string;
+  content: ProsemirrorData[];
+  text?: string;
+  attrs?: JSONObject;
+  marks?: {
+    type: string;
+    attrs: JSONObject;
+  }[];
+};
+
+export type ProsemirrorDoc = {
+  type: "doc";
+  content: ProsemirrorData[];
+};

@@ -39,7 +39,7 @@ import Paragraph from "./Paragraph";
 import SimpleImage from "./SimpleImage";
 import Table from "./Table";
 import TableCell from "./TableCell";
-import TableHeadCell from "./TableHeadCell";
+import TableHeader from "./TableHeader";
 import TableRow from "./TableRow";
 import Text from "./Text";
 import Video from "./Video";
@@ -78,10 +78,12 @@ export const listExtensions: Nodes = [
 ];
 
 export const tableExtensions: Nodes = [
-  Table,
   TableCell,
-  TableHeadCell,
+  TableHeader,
   TableRow,
+  // Note: Table nodes comes last to ensure the table selection plugin is registered after the
+  // plugins for table grips in TableCell and TableHeader.
+  Table,
 ];
 
 /**

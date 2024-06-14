@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { s } from "@shared/styles";
 import InputSelect, { Props as SelectProps } from "~/components/InputSelect";
-import { Permission } from "~/types";
+import { EmptySelectValue, Permission } from "~/types";
 
 export default function InputMemberPermissionSelect(
   props: Partial<SelectProps> & { permissions: Permission[] }
 ) {
+  const { value, onChange, ...rest } = props;
   const { t } = useTranslation();
 
   return (
@@ -15,9 +16,11 @@ export default function InputMemberPermissionSelect(
       label={t("Permissions")}
       options={props.permissions}
       ariaLabel={t("Permissions")}
+      onChange={onChange}
+      value={value || EmptySelectValue}
       labelHidden
       nude
-      {...props}
+      {...rest}
     />
   );
 }

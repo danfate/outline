@@ -1,6 +1,7 @@
 import { Node, Schema } from "prosemirror-model";
 import headingToSlug from "../editor/lib/headingToSlug";
 import textBetween from "../editor/lib/textBetween";
+import { ProsemirrorData } from "../types";
 
 export type Heading = {
   /* The heading in plain text */
@@ -27,7 +28,54 @@ export type Task = {
   completed: boolean;
 };
 
-export default class ProsemirrorHelper {
+export const attachmentRedirectRegex =
+  /\/api\/attachments\.redirect\?id=(?<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+export const attachmentPublicRegex =
+  /public\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(?<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+
+export class ProsemirrorHelper {
+  /**
+   * Get a new empty document.
+   *
+   * @returns A new empty document as JSON.
+   */
+  static getEmptyDocument(): ProsemirrorData {
+    return {
+      type: "doc",
+      content: [
+        {
+          content: [],
+          type: "paragraph",
+        },
+      ],
+    };
+  }
+
+  /**
+   * Returns true if the data looks like an empty document.
+   *
+   * @param data The ProsemirrorData to check.
+   * @returns True if the document is empty.
+   */
+  static isEmptyData(data: ProsemirrorData): boolean {
+    if (data.type !== "doc") {
+      return false;
+    }
+
+    if (data.content.length === 1) {
+      const node = data.content[0];
+      return (
+        node.type === "paragraph" &&
+        (node.content === null ||
+          node.content === undefined ||
+          node.content.length === 0)
+      );
+    }
+
+    return data.content.length === 0;
+  }
+
   /**
    * Returns the node as plain text.
    *
@@ -124,6 +172,26 @@ export default class ProsemirrorHelper {
   }
 
   /**
+   * Iterates through the document to find all of the images.
+   *
+   * @param doc Prosemirror document node
+   * @returns Array<Node> of images
+   */
+  static getImages(doc: Node): Node[] {
+    const images: Node[] = [];
+
+    doc.descendants((node) => {
+      if (node.type.name === "image") {
+        images.push(node);
+      }
+
+      return true;
+    });
+
+    return images;
+  }
+
+  /**
    * Iterates through the document to find all of the tasks and their completion state.
    *
    * @param doc Prosemirror document node
@@ -158,6 +226,21 @@ export default class ProsemirrorHelper {
     });
 
     return tasks;
+  }
+
+  /**
+   * Returns a summary of total and completed tasks in the node.
+   *
+   * @param doc Prosemirror document node
+   * @returns Object with completed and total keys
+   */
+  static getTasksSummary(doc: Node): { completed: number; total: number } {
+    const tasks = ProsemirrorHelper.getTasks(doc);
+
+    return {
+      completed: tasks.filter((t) => t.completed).length,
+      total: tasks.length,
+    };
   }
 
   /**

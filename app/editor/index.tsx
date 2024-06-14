@@ -39,8 +39,8 @@ import { basicExtensions as extensions } from "@shared/editor/nodes";
 import Node from "@shared/editor/nodes/Node";
 import ReactNode from "@shared/editor/nodes/ReactNode";
 import { EventType } from "@shared/editor/types";
-import { UserPreferences } from "@shared/types";
-import ProsemirrorHelper from "@shared/utils/ProsemirrorHelper";
+import { ProsemirrorData, UserPreferences } from "@shared/types";
+import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import EventEmitter from "@shared/utils/events";
 import Flex from "~/components/Flex";
 import { PortalContext } from "~/components/Portal";
@@ -59,7 +59,7 @@ export type Props = {
   /** The user id of the current user */
   userId?: string;
   /** The editor content, should only be changed if you wish to reset the content */
-  value?: string;
+  value?: string | ProsemirrorData;
   /** The initial editor content as a markdown string or JSON object */
   defaultValue: string | object;
   /** Placeholder displayed when the editor is empty */
@@ -402,8 +402,8 @@ export class Editor extends React.PureComponent<
       schema: this.schema,
       doc,
       plugins: [
-        ...this.plugins,
         ...this.keymaps,
+        ...this.plugins,
         dropCursor({
           color: this.props.theme.cursor,
         }),
@@ -617,6 +617,13 @@ export class Editor extends React.PureComponent<
    * @returns A list of headings in the document
    */
   public getHeadings = () => ProsemirrorHelper.getHeadings(this.view.state.doc);
+
+  /**
+   * Return the images in the current editor.
+   *
+   * @returns A list of images in the document
+   */
+  public getImages = () => ProsemirrorHelper.getImages(this.view.state.doc);
 
   /**
    * Return the tasks/checkmarks in the current editor.

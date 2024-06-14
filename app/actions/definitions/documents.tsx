@@ -31,7 +31,6 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 import { ExportContentType, TeamPreference } from "@shared/types";
-import MarkdownHelper from "@shared/utils/MarkdownHelper";
 import { getEventFiles } from "@shared/utils/files";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
@@ -40,7 +39,7 @@ import DocumentPublish from "~/scenes/DocumentPublish";
 import DeleteDocumentsInTrash from "~/scenes/Trash/components/DeleteDocumentsInTrash";
 import DocumentTemplatizeDialog from "~/components/DocumentTemplatizeDialog";
 import DuplicateDialog from "~/components/DuplicateDialog";
-import SharePopover from "~/components/Sharing";
+import SharePopover from "~/components/Sharing/Document";
 import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
 import { createAction } from "~/actions";
 import { DocumentSection, TrashSection } from "~/actions/sections";
@@ -56,6 +55,7 @@ import {
   documentPath,
   urlify,
   trashPath,
+  newTemplatePath,
 } from "~/utils/routeHelpers";
 
 export const openDocument = createAction({
@@ -454,7 +454,7 @@ export const copyDocumentAsMarkdown = createAction({
       ? stores.documents.get(activeDocumentId)
       : undefined;
     if (document) {
-      copy(MarkdownHelper.toMarkdown(document));
+      copy(document.toMarkdown());
       toast.success(t("Markdown copied to clipboard"));
     }
   },
@@ -678,34 +678,36 @@ export const importDocument = createAction({
 });
 
 export const createTemplate = createAction({
-  name: ({ t }) => t("Templatize"),
+  name: ({ t, activeDocumentId }) =>
+    activeDocumentId ? t("Templatize") : t("New template"),
   analyticsName: "Templatize document",
   section: DocumentSection,
   icon: <ShapesIcon />,
   keywords: "new create template",
   visible: ({ activeCollectionId, activeDocumentId, stores }) => {
-    if (!activeDocumentId) {
-      return false;
+    if (activeDocumentId) {
+      const document = stores.documents.get(activeDocumentId);
+      if (document?.isTemplate || !document?.isActive) {
+        return false;
+      }
     }
-    const document = stores.documents.get(activeDocumentId);
     return !!(
       !!activeCollectionId &&
-      stores.policies.abilities(activeCollectionId).update &&
-      !document?.isTemplate &&
-      !!document?.isActive
+      stores.policies.abilities(activeCollectionId).update
     );
   },
-  perform: ({ activeDocumentId, stores, t, event }) => {
-    if (!activeDocumentId) {
-      return;
-    }
+  perform: ({ activeCollectionId, activeDocumentId, stores, t, event }) => {
     event?.preventDefault();
     event?.stopPropagation();
 
-    stores.dialogs.openModal({
-      title: t("Create template"),
-      content: <DocumentTemplatizeDialog documentId={activeDocumentId} />,
-    });
+    if (activeDocumentId) {
+      stores.dialogs.openModal({
+        title: t("Create template"),
+        content: <DocumentTemplatizeDialog documentId={activeDocumentId} />,
+      });
+    } else if (activeCollectionId) {
+      history.push(newTemplatePath(activeCollectionId));
+    }
   },
 });
 

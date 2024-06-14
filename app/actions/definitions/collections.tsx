@@ -11,11 +11,11 @@ import {
 import * as React from "react";
 import stores from "~/stores";
 import Collection from "~/models/Collection";
-import CollectionPermissions from "~/scenes/CollectionPermissions";
 import { CollectionEdit } from "~/components/Collection/CollectionEdit";
 import { CollectionNew } from "~/components/Collection/CollectionNew";
 import CollectionDeleteDialog from "~/components/CollectionDeleteDialog";
 import DynamicCollectionIcon from "~/components/Icons/CollectionIcon";
+import SharePopover from "~/components/Sharing/Collection/SharePopover";
 import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
 import { createAction } from "~/actions";
 import { CollectionSection } from "~/actions/sections";
@@ -100,15 +100,24 @@ export const editCollectionPermissions = createAction({
   visible: ({ stores, activeCollectionId }) =>
     !!activeCollectionId &&
     stores.policies.abilities(activeCollectionId).update,
-  perform: ({ t, activeCollectionId }) => {
+  perform: ({ t, stores, activeCollectionId }) => {
     if (!activeCollectionId) {
+      return;
+    }
+    const collection = stores.collections.get(activeCollectionId);
+    if (!collection) {
       return;
     }
 
     stores.dialogs.openModal({
-      title: t("Collection permissions"),
-      fullscreen: true,
-      content: <CollectionPermissions collectionId={activeCollectionId} />,
+      title: t("Share this collection"),
+      content: (
+        <SharePopover
+          collection={collection}
+          onRequestClose={stores.dialogs.closeAllModals}
+          visible
+        />
+      ),
     });
   },
 });

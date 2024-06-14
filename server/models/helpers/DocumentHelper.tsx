@@ -7,14 +7,15 @@ import { JSDOM } from "jsdom";
 import { Node } from "prosemirror-model";
 import * as Y from "yjs";
 import textBetween from "@shared/editor/lib/textBetween";
-import MarkdownHelper from "@shared/utils/MarkdownHelper";
-import { parser, schema } from "@server/editor";
+import { EditorStyleHelper } from "@shared/editor/styles/EditorStyleHelper";
+import { ProsemirrorData } from "@shared/types";
+import { parser, serializer, schema } from "@server/editor";
 import { addTags } from "@server/logging/tracer";
 import { trace } from "@server/logging/tracing";
-import { Document, Revision } from "@server/models";
+import { Collection, Document, Revision } from "@server/models";
 import diff from "@server/utils/diff";
-import ProsemirrorHelper from "./ProsemirrorHelper";
-import TextHelper from "./TextHelper";
+import { ProsemirrorHelper } from "./ProsemirrorHelper";
+import { TextHelper } from "./TextHelper";
 
 type HTMLOptions = {
   /** Whether to include the document title in the generated HTML (defaults to true) */
@@ -35,38 +36,78 @@ type HTMLOptions = {
 };
 
 @trace()
-export default class DocumentHelper {
+export class DocumentHelper {
   /**
-   * Returns the document as JSON content. This method uses the collaborative state if available,
-   * otherwise it falls back to Markdown.
-   *
-   * @param document The document or revision to convert
-   * @returns The document content as JSON
-   */
-  static toJSON(document: Document | Revision) {
-    if ("state" in document && document.state) {
-      const ydoc = new Y.Doc();
-      Y.applyUpdate(ydoc, document.state);
-      return yDocToProsemirrorJSON(ydoc, "default");
-    }
-    const node = parser.parse(document.text) || Node.fromJSON(schema, {});
-    return node.toJSON();
-  }
-
-  /**
-   * Returns the document as a Prosemirror Node. This method uses the collaborative state if
-   * available, otherwise it falls back to Markdown.
+   * Returns the document as a Prosemirror Node. This method uses the derived content if available
+   * then the collaborative state, otherwise it falls back to Markdown.
    *
    * @param document The document or revision to convert
    * @returns The document content as a Prosemirror Node
    */
-  static toProsemirror(document: Document | Revision) {
+  static toProsemirror(document: Document | Revision | Collection) {
+    if ("content" in document && document.content) {
+      return Node.fromJSON(schema, document.content);
+    }
     if ("state" in document && document.state) {
       const ydoc = new Y.Doc();
       Y.applyUpdate(ydoc, document.state);
       return Node.fromJSON(schema, yDocToProsemirrorJSON(ydoc, "default"));
     }
-    return parser.parse(document.text) || Node.fromJSON(schema, {});
+
+    const text =
+      document instanceof Collection ? document.description : document.text;
+    return parser.parse(text ?? "") || Node.fromJSON(schema, {});
+  }
+
+  /**
+   * Returns the document as a plain JSON object. This method uses the derived content if available
+   * then the collaborative state, otherwise it falls back to Markdown.
+   *
+   * @param document The document or revision to convert
+   * @param options Options for the conversion
+   * @returns The document content as a plain JSON object
+   */
+  static async toJSON(
+    document: Document | Revision | Collection,
+    options?: {
+      /** The team context */
+      teamId: string;
+      /** Whether to sign attachment urls, and if so for how many seconds is the signature valid */
+      signedUrls: number;
+      /** Marks to remove from the document */
+      removeMarks?: string[];
+    }
+  ): Promise<ProsemirrorData> {
+    let doc: Node | null;
+    let json;
+
+    if ("content" in document && document.content) {
+      doc = Node.fromJSON(schema, document.content);
+    } else if ("state" in document && document.state) {
+      const ydoc = new Y.Doc();
+      Y.applyUpdate(ydoc, document.state);
+      doc = Node.fromJSON(schema, yDocToProsemirrorJSON(ydoc, "default"));
+    } else if (document instanceof Collection) {
+      doc = parser.parse(document.description ?? "");
+    } else {
+      doc = parser.parse(document.text);
+    }
+
+    if (doc && options?.signedUrls) {
+      json = await ProsemirrorHelper.signAttachmentUrls(
+        doc,
+        options.teamId,
+        options.signedUrls
+      );
+    } else {
+      json = doc?.toJSON() ?? {};
+    }
+
+    if (options?.removeMarks) {
+      json = ProsemirrorHelper.removeMarks(json, options.removeMarks);
+    }
+
+    return json;
   }
 
   /**
@@ -88,19 +129,34 @@ export default class DocumentHelper {
   }
 
   /**
-   * Returns the document as Markdown. This is a lossy conversion and should
-   * only be used for export.
+   * Returns the document as Markdown. This is a lossy conversion and should only be used for export.
    *
    * @param document The document or revision to convert
    * @returns The document title and content as a Markdown string
    */
-  static toMarkdown(document: Document | Revision) {
-    return MarkdownHelper.toMarkdown(document);
+  static toMarkdown(document: Document | Revision | Collection) {
+    const text = serializer
+      .serialize(DocumentHelper.toProsemirror(document))
+      .replace(/\n\\(\n|$)/g, "\n\n")
+      .replace(/“/g, '"')
+      .replace(/”/g, '"')
+      .replace(/‘/g, "'")
+      .replace(/’/g, "'")
+      .trim();
+
+    if (document instanceof Collection) {
+      return text;
+    }
+
+    const title = `${document.emoji ? document.emoji + " " : ""}${
+      document.title
+    }`;
+
+    return `# ${title}\n\n${text}`;
   }
 
   /**
-   * Returns the document as plain HTML. This is a lossy conversion and should
-   * only be used for export.
+   * Returns the document as plain HTML. This is a lossy conversion and should only be used for export.
    *
    * @param document The document or revision to convert
    * @param options Options for the HTML output
@@ -267,7 +323,7 @@ export default class DocumentHelper {
 
         // Special case for largetables, as this block can get very large we
         // want to clip it to only the changed rows and surrounding context.
-        if (childNode.classList.contains("table-wrapper")) {
+        if (childNode.classList.contains(EditorStyleHelper.table)) {
           const rows = childNode.querySelectorAll("tr");
           if (rows.length < 3) {
             continue;
