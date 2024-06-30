@@ -20,11 +20,15 @@ import env from "~/env";
 import { initI18n } from "~/utils/i18n";
 import Desktop from "./components/DesktopEventHandler";
 import LazyPolyfill from "./components/LazyPolyfills";
-import MobileScrollWrapper from "./components/MobileScrollWrapper";
+import PageScroll from "./components/PageScroll";
 import Routes from "./routes";
 import Logger from "./utils/Logger";
+import { PluginManager } from "./utils/PluginManager";
 import history from "./utils/history";
 import { initSentry } from "./utils/sentry";
+
+// Load plugins as soon as possible
+void PluginManager.loadPlugins();
 
 initI18n(env.DEFAULT_LANGUAGE);
 const element = window.document.getElementById("root");
@@ -61,7 +65,7 @@ if (element) {
                   <LazyPolyfill>
                     <LazyMotion features={loadFeatures}>
                       <Router history={history}>
-                        <MobileScrollWrapper>
+                        <PageScroll>
                           <PageTheme />
                           <ScrollToTop>
                             <Routes />
@@ -69,7 +73,7 @@ if (element) {
                           <Toasts />
                           <Dialogs />
                           <Desktop />
-                        </MobileScrollWrapper>
+                        </PageScroll>
                       </Router>
                     </LazyMotion>
                   </LazyPolyfill>

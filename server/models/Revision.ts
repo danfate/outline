@@ -20,6 +20,7 @@ import Document from "./Document";
 import User from "./User";
 import IdModel from "./base/IdModel";
 import Fix from "./decorators/Fix";
+import IsHexColor from "./validators/IsHexColor";
 import Length from "./validators/Length";
 
 @DefaultScope(() => ({
@@ -70,12 +71,29 @@ class Revision extends IdModel<
   @Column(DataType.JSONB)
   content: ProsemirrorData;
 
+  /**
+   * An emoji to use as the document icon,
+   * This is used as fallback (for backward compat) when icon is not set.
+   */
   @Length({
-    max: 1,
-    msg: `Emoji must be a single character`,
+    max: 50,
+    msg: `Emoji must be 50 characters or less`,
   })
   @Column
   emoji: string | null;
+
+  /** An icon to use as the document icon. */
+  @Length({
+    max: 50,
+    msg: `icon must be 50 characters or less`,
+  })
+  @Column
+  icon: string | null;
+
+  /** The color of the icon. */
+  @IsHexColor
+  @Column
+  color: string | null;
 
   // associations
 
@@ -121,6 +139,8 @@ class Revision extends IdModel<
       title: document.title,
       text: document.text,
       emoji: document.emoji,
+      icon: document.icon,
+      color: document.color,
       content: document.content,
       userId: document.lastModifiedById,
       editorVersion: document.editorVersion,

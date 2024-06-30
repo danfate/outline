@@ -210,7 +210,7 @@ export class IconLibrary {
         }
         return undefined;
       })
-      .filter(Boolean);
+      .filter((icon: string | undefined): icon is string => !!icon);
   }
 
   /**
@@ -244,7 +244,7 @@ export class IconLibrary {
       keywords: "browser web app",
     },
     collection: {
-      component: CollectionIcon,
+      component: (props) => <CollectionIcon expanded {...props} />,
       keywords: "collection",
     },
     coins: {

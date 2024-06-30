@@ -8,13 +8,14 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import EventBoundary from "@shared/components/EventBoundary";
 import { s } from "@shared/styles";
 import Document from "~/models/Document";
 import Badge from "~/components/Badge";
 import DocumentMeta from "~/components/DocumentMeta";
-import EventBoundary from "~/components/EventBoundary";
 import Flex from "~/components/Flex";
 import Highlight from "~/components/Highlight";
+import Icon from "~/components/Icon";
 import NudeButton from "~/components/NudeButton";
 import StarButton, { AnimatedStar } from "~/components/Star";
 import Tooltip from "~/components/Tooltip";
@@ -23,7 +24,6 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import DocumentMenu from "~/menus/DocumentMenu";
 import { hover } from "~/styles";
 import { documentPath } from "~/utils/routeHelpers";
-import EmojiIcon from "./Icons/EmojiIcon";
 
 type Props = {
   document: Document;
@@ -97,9 +97,9 @@ function DocumentListItem(
     >
       <Content>
         <Heading dir={document.dir}>
-          {document.emoji && (
+          {document.icon && (
             <>
-              <EmojiIcon emoji={document.emoji} size={24} />
+              <Icon value={document.icon} color={document.color ?? undefined} />
               &nbsp;
             </>
           )}

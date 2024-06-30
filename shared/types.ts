@@ -182,7 +182,13 @@ export type PublicTeam = {
   avatarUrl: string;
   name: string;
   customTheme: Partial<CustomTheme>;
+  tocPosition: TOCPosition;
 };
+
+export enum TOCPosition {
+  Left = "left",
+  Right = "right",
+}
 
 export enum TeamPreference {
   /** Whether documents have a separate edit mode instead of always editing. */
@@ -199,6 +205,8 @@ export enum TeamPreference {
   Commenting = "commenting",
   /** The custom theme for the team. */
   CustomTheme = "customTheme",
+  /** Side to display the document's table of contents in relation to the main content. */
+  TocPosition = "tocPosition",
 }
 
 export type TeamPreferences = {
@@ -209,6 +217,7 @@ export type TeamPreferences = {
   [TeamPreference.MembersCanCreateApiKey]?: boolean;
   [TeamPreference.Commenting]?: boolean;
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
+  [TeamPreference.TocPosition]?: TOCPosition;
 };
 
 export enum NavigationNodeType {
@@ -221,6 +230,8 @@ export type NavigationNode = {
   title: string;
   url: string;
   emoji?: string;
+  icon?: string;
+  color?: string;
   children: NavigationNode[];
   isDraft?: boolean;
   collectionId?: string;
@@ -395,4 +406,44 @@ export type ProsemirrorData = {
 export type ProsemirrorDoc = {
   type: "doc";
   content: ProsemirrorData[];
+};
+
+export enum IconType {
+  Outline = "outline",
+  Emoji = "emoji",
+}
+
+export enum EmojiCategory {
+  People = "People",
+  Nature = "Nature",
+  Foods = "Foods",
+  Activity = "Activity",
+  Places = "Places",
+  Objects = "Objects",
+  Symbols = "Symbols",
+  Flags = "Flags",
+}
+
+export enum EmojiSkinTone {
+  Default = "Default",
+  Light = "Light",
+  MediumLight = "MediumLight",
+  Medium = "Medium",
+  MediumDark = "MediumDark",
+  Dark = "Dark",
+}
+
+export type Emoji = {
+  id: string;
+  name: string;
+  value: string;
+};
+
+export type EmojiVariants = {
+  [EmojiSkinTone.Default]: Emoji;
+  [EmojiSkinTone.Light]?: Emoji;
+  [EmojiSkinTone.MediumLight]?: Emoji;
+  [EmojiSkinTone.Medium]?: Emoji;
+  [EmojiSkinTone.MediumDark]?: Emoji;
+  [EmojiSkinTone.Dark]?: Emoji;
 };

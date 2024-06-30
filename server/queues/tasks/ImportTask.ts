@@ -38,7 +38,7 @@ export type StructuredImportData = {
   collections: {
     id: string;
     urlId?: string;
-    color?: string;
+    color?: string | null;
     icon?: string | null;
     sort?: CollectionSort;
     permission?: CollectionPermission | null;
@@ -61,6 +61,8 @@ export type StructuredImportData = {
     urlId?: string;
     title: string;
     emoji?: string | null;
+    icon?: string | null;
+    color?: string | null;
     /**
      * The document text. To reference an attachment or image use the special
      * formatting <<attachmentId>>. It will be replaced with a reference to the

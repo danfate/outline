@@ -2537,11 +2537,12 @@ describe("#documents.restore", () => {
 
   it("should not allow restore of trashed documents to collection user cannot access", async () => {
     const user = await buildUser();
+    const collection = await buildCollection();
     const document = await buildDocument({
       userId: user.id,
       teamId: user.teamId,
+      collectionId: collection.id,
     });
-    const collection = await buildCollection();
     await document.destroy();
     const res = await server.post("/api/documents.restore", {
       body: {
@@ -2772,14 +2773,9 @@ describe("#documents.create", () => {
   it("should fail for invalid parentDocumentId", async () => {
     const team = await buildTeam();
     const user = await buildUser({ teamId: team.id });
-    const collection = await buildCollection({
-      userId: user.id,
-      teamId: team.id,
-    });
     const res = await server.post("/api/documents.create", {
       body: {
         token: user.getJwtToken(),
-        collectionId: collection.id,
         parentDocumentId: "invalid",
         title: "new document",
         text: "hello",
@@ -2790,7 +2786,7 @@ describe("#documents.create", () => {
     expect(body.message).toEqual("parentDocumentId: Invalid uuid");
   });
 
-  it("should create as a new document", async () => {
+  it("should create as a new document with emoji", async () => {
     const team = await buildTeam();
     const user = await buildUser({ teamId: team.id });
     const collection = await buildCollection({
@@ -2813,6 +2809,34 @@ describe("#documents.create", () => {
     expect(newDocument!.parentDocumentId).toBe(null);
     expect(newDocument!.collectionId).toBe(collection.id);
     expect(newDocument!.emoji).toBe("🚢");
+    expect(newDocument!.icon).toBe("🚢");
+    expect(body.policies[0].abilities.update).toEqual(true);
+  });
+
+  it("should create as a new document with icon", async () => {
+    const team = await buildTeam();
+    const user = await buildUser({ teamId: team.id });
+    const collection = await buildCollection({
+      userId: user.id,
+      teamId: team.id,
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        collectionId: collection.id,
+        icon: "🚢",
+        title: "new document",
+        text: "hello",
+        publish: true,
+      },
+    });
+    const body = await res.json();
+    const newDocument = await Document.findByPk(body.data.id);
+    expect(res.status).toEqual(200);
+    expect(newDocument!.parentDocumentId).toBe(null);
+    expect(newDocument!.collectionId).toBe(collection.id);
+    expect(newDocument!.emoji).toBe("🚢");
+    expect(newDocument!.icon).toBe("🚢");
     expect(body.policies[0].abilities.update).toEqual(true);
   });
 
@@ -2834,7 +2858,7 @@ describe("#documents.create", () => {
     expect(body.data.collectionId).toBeNull();
   });
 
-  it("should not allow creating a template without a collection", async () => {
+  it("should not allow creating a template with a collection", async () => {
     const team = await buildTeam();
     const user = await buildUser({ teamId: team.id });
     const res = await server.post("/api/documents.create", {
@@ -2867,25 +2891,8 @@ describe("#documents.create", () => {
     const body = await res.json();
 
     expect(res.status).toEqual(400);
-    expect(body.message).toBe("collectionId is required to publish");
-  });
-
-  it("should not allow creating a nested doc without a collection", async () => {
-    const team = await buildTeam();
-    const user = await buildUser({ teamId: team.id });
-    const res = await server.post("/api/documents.create", {
-      body: {
-        token: user.getJwtToken(),
-        parentDocumentId: "d7a4eb73-fac1-4028-af45-d7e34d54db8e",
-        title: "nested doc",
-        text: "nested doc without collection",
-      },
-    });
-    const body = await res.json();
-
-    expect(res.status).toEqual(400);
     expect(body.message).toBe(
-      "collectionId is required to create a nested document"
+      "collectionId or parentDocumentId is required to publish"
     );
   });
 
@@ -2947,7 +2954,6 @@ describe("#documents.create", () => {
     const res = await server.post("/api/documents.create", {
       body: {
         token: user.getJwtToken(),
-        collectionId: collection.id,
         parentDocumentId: document.id,
         title: "new document",
         text: "hello",
@@ -2963,14 +2969,9 @@ describe("#documents.create", () => {
   it("should error with invalid parentDocument", async () => {
     const team = await buildTeam();
     const user = await buildUser({ teamId: team.id });
-    const collection = await buildCollection({
-      userId: user.id,
-      teamId: team.id,
-    });
     const res = await server.post("/api/documents.create", {
       body: {
         token: user.getJwtToken(),
-        collectionId: collection.id,
         parentDocumentId: "d7a4eb73-fac1-4028-af45-d7e34d54db8e",
         title: "new document",
         text: "hello",
@@ -2996,7 +2997,6 @@ describe("#documents.create", () => {
     const res = await server.post("/api/documents.create", {
       body: {
         token: user.getJwtToken(),
-        collectionId: collection.id,
         parentDocumentId: document.id,
         title: "new document",
         text: "hello",
@@ -3122,7 +3122,7 @@ describe("#documents.update", () => {
     expect(res.status).toEqual(403);
   });
 
-  it("should fail to update an invalid emoji value", async () => {
+  it("should fail to update an invalid icon value", async () => {
     const user = await buildUser();
     const document = await buildDocument({
       userId: user.id,
@@ -3133,13 +3133,13 @@ describe("#documents.update", () => {
       body: {
         token: user.getJwtToken(),
         id: document.id,
-        emoji: ":)",
+        icon: ":)",
       },
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
 
-    expect(body.message).toBe("emoji: Invalid");
+    expect(body.message).toBe("icon: Invalid");
   });
 
   it("should successfully update the emoji", async () => {
@@ -3152,12 +3152,57 @@ describe("#documents.update", () => {
       body: {
         token: user.getJwtToken(),
         id: document.id,
-        emoji: "😂",
+        emoji: "🚢",
       },
     });
     const body = await res.json();
     expect(res.status).toEqual(200);
-    expect(body.data.emoji).toBe("😂");
+    expect(body.data.emoji).toBe("🚢");
+    expect(body.data.icon).toBe("🚢");
+    expect(body.data.color).toBeNull;
+  });
+
+  it("should successfully update the icon", async () => {
+    const user = await buildUser();
+    const document = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+    });
+    const res = await server.post("/api/documents.update", {
+      body: {
+        token: user.getJwtToken(),
+        id: document.id,
+        icon: "beaker",
+        color: "#FFDDEE",
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.icon).toBe("beaker");
+    expect(body.data.color).toBe("#FFDDEE");
+  });
+
+  it("should successfully remove the icon", async () => {
+    const user = await buildUser();
+    const document = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      icon: "beaker",
+      color: "#FFDDEE",
+    });
+    const res = await server.post("/api/documents.update", {
+      body: {
+        token: user.getJwtToken(),
+        id: document.id,
+        icon: null,
+        color: null,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.icon).toBeNull();
+    expect(body.data.emoji).toBeNull();
+    expect(body.data.color).toBeNull();
   });
 
   it("should not add template to collection structure when publishing", async () => {
@@ -3324,13 +3369,14 @@ describe("#documents.update", () => {
       body: {
         token: user.getJwtToken(),
         id: document.id,
-        text: "Changed text",
+        title: "Changed text",
       },
     });
     const body = await res.json();
     expect(res.status).toEqual(200);
-    expect(body.data.text).toBe("Changed text");
+    expect(body.data.title).toBe("Changed text");
     expect(body.data.updatedBy.id).toBe(user.id);
+    expect(body.policies[0].abilities.update).toEqual(true);
   });
 
   it("does not allow editing by read-only collection user", async () => {

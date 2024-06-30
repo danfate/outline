@@ -97,7 +97,10 @@ router.post(
     };
 
     if (template) {
-      where = { ...where, template: true };
+      where = {
+        ...where,
+        template: true,
+      };
     }
 
     // if a specific user is passed then add to filters. If the user doesn't
@@ -439,8 +442,11 @@ router.post(
       apiVersion >= 2
         ? {
             document: serializedDocument,
-            team: team?.getPreference(TeamPreference.PublicBranding)
-              ? presentPublicTeam(team)
+            team: team
+              ? presentPublicTeam(
+                  team,
+                  !!team?.getPreference(TeamPreference.PublicBranding)
+                )
               : undefined,
             sharedTree:
               share && share.includeChildDocuments
@@ -549,7 +555,6 @@ router.post(
     if (accept?.includes("text/html")) {
       contentType = "text/html";
       content = await DocumentHelper.toHTML(document, {
-        signedUrls: true,
         centered: true,
         includeMermaid: true,
       });
@@ -671,10 +676,6 @@ router.post(
       throw ValidationError(
         "Unable to restore to original collection, it may have been deleted"
       );
-    }
-
-    if (document.collection) {
-      authorize(user, "updateDocument", collection);
     }
 
     if (document.deletedAt) {
@@ -943,6 +944,8 @@ router.post(
         createdById: user.id,
         template: true,
         emoji: original.emoji,
+        icon: original.icon,
+        color: original.color,
         title: original.title,
         text: original.text,
         content: original.content,
@@ -995,7 +998,7 @@ router.post(
     const { user } = ctx.state.auth;
     let collection: Collection | null | undefined;
 
-    const document = await Document.findByPk(id, {
+    let document = await Document.findByPk(id, {
       userId: user.id,
       includeState: true,
       transaction,
@@ -1021,13 +1024,26 @@ router.post(
           method: ["withMembership", user.id],
         }).findByPk(collectionId!, { transaction });
       }
-      authorize(user, "createDocument", collection);
+
+      if (document.parentDocumentId) {
+        const parentDocument = await Document.findByPk(
+          document.parentDocumentId,
+          {
+            userId: user.id,
+            transaction,
+          }
+        );
+        authorize(user, "createChildDocument", parentDocument, { collection });
+      } else {
+        authorize(user, "createDocument", collection);
+      }
     }
 
-    await documentUpdater({
+    document = await documentUpdater({
       document,
       user,
       ...input,
+      icon: input.icon ?? input.emoji ?? null,
       publish,
       collectionId,
       insightsEnabled,
@@ -1036,18 +1052,9 @@ router.post(
       ip: ctx.request.ip,
     });
 
-    collection = document.collectionId
-      ? await Collection.scope({
-          method: ["withMembership", user.id],
-        }).findByPk(document.collectionId, { transaction })
-      : null;
-
-    document.updatedBy = user;
-    document.collection = collection;
-
     ctx.body = {
       data: await presentDocument(ctx, document),
-      policies: presentPolicies(user, [document, collection]),
+      policies: presentPolicies(user, [document]),
     };
   }
 );
@@ -1378,6 +1385,8 @@ router.post(
       title,
       text,
       emoji,
+      icon,
+      color,
       publish,
       collectionId,
       parentDocumentId,
@@ -1393,7 +1402,29 @@ router.post(
 
     let collection;
 
-    if (collectionId) {
+    let parentDocument;
+
+    if (parentDocumentId) {
+      parentDocument = await Document.findByPk(parentDocumentId, {
+        userId: user.id,
+      });
+
+      if (parentDocument?.collectionId) {
+        collection = await Collection.scope({
+          method: ["withMembership", user.id],
+        }).findOne({
+          where: {
+            id: parentDocument.collectionId,
+            teamId: user.teamId,
+          },
+          transaction,
+        });
+      }
+
+      authorize(user, "createChildDocument", parentDocument, {
+        collection,
+      });
+    } else if (collectionId) {
       collection = await Collection.scope({
         method: ["withMembership", user.id],
       }).findOne({
@@ -1404,17 +1435,6 @@ router.post(
         transaction,
       });
       authorize(user, "createDocument", collection);
-    }
-
-    let parentDocument;
-
-    if (parentDocumentId) {
-      parentDocument = await Document.findByPk(parentDocumentId, {
-        userId: user.id,
-      });
-      authorize(user, "read", parentDocument, {
-        collection,
-      });
     }
 
     let templateDocument: Document | null | undefined;
@@ -1430,10 +1450,11 @@ router.post(
     const document = await documentCreator({
       title,
       text,
-      emoji,
+      icon: icon ?? emoji,
+      color,
       createdAt,
       publish,
-      collectionId,
+      collectionId: collection?.id,
       parentDocumentId,
       templateDocument,
       template,

@@ -4,8 +4,11 @@ import isEmpty from "lodash/isEmpty";
 import isUUID from "validator/lib/isUUID";
 import { z } from "zod";
 import { DocumentPermission, StatusFilter } from "@shared/types";
+import { IconLibrary } from "@shared/utils/IconLibrary";
 import { UrlHelper } from "@shared/utils/UrlHelper";
 import { BaseSchema } from "@server/routes/api/schema";
+import { zodEnumFromObjectKeys } from "@server/utils/zod";
+import { ValidateColor } from "@server/validation";
 
 const DocumentsSortParamsSchema = z.object({
   /** Specifies the attributes by which documents will be sorted in the list */
@@ -223,6 +226,20 @@ export const DocumentsUpdateSchema = BaseSchema.extend({
     /** Emoji displayed alongside doc title */
     emoji: z.string().regex(emojiRegex()).nullish(),
 
+    /** Icon displayed alongside doc title */
+    icon: z
+      .union([
+        z.string().regex(emojiRegex()),
+        zodEnumFromObjectKeys(IconLibrary.mapping),
+      ])
+      .nullish(),
+
+    /** Icon color */
+    color: z
+      .string()
+      .regex(ValidateColor.regex, { message: ValidateColor.message })
+      .nullish(),
+
     /** Boolean to denote if the doc should occupy full width */
     fullWidth: z.boolean().optional(),
 
@@ -319,7 +336,21 @@ export const DocumentsCreateSchema = BaseSchema.extend({
     text: z.string().default(""),
 
     /** Emoji displayed alongside doc title */
-    emoji: z.string().regex(emojiRegex()).optional(),
+    emoji: z.string().regex(emojiRegex()).nullish(),
+
+    /** Icon displayed alongside doc title */
+    icon: z
+      .union([
+        z.string().regex(emojiRegex()),
+        zodEnumFromObjectKeys(IconLibrary.mapping),
+      ])
+      .optional(),
+
+    /** Icon color */
+    color: z
+      .string()
+      .regex(ValidateColor.regex, { message: ValidateColor.message })
+      .nullish(),
 
     /** Boolean to denote if the doc should be published */
     publish: z.boolean().optional(),
@@ -348,15 +379,20 @@ export const DocumentsCreateSchema = BaseSchema.extend({
     template: z.boolean().optional(),
   }),
 })
-  .refine((req) => !(req.body.parentDocumentId && !req.body.collectionId), {
-    message: "collectionId is required to create a nested document",
-  })
   .refine((req) => !(req.body.template && !req.body.collectionId), {
     message: "collectionId is required to create a template document",
   })
-  .refine((req) => !(req.body.publish && !req.body.collectionId), {
-    message: "collectionId is required to publish",
-  });
+  .refine(
+    (req) =>
+      !(
+        req.body.publish &&
+        !req.body.parentDocumentId &&
+        !req.body.collectionId
+      ),
+    {
+      message: "collectionId or parentDocumentId is required to publish",
+    }
+  );
 
 export type DocumentsCreateReq = z.infer<typeof DocumentsCreateSchema>;
 
