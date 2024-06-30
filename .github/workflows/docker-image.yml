@@ -2,8 +2,8 @@ name: Docker Image CI
 
 on:
   push:
-    branches:
-      - 'releases/**'
+    paths:
+      - 'build_cjk.sh'
       
 #     branches: [ "main" ]
 #   pull_request:
