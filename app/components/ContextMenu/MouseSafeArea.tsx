@@ -2,17 +2,17 @@ import * as React from "react";
 import { useMousePosition } from "~/hooks/useMousePosition";
 
 type Positions = {
-  /* Sub-menu x */
+  /** Sub-menu x */
   x: number;
-  /* Sub-menu y */
+  /** Sub-menu y */
   y: number;
-  /* Sub-menu height */
+  /** Sub-menu height */
   h: number;
-  /* Sub-menu width */
+  /** Sub-menu width */
   w: number;
-  /* Mouse x */
+  /** Mouse x */
   mouseX: number;
-  /* Mouse y */
+  /** Mouse y */
   mouseY: number;
 };
 
@@ -24,8 +24,12 @@ type Positions = {
 export default function MouseSafeArea(props: {
   parentRef: React.RefObject<HTMLElement | null>;
 }) {
-  const { x = 0, y = 0, height: h = 0, width: w = 0 } =
-    props.parentRef.current?.getBoundingClientRect() || {};
+  const {
+    x = 0,
+    y = 0,
+    height: h = 0,
+    width: w = 0,
+  } = props.parentRef.current?.getBoundingClientRect() || {};
   const [mouseX, mouseY] = useMousePosition();
   const positions = { x, y, h, w, mouseX, mouseY };
 

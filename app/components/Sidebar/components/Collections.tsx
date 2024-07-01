@@ -23,20 +23,25 @@ function Collections() {
   const { t } = useTranslation();
   const orderedCollections = collections.orderedData;
 
+  const params = React.useMemo(
+    () => ({
+      limit: 100,
+    }),
+    []
+  );
+
   const [
     { isCollectionDropping, isDraggingAnyCollection },
     dropToReorderCollection,
   ] = useDrop({
     accept: "collection",
     drop: async (item: DragObject) => {
-      collections.move(
+      void collections.move(
         item.id,
         fractionalIndex(null, orderedCollections[0].index)
       );
     },
-    canDrop: (item) => {
-      return item.id !== orderedCollections[0].id;
-    },
+    canDrop: (item) => item.id !== orderedCollections[0].id,
     collect: (monitor) => ({
       isCollectionDropping: monitor.isOver(),
       isDraggingAnyCollection: monitor.getItemType() === "collection",
@@ -49,7 +54,7 @@ function Collections() {
         <Relative>
           <PaginatedList
             fetch={collections.fetchPage}
-            options={{ limit: 25 }}
+            options={params}
             aria-label={t("Collections")}
             items={collections.orderedData}
             loading={<PlaceholderCollections />}

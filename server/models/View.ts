@@ -1,5 +1,9 @@
-import { subMilliseconds } from "date-fns";
-import { Op } from "sequelize";
+import {
+  FindOrCreateOptions,
+  InferAttributes,
+  InferCreationAttributes,
+  Op,
+} from "sequelize";
 import {
   BelongsTo,
   Column,
@@ -9,7 +13,6 @@ import {
   DataType,
   Scopes,
 } from "sequelize-typescript";
-import { USER_PRESENCE_INTERVAL } from "@shared/constants";
 import Document from "./Document";
 import User from "./User";
 import IdModel from "./base/IdModel";
@@ -28,7 +31,10 @@ import Fix from "./decorators/Fix";
 }))
 @Table({ tableName: "views", modelName: "view" })
 @Fix
-class View extends IdModel {
+class View extends IdModel<
+  InferAttributes<View>,
+  Partial<InferCreationAttributes<View>>
+> {
   @Column
   lastEditingAt: Date | null;
 
@@ -52,18 +58,21 @@ class View extends IdModel {
   @Column(DataType.UUID)
   documentId: string;
 
-  static async incrementOrCreate(where: {
-    userId?: string;
-    documentId?: string;
-    collectionId?: string;
-  }) {
+  static async incrementOrCreate(
+    where: {
+      userId: string;
+      documentId: string;
+    },
+    options?: FindOrCreateOptions<InferAttributes<View>>
+  ) {
     const [model, created] = await this.findOrCreate({
+      ...options,
       where,
     });
 
     if (!created) {
       model.count += 1;
-      model.save();
+      await model.save(options);
     }
 
     return model;
@@ -81,7 +90,6 @@ class View extends IdModel {
       include: [
         {
           model: User,
-          paranoid: false,
           required: true,
           ...(includeSuspended
             ? {}
@@ -91,33 +99,22 @@ class View extends IdModel {
     });
   }
 
-  static async findRecentlyEditingByDocument(documentId: string) {
-    return this.findAll({
-      where: {
-        documentId,
-        lastEditingAt: {
-          [Op.gt]: subMilliseconds(new Date(), USER_PRESENCE_INTERVAL * 2),
-        },
-      },
-      order: [["lastEditingAt", "DESC"]],
-    });
-  }
-
   static async touch(documentId: string, userId: string, isEditing: boolean) {
-    const [view] = await this.findOrCreate({
+    const values: Partial<View> = {
+      updatedAt: new Date(),
+    };
+
+    if (isEditing) {
+      values.lastEditingAt = new Date();
+    }
+
+    await this.update(values, {
       where: {
         userId,
         documentId,
       },
+      returning: false,
     });
-
-    if (isEditing) {
-      const lastEditingAt = new Date();
-      view.lastEditingAt = lastEditingAt;
-      await view.save();
-    }
-
-    return view;
   }
 }
 

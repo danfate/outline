@@ -25,13 +25,14 @@ export function opts(user?: User | null) {
  *
  * @returns i18n instance
  */
-export function initI18n() {
+export async function initI18n() {
   const lng = unicodeCLDRtoBCP47(env.DEFAULT_LANGUAGE);
-  i18n.use(backend).init({
+  i18n.use(backend);
+  await i18n.init({
     compatibilityJSON: "v3",
     backend: {
-      loadPath: (language: string) => {
-        return path.resolve(
+      loadPath: (language: string) =>
+        path.resolve(
           path.join(
             __dirname,
             "..",
@@ -42,8 +43,7 @@ export function initI18n() {
             unicodeBCP47toCLDR(language),
             "translation.json"
           )
-        );
-      },
+        ),
     },
     preload: languages.map(unicodeCLDRtoBCP47),
     interpolation: {

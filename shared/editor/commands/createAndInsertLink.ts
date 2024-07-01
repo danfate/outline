@@ -1,10 +1,12 @@
 import { Node } from "prosemirror-model";
 import { EditorView } from "prosemirror-view";
+import { toast } from "sonner";
+import type { Dictionary } from "~/hooks/useDictionary";
 
 function findPlaceholderLink(doc: Node, href: string) {
   let result: { pos: number; node: Node } | undefined;
 
-  function findLinks(node: Node, pos = 0) {
+  doc.descendants((node: Node, pos = 0) => {
     // get text nodes
     if (node.type.name === "text") {
       // get marks for text nodes
@@ -17,16 +19,17 @@ function findPlaceholderLink(doc: Node, href: string) {
           }
         }
       });
+
+      return false;
     }
 
     if (!node.content.size) {
-      return;
+      return false;
     }
 
-    node.descendants(findLinks);
-  }
+    return true;
+  });
 
-  findLinks(doc);
   return result;
 }
 
@@ -35,16 +38,16 @@ const createAndInsertLink = async function (
   title: string,
   href: string,
   options: {
-    dictionary: any;
-    onCreateLink: (title: string) => Promise<string>;
-    onShowToast: (message: string) => void;
+    dictionary: Dictionary;
+    nested?: boolean;
+    onCreateLink: (title: string, nested?: boolean) => Promise<string>;
   }
 ) {
   const { dispatch, state } = view;
-  const { onCreateLink, onShowToast } = options;
+  const { onCreateLink } = options;
 
   try {
-    const url = await onCreateLink(title);
+    const url = await onCreateLink(title, options.nested);
     const result = findPlaceholderLink(view.state.doc, href);
 
     if (!result) {
@@ -78,7 +81,7 @@ const createAndInsertLink = async function (
       )
     );
 
-    onShowToast(options.dictionary.createLinkError);
+    toast.error(options.dictionary.createLinkError);
   }
 };
 

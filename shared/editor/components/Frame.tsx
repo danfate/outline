@@ -4,16 +4,27 @@ import { OpenIcon } from "outline-icons";
 import * as React from "react";
 import styled from "styled-components";
 import { Optional } from "utility-types";
+import { s } from "../../styles";
+import { sanitizeUrl } from "../../utils/urls";
 
 type Props = Omit<Optional<HTMLIFrameElement>, "children"> & {
+  /** The URL to load in the iframe */
   src?: string;
+  /** Whether to display a border, defaults to true */
   border?: boolean;
+  /** The aria title of the frame */
   title?: string;
+  /** An icon to display under the frame representing the service */
   icon?: React.ReactNode;
+  /** The canonical URL of the content */
   canonicalUrl?: string;
+  /** Whether the node is currently selected */
   isSelected?: boolean;
+  /** The width of the frame */
   width?: string;
+  /** The height of the frame */
   height?: string;
+  /** The allow policy of the frame */
   allow?: string;
 };
 
@@ -30,7 +41,7 @@ class Frame extends React.Component<PropsWithRef> {
 
   componentDidMount() {
     this.mounted = true;
-    setImmediate(this.loadIframe);
+    setTimeout(this.loadIframe, 0);
   }
 
   componentWillUnmount() {
@@ -55,6 +66,7 @@ class Frame extends React.Component<PropsWithRef> {
       canonicalUrl,
       isSelected,
       referrerPolicy,
+      className = "",
       src,
     } = this.props;
     const withBar = !!(icon || canonicalUrl);
@@ -65,19 +77,21 @@ class Frame extends React.Component<PropsWithRef> {
         height={height}
         $withBar={withBar}
         $border={border}
-        className={isSelected ? "ProseMirror-selectednode" : ""}
+        className={
+          isSelected ? `ProseMirror-selectednode ${className}` : className
+        }
       >
         {this.isLoaded && (
           <Iframe
             ref={forwardedRef}
             $withBar={withBar}
-            sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-downloads allow-storage-access-by-user-activation"
             width={width}
             height={height}
             frameBorder="0"
             title="embed"
             loading="lazy"
-            src={src}
+            src={sanitizeUrl(src)}
             referrerPolicy={referrerPolicy}
             allowFullScreen
           />
@@ -91,7 +105,7 @@ class Frame extends React.Component<PropsWithRef> {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <OpenIcon color="currentColor" size={18} /> Open
+                <OpenIcon size={18} /> Open
               </Open>
             )}
           </Bar>
@@ -121,7 +135,7 @@ const Rounded = styled.div<{
 `;
 
 const Open = styled.a`
-  color: ${(props) => props.theme.textSecondary} !important;
+  color: ${s("textSecondary")} !important;
   font-size: 13px;
   font-weight: 500;
   align-items: center;
@@ -141,12 +155,13 @@ const Bar = styled.div`
   display: flex;
   align-items: center;
   border-top: 1px solid ${(props) => props.theme.embedBorder};
-  background: ${(props) => props.theme.secondaryBackground};
-  color: ${(props) => props.theme.textSecondary};
+  background: ${s("secondaryBackground")};
+  color: ${s("textSecondary")};
   padding: 0 8px;
   border-bottom-left-radius: 6px;
   border-bottom-right-radius: 6px;
   user-select: none;
+  position: relative;
 `;
 
 export default React.forwardRef<HTMLIFrameElement, Props>((props, ref) => (

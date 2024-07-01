@@ -19,16 +19,12 @@ type Props = {
 const WebhookSubscriptionListItem = ({ webhook }: Props) => {
   const { t } = useTranslation();
   const { dialogs } = useStores();
-  const [
-    editModalOpen,
-    handleEditModalOpen,
-    handleEditModalClose,
-  ] = useBoolean();
+  const [editModalOpen, handleEditModalOpen, handleEditModalClose] =
+    useBoolean();
 
   const showDeletionConfirmation = React.useCallback(() => {
     dialogs.openModal({
       title: t("Delete webhook"),
-      isCentered: true,
       content: (
         <WebhookSubscriptionRevokeDialog
           onSubmit={dialogs.closeAllModals}
@@ -45,7 +41,7 @@ const WebhookSubscriptionListItem = ({ webhook }: Props) => {
         <>
           {webhook.name}
           {!webhook.enabled && (
-            <StyledBadge yellow={true}>{t("Disabled")}</StyledBadge>
+            <StyledBadge yellow>{t("Disabled")}</StyledBadge>
           )}
         </>
       }

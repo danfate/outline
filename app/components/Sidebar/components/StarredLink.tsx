@@ -4,15 +4,10 @@ import { observer } from "mobx-react";
 import { StarredIcon } from "outline-icons";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { useDrag, useDrop } from "react-dnd";
-import { getEmptyImage } from "react-dnd-html5-backend";
 import { useLocation } from "react-router-dom";
 import styled, { useTheme } from "styled-components";
-import parseTitle from "@shared/utils/parseTitle";
 import Star from "~/models/Star";
 import Fade from "~/components/Fade";
-import CollectionIcon from "~/components/Icons/CollectionIcon";
-import EmojiIcon from "~/components/Icons/EmojiIcon";
 import useBoolean from "~/hooks/useBoolean";
 import useStores from "~/hooks/useStores";
 import DocumentMenu from "~/menus/DocumentMenu";
@@ -23,6 +18,12 @@ import DropCursor from "./DropCursor";
 import Folder from "./Folder";
 import Relative from "./Relative";
 import SidebarLink from "./SidebarLink";
+import {
+  useDragStar,
+  useDropToCreateStar,
+  useDropToReorderStar,
+} from "./useDragAndDrop";
+import { useSidebarLabelAndIcon } from "./useSidebarLabelAndIcon";
 
 type Props = {
   star: Star;
@@ -35,45 +36,8 @@ function useLocationStateStarred() {
   return location.state?.starred;
 }
 
-function useLabelAndIcon({ documentId, collectionId }: Star) {
-  const { collections, documents } = useStores();
-  const theme = useTheme();
-
-  if (documentId) {
-    const document = documents.get(documentId);
-    if (document) {
-      const { emoji } = parseTitle(document?.title);
-
-      return {
-        label: emoji
-          ? document.title.replace(emoji, "")
-          : document.titleWithDefault,
-        icon: emoji ? (
-          <EmojiIcon emoji={emoji} />
-        ) : (
-          <StarredIcon color={theme.yellow} />
-        ),
-      };
-    }
-  }
-
-  if (collectionId) {
-    const collection = collections.get(collectionId);
-    if (collection) {
-      return {
-        label: collection.name,
-        icon: <CollectionIcon collection={collection} />,
-      };
-    }
-  }
-
-  return {
-    label: "",
-    icon: <StarredIcon color={theme.yellow} />,
-  };
-}
-
 function StarredLink({ star }: Props) {
+  const theme = useTheme();
   const { ui, collections, documents } = useStores();
   const [menuOpen, handleMenuOpen, handleMenuClose] = useBoolean();
   const { documentId, collectionId } = star;
@@ -90,13 +54,9 @@ function StarredLink({ star }: Props) {
   }, [star.collectionId, ui.activeCollectionId, locationStateStarred]);
 
   useEffect(() => {
-    async function load() {
-      if (documentId) {
-        await documents.fetch(documentId);
-      }
+    if (documentId) {
+      void documents.fetch(documentId);
     }
-
-    load();
   }, [documentId, documents]);
 
   const handleDisclosureClick = React.useCallback(
@@ -108,43 +68,36 @@ function StarredLink({ star }: Props) {
     []
   );
 
-  const { label, icon } = useLabelAndIcon(star);
-
-  // Draggable
-  const [{ isDragging }, drag, preview] = useDrag({
-    type: "star",
-    item: () => ({
-      star,
-      title: label,
-      icon,
-    }),
-    collect: (monitor) => ({
-      isDragging: !!monitor.isDragging(),
-    }),
-    canDrag: () => true,
-  });
-
-  React.useEffect(() => {
-    preview(getEmptyImage(), { captureDraggingState: true });
-  }, [preview]);
-
-  // Drop to reorder
-  const [{ isOverReorder, isDraggingAny }, dropToReorder] = useDrop({
-    accept: "star",
-    drop: (item: { star: Star }) => {
-      const next = star?.next();
-
-      item.star.save({
-        index: fractionalIndex(star?.index || null, next?.index || null),
-      });
-    },
-    collect: (monitor) => ({
-      isOverReorder: !!monitor.isOver(),
-      isDraggingAny: !!monitor.canDrop(),
-    }),
-  });
+  const getIndex = () => {
+    const next = star?.next();
+    return fractionalIndex(star?.index || null, next?.index || null);
+  };
+  const { label, icon } = useSidebarLabelAndIcon(
+    star,
+    <StarredIcon color={theme.yellow} />
+  );
+  const [{ isDragging }, draggableRef] = useDragStar(star);
+  const [reorderStarMonitor, dropToReorderRef] = useDropToReorderStar(getIndex);
+  const [createStarMonitor, dropToStarRef] = useDropToCreateStar(getIndex);
 
   const displayChildDocuments = expanded && !isDragging;
+
+  const cursor = (
+    <>
+      {reorderStarMonitor.isDragging && (
+        <DropCursor
+          isActiveDrop={reorderStarMonitor.isOverCursor}
+          innerRef={dropToReorderRef}
+        />
+      )}
+      {createStarMonitor.isDragging && (
+        <DropCursor
+          isActiveDrop={createStarMonitor.isOverCursor}
+          innerRef={dropToStarRef}
+        />
+      )}
+    </>
+  );
 
   if (documentId) {
     const document = documents.get(documentId);
@@ -152,7 +105,9 @@ function StarredLink({ star }: Props) {
       return null;
     }
 
-    const collection = collections.get(document.collectionId);
+    const collection = document.collectionId
+      ? collections.get(document.collectionId)
+      : undefined;
     const childDocuments = collection
       ? collection.getDocumentChildren(documentId)
       : [];
@@ -160,7 +115,7 @@ function StarredLink({ star }: Props) {
 
     return (
       <>
-        <Draggable key={star.id} ref={drag} $isDragging={isDragging}>
+        <Draggable key={star.id} ref={draggableRef} $isDragging={isDragging}>
           <SidebarLink
             depth={0}
             to={{
@@ -203,9 +158,7 @@ function StarredLink({ star }: Props) {
               />
             ))}
           </Folder>
-          {isDraggingAny && (
-            <DropCursor isActiveDrop={isOverReorder} innerRef={dropToReorder} />
-          )}
+          {cursor}
         </Relative>
       </>
     );
@@ -214,13 +167,13 @@ function StarredLink({ star }: Props) {
   if (collection) {
     return (
       <>
-        <Draggable key={star?.id} ref={drag} $isDragging={isDragging}>
+        <Draggable key={star?.id} ref={draggableRef} $isDragging={isDragging}>
           <CollectionLink
             collection={collection}
             expanded={isDragging ? undefined : displayChildDocuments}
             activeDocument={documents.active}
             onDisclosureClick={handleDisclosureClick}
-            isDraggingAnyCollection={isDraggingAny}
+            isDraggingAnyCollection={reorderStarMonitor.isDragging}
           />
         </Draggable>
         <Relative>
@@ -228,9 +181,7 @@ function StarredLink({ star }: Props) {
             collection={collection}
             expanded={displayChildDocuments}
           />
-          {isDraggingAny && (
-            <DropCursor isActiveDrop={isOverReorder} innerRef={dropToReorder} />
-          )}
+          {cursor}
         </Relative>
       </>
     );

@@ -1,4 +1,11 @@
+import { createReadStream } from "fs";
 import path from "path";
+import { File } from "formidable";
+import {
+  InferAttributes,
+  InferCreationAttributes,
+  QueryTypes,
+} from "sequelize";
 import {
   BeforeDestroy,
   BelongsTo,
@@ -9,13 +16,10 @@ import {
   Table,
   DataType,
   IsNumeric,
+  BeforeUpdate,
 } from "sequelize-typescript";
-import {
-  publicS3Endpoint,
-  deleteFromS3,
-  getFileByKey,
-  getSignedUrl,
-} from "@server/utils/s3";
+import FileStorage from "@server/storage/files";
+import { ValidateKey } from "@server/validation";
 import Document from "./Document";
 import Team from "./Team";
 import User from "./User";
@@ -25,7 +29,10 @@ import Length from "./validators/Length";
 
 @Table({ tableName: "attachments", modelName: "attachment" })
 @Fix
-class Attachment extends IdModel {
+class Attachment extends IdModel<
+  InferAttributes<Attachment>,
+  Partial<InferCreationAttributes<Attachment>>
+> {
   @Length({
     max: 4096,
     msg: "key must be 4096 characters or less",
@@ -75,7 +82,14 @@ class Attachment extends IdModel {
    * Get the contents of this attachment as a readable stream.
    */
   get stream() {
-    return getFileByKey(this.key);
+    return FileStorage.getFileStream(this.key);
+  }
+
+  /**
+   * Get the contents of this attachment as a buffer.
+   */
+  get buffer() {
+    return FileStorage.getFileBuffer(this.key);
   }
 
   /**
@@ -89,29 +103,87 @@ class Attachment extends IdModel {
    * Get a url that can be used to download a private attachment if the user has a valid session.
    */
   get redirectUrl() {
-    return `/api/attachments.redirect?id=${this.id}`;
+    return Attachment.getRedirectUrl(this.id);
   }
 
   /**
-   * Get a direct URL to the attachment in storage. Note that this will not work for private attachments,
-   * a signed URL must be used.
+   * Get a direct URL to the attachment in storage. Note that this will not work
+   * for private attachments, a signed URL must be used.
    */
   get canonicalUrl() {
-    return encodeURI(`${publicS3Endpoint()}/${this.key}`);
+    return encodeURI(FileStorage.getUrlForKey(this.key));
   }
 
   /**
-   * Get a signed URL with the default expirt to download the attachment from storage.
+   * Get a signed URL with the default expiry to download the attachment from storage.
    */
   get signedUrl() {
-    return getSignedUrl(this.key);
+    return FileStorage.getSignedUrl(this.key);
+  }
+
+  /**
+   * Store the given file in storage at the location specified by the attachment key.
+   * If the attachment already exists, an error will be thrown.
+   *
+   * @param file The file to store
+   * @returns A promise resolving to the attachment
+   */
+  async writeFile(file: File) {
+    return FileStorage.store({
+      body: createReadStream(file.filepath),
+      contentLength: file.size,
+      contentType: this.contentType,
+      key: this.key,
+      acl: this.acl,
+    });
   }
 
   // hooks
 
+  @BeforeUpdate
+  static async sanitizeKey(model: Attachment) {
+    model.key = ValidateKey.sanitize(model.key);
+    return model;
+  }
+
   @BeforeDestroy
   static async deleteAttachmentFromS3(model: Attachment) {
-    await deleteFromS3(model.key);
+    await FileStorage.deleteFile(model.key);
+  }
+
+  // static methods
+
+  /**
+   * Get the total size of all attachments for a given team.
+   *
+   * @param teamId - The ID of the team to get the total size for.
+   * @returns A promise resolving to the total size of all attachments for the given team in bytes.
+   */
+  static async getTotalSizeForTeam(teamId: string): Promise<number> {
+    const result = await this.sequelize!.query<{ total: string }>(
+      `
+      SELECT SUM(size) as total
+      FROM attachments
+      WHERE "teamId" = :teamId
+    `,
+      {
+        replacements: { teamId },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    return parseInt(result?.[0]?.total ?? "0", 10);
+  }
+
+  /**
+   * Get the redirect URL for a private attachment. Use `attachment.redirectUrl` if you already have
+   * an instance of the attachment.
+   *
+   * @param id The ID of the attachment to get the redirect URL for.
+   * @returns The redirect URL for the attachment.
+   */
+  static getRedirectUrl(id: string) {
+    return `/api/attachments.redirect?id=${id}`;
   }
 
   // associations

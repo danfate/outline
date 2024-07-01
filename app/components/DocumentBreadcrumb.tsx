@@ -6,12 +6,19 @@ import styled from "styled-components";
 import type { NavigationNode } from "@shared/types";
 import Document from "~/models/Document";
 import Breadcrumb from "~/components/Breadcrumb";
+import Icon from "~/components/Icon";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
 import useStores from "~/hooks/useStores";
 import { MenuInternalLink } from "~/types";
-import { collectionUrl } from "~/utils/routeHelpers";
+import {
+  archivePath,
+  collectionPath,
+  settingsPath,
+  trashPath,
+} from "~/utils/routeHelpers";
 
 type Props = {
+  children?: React.ReactNode;
   document: Document;
   onlyText?: boolean;
 };
@@ -22,27 +29,27 @@ function useCategory(document: Document): MenuInternalLink | null {
   if (document.isDeleted) {
     return {
       type: "route",
-      icon: <TrashIcon color="currentColor" />,
+      icon: <TrashIcon />,
       title: t("Trash"),
-      to: "/trash",
+      to: trashPath(),
     };
   }
 
   if (document.isArchived) {
     return {
       type: "route",
-      icon: <ArchiveIcon color="currentColor" />,
+      icon: <ArchiveIcon />,
       title: t("Archive"),
-      to: "/archive",
+      to: archivePath(),
     };
   }
 
-  if (document.isTemplate) {
+  if (document.template) {
     return {
       type: "route",
-      icon: <ShapesIcon color="currentColor" />,
+      icon: <ShapesIcon />,
       title: t("Templates"),
-      to: "/templates",
+      to: settingsPath("templates"),
     };
   }
 
@@ -53,11 +60,17 @@ const DocumentBreadcrumb: React.FC<Props> = ({
   document,
   children,
   onlyText,
-}) => {
+}: Props) => {
   const { collections } = useStores();
   const { t } = useTranslation();
   const category = useCategory(document);
-  const collection = collections.get(document.collectionId);
+  const collection = document.collectionId
+    ? collections.get(document.collectionId)
+    : undefined;
+
+  React.useEffect(() => {
+    void document.loadRelations();
+  }, [document]);
 
   let collectionNode: MenuInternalLink | undefined;
 
@@ -66,22 +79,18 @@ const DocumentBreadcrumb: React.FC<Props> = ({
       type: "route",
       title: collection.name,
       icon: <CollectionIcon collection={collection} expanded />,
-      to: collectionUrl(collection.url),
+      to: collectionPath(collection.path),
     };
-  } else if (document.collectionId && !collection) {
+  } else if (document.isCollectionDeleted) {
     collectionNode = {
       type: "route",
       title: t("Deleted Collection"),
       icon: undefined,
-      to: collectionUrl("deleted-collection"),
+      to: "",
     };
   }
 
-  const path = React.useMemo(
-    () => collection?.pathToDocument(document.id).slice(0, -1) || [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [collection, document, document.collectionId, document.parentDocumentId]
-  );
+  const path = document.pathTo;
 
   const items = React.useMemo(() => {
     const output = [];
@@ -94,10 +103,16 @@ const DocumentBreadcrumb: React.FC<Props> = ({
       output.push(collectionNode);
     }
 
-    path.forEach((node: NavigationNode) => {
+    path.slice(0, -1).forEach((node: NavigationNode) => {
       output.push({
         type: "route",
-        title: node.title,
+        title: node.icon ? (
+          <>
+            <StyledIcon value={node.icon} color={node.color} /> {node.title}
+          </>
+        ) : (
+          node.title
+        ),
         to: node.url,
       });
     });
@@ -112,7 +127,7 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     return (
       <>
         {collection?.name}
-        {path.map((node: NavigationNode) => (
+        {path.slice(0, -1).map((node: NavigationNode) => (
           <React.Fragment key={node.id}>
             <SmallSlash />
             {node.title}
@@ -122,8 +137,16 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     );
   }
 
-  return <Breadcrumb items={items} children={children} highlightFirstItem />;
+  return (
+    <Breadcrumb items={items} highlightFirstItem>
+      {children}
+    </Breadcrumb>
+  );
 };
+
+const StyledIcon = styled(Icon)`
+  margin-right: 2px;
+`;
 
 const SmallSlash = styled(GoToIcon)`
   width: 12px;
@@ -131,7 +154,7 @@ const SmallSlash = styled(GoToIcon)`
   vertical-align: middle;
   flex-shrink: 0;
 
-  fill: ${(props) => props.theme.slate};
+  fill: ${(props) => props.theme.textTertiary};
   opacity: 0.5;
 `;
 

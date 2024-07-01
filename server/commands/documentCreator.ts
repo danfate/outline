@@ -1,25 +1,35 @@
 import { Transaction } from "sequelize";
+import { Optional } from "utility-types";
 import { Document, Event, User } from "@server/models";
-import DocumentHelper from "@server/models/helpers/DocumentHelper";
+import { ProsemirrorHelper } from "@server/models/helpers/ProsemirrorHelper";
+import { TextHelper } from "@server/models/helpers/TextHelper";
 
-type Props = {
-  id?: string;
-  urlId?: string;
-  title: string;
-  text?: string;
+type Props = Optional<
+  Pick<
+    Document,
+    | "id"
+    | "urlId"
+    | "title"
+    | "text"
+    | "content"
+    | "icon"
+    | "color"
+    | "collectionId"
+    | "parentDocumentId"
+    | "importId"
+    | "template"
+    | "fullWidth"
+    | "sourceMetadata"
+    | "editorVersion"
+    | "publishedAt"
+    | "createdAt"
+    | "updatedAt"
+  >
+> & {
   state?: Buffer;
   publish?: boolean;
-  collectionId?: string | null;
-  parentDocumentId?: string | null;
-  importId?: string;
   templateDocument?: Document | null;
-  publishedAt?: Date;
-  template?: boolean;
-  createdAt?: Date;
-  updatedAt?: Date;
   user: User;
-  editorVersion?: string;
-  source?: "import";
   ip?: string;
   transaction?: Transaction;
 };
@@ -27,26 +37,36 @@ type Props = {
 export default async function documentCreator({
   title = "",
   text = "",
+  icon,
+  color,
   state,
   id,
   urlId,
   publish,
   collectionId,
   parentDocumentId,
+  content,
+  template,
   templateDocument,
+  fullWidth,
   importId,
   createdAt,
   // allows override for import
   updatedAt,
-  template,
   user,
   editorVersion,
   publishedAt,
-  source,
+  sourceMetadata,
   ip,
   transaction,
 }: Props): Promise<Document> {
   const templateId = templateDocument ? templateDocument.id : undefined;
+
+  if (state && templateDocument) {
+    throw new Error(
+      "State cannot be set when creating a document from a template"
+    );
+  }
 
   if (urlId) {
     const existing = await Document.unscoped().findOne({
@@ -69,19 +89,38 @@ export default async function documentCreator({
       editorVersion,
       collectionId,
       teamId: user.teamId,
-      userId: user.id,
       createdAt,
-      updatedAt,
+      updatedAt: updatedAt ?? createdAt,
       lastModifiedById: user.id,
       createdById: user.id,
       template,
       templateId,
       publishedAt,
       importId,
-      title: templateDocument
-        ? DocumentHelper.replaceTemplateVariables(templateDocument.title, user)
-        : title,
-      text: templateDocument ? templateDocument.text : text,
+      sourceMetadata,
+      fullWidth: templateDocument ? templateDocument.fullWidth : fullWidth,
+      emoji: templateDocument ? templateDocument.emoji : icon,
+      icon: templateDocument ? templateDocument.emoji : icon,
+      color: templateDocument ? templateDocument.color : color,
+      title: TextHelper.replaceTemplateVariables(
+        templateDocument ? templateDocument.title : title,
+        user
+      ),
+      text: await TextHelper.replaceImagesWithAttachments(
+        TextHelper.replaceTemplateVariables(
+          templateDocument ? templateDocument.text : text,
+          user
+        ),
+        user,
+        ip,
+        transaction
+      ),
+      content: templateDocument
+        ? ProsemirrorHelper.replaceTemplateVariables(
+            templateDocument.content,
+            user
+          )
+        : content,
       state,
     },
     {
@@ -97,7 +136,7 @@ export default async function documentCreator({
       teamId: document.teamId,
       actorId: user.id,
       data: {
-        source,
+        source: importId ? "import" : undefined,
         title: document.title,
         templateId,
       },
@@ -109,7 +148,11 @@ export default async function documentCreator({
   );
 
   if (publish) {
-    await document.publish(user.id, { transaction });
+    if (!collectionId) {
+      throw new Error("Collection ID is required to publish");
+    }
+
+    await document.publish(user.id, collectionId, { transaction });
     await Event.create(
       {
         name: "documents.publish",
@@ -118,7 +161,7 @@ export default async function documentCreator({
         teamId: document.teamId,
         actorId: user.id,
         data: {
-          source,
+          source: importId ? "import" : undefined,
           title: document.title,
         },
         ip,
@@ -132,7 +175,10 @@ export default async function documentCreator({
   // reload to get all of the data needed to present (user, collection etc)
   // we need to specify publishedAt to bypass default scope that only returns
   // published documents
-  return await Document.findOne({
+  return await Document.scope([
+    "withDrafts",
+    { method: ["withMembership", user.id] },
+  ]).findOne({
     where: {
       id: document.id,
       publishedAt: document.publishedAt,

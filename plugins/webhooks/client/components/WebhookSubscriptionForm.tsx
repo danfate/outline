@@ -1,18 +1,22 @@
-import { isEqual, filter, includes } from "lodash";
+import filter from "lodash/filter";
+import includes from "lodash/includes";
+import isEqual from "lodash/isEqual";
 import randomstring from "randomstring";
 import * as React from "react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation, Trans } from "react-i18next";
 import styled from "styled-components";
+import { TeamPreference } from "@shared/types";
 import WebhookSubscription from "~/models/WebhookSubscription";
 import Button from "~/components/Button";
 import Input from "~/components/Input";
 import Text from "~/components/Text";
+import useCurrentTeam from "~/hooks/useCurrentTeam";
 import useMobile from "~/hooks/useMobile";
 
 const WEBHOOK_EVENTS = {
-  user: [
+  users: [
     "users.create",
     "users.signin",
     "users.update",
@@ -23,7 +27,7 @@ const WEBHOOK_EVENTS = {
     "users.promote",
     "users.demote",
   ],
-  document: [
+  documents: [
     "documents.create",
     "documents.publish",
     "documents.unpublish",
@@ -35,14 +39,10 @@ const WEBHOOK_EVENTS = {
     "documents.move",
     "documents.update",
     "documents.title_change",
+    "documents.add_user",
+    "documents.remove_user",
   ],
-  revision: ["revisions.create"],
-  fileOperation: [
-    "fileOperations.create",
-    "fileOperations.update",
-    "fileOperations.delete",
-  ],
-  collection: [
+  collections: [
     "collections.create",
     "collections.update",
     "collections.delete",
@@ -53,23 +53,30 @@ const WEBHOOK_EVENTS = {
     "collections.move",
     "collections.permission_changed",
   ],
-  group: [
+  comments: ["comments.create", "comments.update", "comments.delete"],
+  revisions: ["revisions.create"],
+  fileOperations: [
+    "fileOperations.create",
+    "fileOperations.update",
+    "fileOperations.delete",
+  ],
+  groups: [
     "groups.create",
     "groups.update",
     "groups.delete",
     "groups.add_user",
     "groups.remove_user",
   ],
-  integration: ["integrations.create", "integrations.update"],
-  share: ["shares.create", "shares.update", "shares.revoke"],
-  team: ["teams.update"],
-  pin: ["pins.create", "pins.update", "pins.delete"],
-  webhookSubscription: [
+  integrations: ["integrations.create", "integrations.update"],
+  shares: ["shares.create", "shares.update", "shares.revoke"],
+  teams: ["teams.update"],
+  pins: ["pins.create", "pins.update", "pins.delete"],
+  webhookSubscriptions: [
     "webhookSubscriptions.create",
     "webhookSubscriptions.delete",
     "webhookSubscriptions.update",
   ],
-  view: ["views.create"],
+  views: ["views.create"],
 };
 
 const EventCheckboxLabel = styled.label`
@@ -155,6 +162,7 @@ function generateSigningSecret() {
 
 function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
   const { t } = useTranslation();
+  const team = useCurrentTeam();
   const {
     register,
     handleSubmit: formHandleSubmit,
@@ -223,7 +231,7 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
 
   return (
     <form onSubmit={formHandleSubmit(handleSubmit)}>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Provide a descriptive name for this webhook and the URL we should send
           a POST request to when matching events are created.
@@ -258,31 +266,37 @@ function WebhookSubscriptionForm({ handleSubmit, webhookSubscription }: Props) {
           })}
         />
       </TextFields>
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Subscribe to all events, groups, or individual events. We recommend
           only subscribing to the minimum amount of events that your application
           needs to function.
         </Trans>
       </Text>
-
       <EventCheckbox label={t("All events")} value="*" />
-
       <FieldSet disabled={isAllEventSelected}>
         <GroupGrid isMobile={isMobile}>
-          {Object.entries(WEBHOOK_EVENTS).map(([group, events], i) => (
-            <GroupWrapper key={i} isMobile={isMobile}>
-              <EventCheckbox
-                label={t(`All {{ groupName }} events`, { groupName: group })}
-                value={group}
-              />
-              <FieldSet disabled={selectedGroups.includes(group)}>
-                {events.map((event) => (
-                  <EventCheckbox label={event} value={event} key={event} />
-                ))}
-              </FieldSet>
-            </GroupWrapper>
-          ))}
+          {Object.entries(WEBHOOK_EVENTS)
+            .filter(
+              ([group]) =>
+                group !== "comment" ||
+                team.getPreference(TeamPreference.Commenting)
+            )
+            .map(([group, events], i) => (
+              <GroupWrapper key={i} isMobile={isMobile}>
+                <EventCheckbox
+                  label={t(`All {{ groupName }} events`, {
+                    groupName: group.replace(/s$/, ""),
+                  })}
+                  value={group}
+                />
+                <FieldSet disabled={selectedGroups.includes(group)}>
+                  {events.map((event) => (
+                    <EventCheckbox label={event} value={event} key={event} />
+                  ))}
+                </FieldSet>
+              </GroupWrapper>
+            ))}
         </GroupGrid>
       </FieldSet>
       <Button

@@ -1,10 +1,10 @@
 import { Context, Next } from "koa";
-import { defaults } from "lodash";
+import defaults from "lodash/defaults";
 import env from "@server/env";
 import { RateLimitExceededError } from "@server/errors";
 import Logger from "@server/logging/Logger";
 import Metrics from "@server/logging/Metrics";
-import Redis from "@server/redis";
+import Redis from "@server/storage/redis";
 import RateLimiter from "@server/utils/RateLimiter";
 
 /**
@@ -73,9 +73,11 @@ export function rateLimiter(config: RateLimiterConfig) {
       return next();
     }
 
-    if (!RateLimiter.hasRateLimiter(ctx.path)) {
+    const fullPath = `${ctx.mountPath ?? ""}${ctx.path}`;
+
+    if (!RateLimiter.hasRateLimiter(fullPath)) {
       RateLimiter.setRateLimiter(
-        ctx.path,
+        fullPath,
         defaults(
           {
             ...config,

@@ -2,6 +2,7 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useHistory } from "react-router-dom";
+import { toast } from "sonner";
 import Collection from "~/models/Collection";
 import ConfirmationDialog from "~/components/ConfirmationDialog";
 import Text from "~/components/Text";
@@ -22,11 +23,14 @@ function CollectionDeleteDialog({ collection, onSubmit }: Props) {
 
   const handleSubmit = async () => {
     const redirect = collection.id === ui.activeCollectionId;
-    await collection.delete();
-    onSubmit();
+
     if (redirect) {
       history.push(homePath());
     }
+
+    await collection.delete();
+    onSubmit();
+    toast.success(t("Collection deleted"));
   };
 
   return (
@@ -37,9 +41,9 @@ function CollectionDeleteDialog({ collection, onSubmit }: Props) {
       danger
     >
       <>
-        <Text type="secondary">
+        <Text as="p" type="secondary">
           <Trans
-            defaults="Are you sure about that? Deleting the <em>{{collectionName}}</em> collection is permanent and cannot be restored, however documents within will be moved to the trash."
+            defaults="Are you sure about that? Deleting the <em>{{collectionName}}</em> collection is permanent and cannot be restored, however all published documents within will be moved to the trash."
             values={{
               collectionName: collection.name,
             }}
@@ -49,7 +53,7 @@ function CollectionDeleteDialog({ collection, onSubmit }: Props) {
           />
         </Text>
         {team.defaultCollectionId === collection.id ? (
-          <Text type="secondary">
+          <Text as="p" type="secondary">
             <Trans
               defaults="Also, <em>{{collectionName}}</em> is being used as the start view – deleting it will reset the start view to the Home page."
               values={{

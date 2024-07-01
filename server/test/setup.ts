@@ -1,31 +1,41 @@
-import Redis from "@server/redis";
+import "reflect-metadata";
+import sharedEnv from "@shared/env";
+import env from "@server/env";
+import Redis from "@server/storage/redis";
 
-// NOTE: this require must come after the ENV var override
-// so that sequelize uses the test config variables
-require("@server/database/sequelize");
+require("@server/storage/database");
 
 jest.mock("bull");
 
 // This is needed for the relative manual mock to be picked up
 jest.mock("../queues");
 
-// Avoid "Yjs was already imported" errors in the test environment
-jest.mock("yjs");
-
 // We never want to make real S3 requests in test environment
-jest.mock("aws-sdk", () => {
-  const mS3 = {
-    createPresignedPost: jest.fn(),
-    putObject: jest.fn().mockReturnThis(),
-    deleteObject: jest.fn().mockReturnThis(),
-    promise: jest.fn(),
-  };
-  return {
-    S3: jest.fn(() => mS3),
-    Endpoint: jest.fn(),
-  };
-});
+jest.mock("@aws-sdk/client-s3", () => ({
+  S3Client: jest.fn(() => ({
+    send: jest.fn(),
+  })),
+  DeleteObjectCommand: jest.fn(),
+  GetObjectCommand: jest.fn(),
+  ObjectCannedACL: {},
+}));
 
-jest.mock("@getoutline/y-prosemirror", () => ({}));
+jest.mock("@aws-sdk/lib-storage", () => ({
+  Upload: jest.fn(() => ({
+    done: jest.fn(),
+  })),
+}));
+
+jest.mock("@aws-sdk/s3-presigned-post", () => ({
+  createPresignedPost: jest.fn(),
+}));
+
+jest.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: jest.fn(),
+}));
 
 afterAll(() => Redis.defaultClient.disconnect());
+
+beforeEach(() => {
+  env.URL = sharedEnv.URL = "https://app.outline.dev";
+});

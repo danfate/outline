@@ -1,13 +1,14 @@
 import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
+import { toast } from "sonner";
 import User from "~/models/User";
 import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import Input from "~/components/Input";
+import Notice from "~/components/Notice";
 import Text from "~/components/Text";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
 
 type Props = {
   user: User;
@@ -16,7 +17,6 @@ type Props = {
 function TeamNew({ user }: Props) {
   const { auth } = useStores();
   const { t } = useTranslation();
-  const { showToast } = useToasts();
   const [name, setName] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -31,9 +31,7 @@ function TeamNew({ user }: Props) {
         });
       }
     } catch (err) {
-      showToast(err.message, {
-        type: "error",
-      });
+      toast.error(err.message);
     } finally {
       setIsSaving(false);
     }
@@ -46,17 +44,14 @@ function TeamNew({ user }: Props) {
   return (
     <>
       <form onSubmit={handleSubmit}>
-        <Text type="secondary">
-          <Trans
-            defaults="Your are creating a new workspace using your current account — <em>{{email}}</em>"
-            values={{
-              email: user.email,
-            }}
-            components={{
-              em: <strong />,
-            }}
-          />
-        </Text>
+        <Notice>
+          <Trans>
+            Please note that workspaces are completely separated. They can have
+            a different domain, settings, users, and billing.
+          </Trans>
+        </Notice>
+
+        <p />
 
         <Flex>
           <Input
@@ -69,11 +64,21 @@ function TeamNew({ user }: Props) {
             flex
           />
         </Flex>
-        <Text type="secondary">
+
+        <Text as="p" type="secondary">
+          <Trans
+            defaults="You are creating a new workspace using your current account — <em>{{email}}</em>"
+            values={{
+              email: user.email,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
+          .{" "}
           <Trans>
-            When your new workspace is created, you will be the admin, meaning
-            you will have the highest level of permissions and the ability to
-            invite others.
+            To create a workspace under another email please sign up from the
+            homepage
           </Trans>
         </Text>
 

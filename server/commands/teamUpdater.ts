@@ -1,70 +1,25 @@
-import { has } from "lodash";
+import has from "lodash/has";
 import { Transaction } from "sequelize";
 import { TeamPreference } from "@shared/types";
-import { sequelize } from "@server/database/sequelize";
 import env from "@server/env";
 import { Event, Team, TeamDomain, User } from "@server/models";
 
-type TeamUpdaterProps = {
+type Props = {
   params: Partial<Omit<Team, "allowedDomains">> & { allowedDomains?: string[] };
   ip?: string;
   user: User;
   team: Team;
+  transaction: Transaction;
 };
 
-const teamUpdater = async ({ params, user, team, ip }: TeamUpdaterProps) => {
-  const {
-    name,
-    avatarUrl,
-    subdomain,
-    sharing,
-    guestSignin,
-    documentEmbeds,
-    memberCollectionCreate,
-    collaborativeEditing,
-    defaultCollectionId,
-    defaultUserRole,
-    inviteRequired,
-    allowedDomains,
-    preferences,
-  } = params;
+const teamUpdater = async ({ params, user, team, ip, transaction }: Props) => {
+  const { allowedDomains, preferences, subdomain, ...attributes } = params;
+  team.setAttributes(attributes);
 
-  const transaction: Transaction = await sequelize.transaction();
-
-  if (subdomain !== undefined && env.SUBDOMAINS_ENABLED) {
+  if (subdomain !== undefined && env.isCloudHosted) {
     team.subdomain = subdomain === "" ? null : subdomain;
   }
 
-  if (name) {
-    team.name = name;
-  }
-  if (sharing !== undefined) {
-    team.sharing = sharing;
-  }
-  if (documentEmbeds !== undefined) {
-    team.documentEmbeds = documentEmbeds;
-  }
-  if (guestSignin !== undefined) {
-    team.guestSignin = guestSignin;
-  }
-  if (avatarUrl !== undefined) {
-    team.avatarUrl = avatarUrl;
-  }
-  if (memberCollectionCreate !== undefined) {
-    team.memberCollectionCreate = memberCollectionCreate;
-  }
-  if (defaultCollectionId !== undefined) {
-    team.defaultCollectionId = defaultCollectionId;
-  }
-  if (collaborativeEditing !== undefined) {
-    team.collaborativeEditing = collaborativeEditing;
-  }
-  if (defaultUserRole !== undefined) {
-    team.defaultUserRole = defaultUserRole;
-  }
-  if (inviteRequired !== undefined) {
-    team.inviteRequired = inviteRequired;
-  }
   if (allowedDomains !== undefined) {
     const existingAllowedDomains = await TeamDomain.findAll({
       where: { teamId: team.id },
@@ -101,47 +56,34 @@ const teamUpdater = async ({ params, user, team, ip }: TeamUpdaterProps) => {
       (x) => !allowedDomains.includes(x.name)
     );
     await Promise.all(deletedDomains.map((x) => x.destroy({ transaction })));
-
     team.allowedDomains = newAllowedDomains;
   }
+
   if (preferences) {
     for (const value of Object.values(TeamPreference)) {
       if (has(preferences, value)) {
-        team.setPreference(value, Boolean(preferences[value]));
+        team.setPreference(value, preferences[value]);
       }
     }
   }
 
-  const changes = team.changed();
-
-  try {
-    const savedTeam = await team.save({
-      transaction,
-    });
-    if (changes) {
-      const data = changes.reduce((acc, curr) => {
-        return { ...acc, [curr]: team[curr] };
-      }, {});
-
-      await Event.create(
-        {
-          name: "teams.update",
-          actorId: user.id,
-          teamId: user.teamId,
-          data,
-          ip,
-        },
-        {
-          transaction,
-        }
-      );
-    }
-    await transaction.commit();
-    return savedTeam;
-  } catch (error) {
-    await transaction.rollback();
-    throw error;
+  const changes = team.changeset;
+  if (Object.keys(changes.attributes).length) {
+    await Event.create(
+      {
+        name: "teams.update",
+        actorId: user.id,
+        teamId: user.teamId,
+        ip,
+        changes,
+      },
+      {
+        transaction,
+      }
+    );
   }
+
+  return team.save({ transaction });
 };
 
 export default teamUpdater;

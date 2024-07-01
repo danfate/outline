@@ -1,12 +1,22 @@
-import fs from "fs";
-import { truncate } from "lodash";
-import { FileOperationState } from "@shared/types";
+import fs from "fs-extra";
+import truncate from "lodash/truncate";
+import { FileOperationState, NotificationEventType } from "@shared/types";
+import { bytesToHumanReadable } from "@shared/utils/files";
 import ExportFailureEmail from "@server/emails/templates/ExportFailureEmail";
 import ExportSuccessEmail from "@server/emails/templates/ExportSuccessEmail";
+import env from "@server/env";
+import { ValidationError } from "@server/errors";
 import Logger from "@server/logging/Logger";
-import { Collection, Event, FileOperation, Team, User } from "@server/models";
+import {
+  Attachment,
+  Collection,
+  Event,
+  FileOperation,
+  Team,
+  User,
+} from "@server/models";
 import fileOperationPresenter from "@server/presenters/fileOperation";
-import { uploadToS3 } from "@server/utils/s3";
+import FileStorage from "@server/storage/files";
 import BaseTask, { TaskPriority } from "./BaseTask";
 
 type Props = {
@@ -40,14 +50,38 @@ export default abstract class ExportTask extends BaseTask<Props> {
       },
     });
 
+    let filePath: string | undefined;
+
     try {
-      Logger.info("task", `ExportTask processing data for ${fileOperationId}`);
+      if (!fileOperation.collectionId) {
+        const totalAttachmentsSize = await Attachment.getTotalSizeForTeam(
+          user.teamId
+        );
+
+        if (
+          fileOperation.options?.includeAttachments &&
+          env.MAXIMUM_EXPORT_SIZE &&
+          totalAttachmentsSize > env.MAXIMUM_EXPORT_SIZE
+        ) {
+          throw ValidationError(
+            `${bytesToHumanReadable(
+              totalAttachmentsSize
+            )} of attachments in workspace is larger than maximum export size of ${bytesToHumanReadable(
+              env.MAXIMUM_EXPORT_SIZE
+            )}.`
+          );
+        }
+      }
+
+      Logger.info("task", `ExportTask processing data for ${fileOperationId}`, {
+        options: fileOperation.options,
+      });
 
       await this.updateFileOperation(fileOperation, {
         state: FileOperationState.Creating,
       });
 
-      const filePath = await this.export(collections, fileOperation);
+      filePath = await this.export(collections, fileOperation);
 
       Logger.info("task", `ExportTask uploading data for ${fileOperationId}`);
 
@@ -55,8 +89,8 @@ export default abstract class ExportTask extends BaseTask<Props> {
         state: FileOperationState.Uploading,
       });
 
-      const stat = await fs.promises.stat(filePath);
-      const url = await uploadToS3({
+      const stat = await fs.stat(filePath);
+      const url = await FileStorage.store({
         body: fs.createReadStream(filePath),
         contentLength: stat.size,
         contentType: "application/zip",
@@ -70,25 +104,35 @@ export default abstract class ExportTask extends BaseTask<Props> {
         url,
       });
 
-      await ExportSuccessEmail.schedule({
-        to: user.email,
-        userId: user.id,
-        id: fileOperation.id,
-        teamUrl: team.url,
-        teamId: team.id,
-      });
+      if (user.subscribedToEventType(NotificationEventType.ExportCompleted)) {
+        await new ExportSuccessEmail({
+          to: user.email,
+          userId: user.id,
+          id: fileOperation.id,
+          teamUrl: team.url,
+          teamId: team.id,
+        }).schedule();
+      }
     } catch (error) {
       await this.updateFileOperation(fileOperation, {
         state: FileOperationState.Error,
         error,
       });
-      await ExportFailureEmail.schedule({
-        to: user.email,
-        userId: user.id,
-        teamUrl: team.url,
-        teamId: team.id,
-      });
+      if (user.subscribedToEventType(NotificationEventType.ExportCompleted)) {
+        await new ExportFailureEmail({
+          to: user.email,
+          userId: user.id,
+          teamUrl: team.url,
+          teamId: team.id,
+        }).schedule();
+      }
       throw error;
+    } finally {
+      if (filePath) {
+        void fs.unlink(filePath).catch((error) => {
+          Logger.error(`Failed to delete temporary file ${filePath}`, error);
+        });
+      }
     }
   }
 

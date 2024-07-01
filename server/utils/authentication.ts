@@ -1,7 +1,7 @@
 import querystring from "querystring";
 import { addMonths } from "date-fns";
 import { Context } from "koa";
-import { pick } from "lodash";
+import pick from "lodash/pick";
 import { Client } from "@shared/types";
 import { getCookieDomain } from "@shared/utils/domains";
 import env from "@server/env";
@@ -32,8 +32,11 @@ export async function signIn(
   service: string,
   { user, team, client, isNewTeam }: AuthenticationResult
 ) {
+  if (team.isSuspended) {
+    return ctx.redirect("/?notice=team-suspended");
+  }
   if (user.isSuspended) {
-    return ctx.redirect("/?notice=suspended");
+    return ctx.redirect("/?notice=user-suspended");
   }
 
   if (isNewTeam) {
@@ -60,7 +63,7 @@ export async function signIn(
   await user.updateSignedIn(ctx.request.ip);
 
   // don't await event creation for a faster sign-in
-  Event.create({
+  void Event.create({
     name: "users.signin",
     actorId: user.id,
     userId: user.id,
@@ -71,7 +74,7 @@ export async function signIn(
     },
     ip: ctx.request.ip,
   });
-  const domain = getCookieDomain(ctx.request.hostname);
+  const domain = getCookieDomain(ctx.request.hostname, env.isCloudHosted);
   const expires = addMonths(new Date(), 3);
 
   // set a cookie for which service we last signed in with. This is
@@ -85,7 +88,7 @@ export async function signIn(
 
   // set a transfer cookie for the access token itself and redirect
   // to the teams subdomain if subdomains are enabled
-  if (env.SUBDOMAINS_ENABLED && team.subdomain) {
+  if (env.isCloudHosted && team.subdomain) {
     // get any existing sessions (teams signed in) and add this team
     const existing = getSessionsInCookie(ctx);
     const sessions = encodeURIComponent(
@@ -118,9 +121,8 @@ export async function signIn(
       );
     }
   } else {
-    ctx.cookies.set("accessToken", user.getJwtToken(), {
+    ctx.cookies.set("accessToken", user.getJwtToken(expires), {
       sameSite: "lax",
-      httpOnly: false,
       expires,
     });
 

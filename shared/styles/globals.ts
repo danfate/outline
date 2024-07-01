@@ -1,8 +1,11 @@
 import { createGlobalStyle } from "styled-components";
 import styledNormalize from "styled-normalize";
-import { breakpoints, depths } from ".";
+import { breakpoints, depths, s } from ".";
 
-type Props = { useCursorPointer?: boolean };
+type Props = {
+  staticHTML?: boolean;
+  useCursorPointer?: boolean;
+};
 
 export default createGlobalStyle<Props>`
   ${styledNormalize}
@@ -14,12 +17,13 @@ export default createGlobalStyle<Props>`
   html,
   body {
     width: 100%;
-    height: 100%;
+    ${(props) => (props.staticHTML ? "" : "height: 100%;")}
     margin: 0;
     padding: 0;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
     --pointer: ${(props) => (props.useCursorPointer ? "pointer" : "default")};
+    overscroll-behavior-x: none;
   }
 
   body,
@@ -28,14 +32,13 @@ export default createGlobalStyle<Props>`
   optgroup,
   select,
   textarea {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-      Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: ${s("fontFamily")};
   }
 
   body {
     font-size: 16px;
     line-height: 1.5;
-    color: ${(props) => props.theme.text};
+    color: ${s("text")};
     overscroll-behavior-y: none;
     -moz-osx-font-smoothing: grayscale;
     -webkit-font-smoothing: antialiased;
@@ -45,7 +48,7 @@ export default createGlobalStyle<Props>`
   @media (min-width: ${breakpoints.tablet}px) {
     html,
     body {
-      min-height: 100vh;
+      min-height: ${(props) => (props.staticHTML ? "0" : "100vh")};
     }
   }
 
@@ -80,12 +83,11 @@ export default createGlobalStyle<Props>`
     margin-top: 1em;
     margin-bottom: 0.5em;
   }
-  h1 { font-size: 2.25em; }
-  h2 { font-size: 1.5em; }
-  h3 { font-size: 1.25em; }
-  h4 { font-size: 1em; }
-  h5 { font-size: 0.875em; }
-  h6 { font-size: 0.75em; }
+  h1 { font-size: 36px; }
+  h2 { font-size: 26px; }
+  h3 { font-size: 20px; }
+  h4 { font-size: 18px; }
+  h5 { font-size: 16px; }
 
   p,
   dl,
@@ -100,15 +102,17 @@ export default createGlobalStyle<Props>`
   hr {
     border: 0;
     height: 0;
-    border-top: 1px solid ${(props) => props.theme.divider};
+    border-top: 1px solid ${s("divider")};
   }
 
   .js-focus-visible :focus:not(.focus-visible) {
     outline: none;
+    outline-width: 0;
   }
 
   .js-focus-visible .focus-visible {
-    outline-color: ${(props) => props.theme.primary};
+    outline-color: ${s("accent")};
     outline-offset: -1px;
+    outline-width: initial;
   }
 `;

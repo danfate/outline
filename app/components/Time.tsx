@@ -1,29 +1,19 @@
-import { formatDistanceToNow } from "date-fns";
 import * as React from "react";
+import { dateToRelative } from "@shared/utils/date";
+import type { Props as LocaleTimeProps } from "~/components/LocaleTime";
+import lazyWithRetry from "~/utils/lazyWithRetry";
 
-const LocaleTime = React.lazy(
-  () =>
-    import(
-      /* webpackChunkName: "locale-time" */
-      "~/components/LocaleTime"
-    )
-);
+const LocaleTime = lazyWithRetry(() => import("~/components/LocaleTime"));
 
-type Props = React.ComponentProps<typeof LocaleTime> & {
+type Props = LocaleTimeProps & {
   onClick?: () => void;
 };
 
 function Time({ onClick, ...props }: Props) {
-  let content = formatDistanceToNow(Date.parse(props.dateTime), {
+  const content = dateToRelative(Date.parse(props.dateTime), {
     addSuffix: props.addSuffix,
+    shorten: props.shorten,
   });
-
-  if (props.shorten) {
-    content = content
-      .replace("about", "")
-      .replace("less than a minute ago", "just now")
-      .replace("minute", "min");
-  }
 
   return (
     <span onClick={onClick}>

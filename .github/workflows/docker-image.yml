@@ -1,0 +1,31 @@
+name: Docker Image CI
+
+on:
+  push:
+    paths:
+      - 'build_cjk.sh'
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3.2.0
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Switch to the repository root
+      run: cd $GITHUB_WORKSPACE
+
+    - name: Execute build script
+      run: |
+        chmod +x ./build_cjk.sh
+        ./build_cjk.sh

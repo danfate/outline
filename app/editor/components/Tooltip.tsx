@@ -3,11 +3,13 @@ import styled from "styled-components";
 import Tooltip from "~/components/Tooltip";
 
 type Props = {
-  tooltip?: string;
+  /** The content to display in the tooltip. */
+  content?: string;
+  children?: React.ReactNode;
 };
 
-const WrappedTooltip: React.FC<Props> = ({ children, tooltip }) => (
-  <Tooltip offset={[0, 16]} delay={150} tooltip={tooltip} placement="top">
+const WrappedTooltip: React.FC<Props> = ({ children, content }: Props) => (
+  <Tooltip offset={[0, 16]} delay={150} content={content} placement="top">
     <TooltipContent>{children}</TooltipContent>
   </Tooltip>
 );

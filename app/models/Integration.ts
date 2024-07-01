@@ -4,10 +4,14 @@ import type {
   IntegrationSettings,
   IntegrationType,
 } from "@shared/types";
-import BaseModel from "~/models/BaseModel";
-import Field from "./decorators/Field";
+import User from "~/models/User";
+import Model from "~/models/base/Model";
+import Field from "~/models/decorators/Field";
+import Relation from "~/models/decorators/Relation";
 
-class Integration<T = unknown> extends BaseModel {
+class Integration<T = unknown> extends Model {
+  static modelName = "Integration";
+
   id: string;
 
   type: IntegrationType;
@@ -16,10 +20,18 @@ class Integration<T = unknown> extends BaseModel {
 
   collectionId: string;
 
+  userId: string;
+
+  @Relation(() => User, { onDelete: "cascade" })
+  user: User;
+
+  teamId: string;
+
   @Field
   @observable
   events: string[];
 
+  @observable
   settings: IntegrationSettings<T>;
 }
 

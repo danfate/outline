@@ -2,19 +2,24 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useMenuState } from "reakit/Menu";
+import { toast } from "sonner";
+import { UserRole } from "@shared/types";
 import User from "~/models/User";
 import ContextMenu from "~/components/ContextMenu";
 import OverflowMenuButton from "~/components/ContextMenu/OverflowMenuButton";
 import Template from "~/components/ContextMenu/Template";
 import {
-  UserChangeToAdminDialog,
-  UserChangeToMemberDialog,
-  UserChangeToViewerDialog,
   UserSuspendDialog,
-} from "~/components/UserRoleDialogs";
+  UserChangeNameDialog,
+} from "~/components/UserDialogs";
+import { actionToMenuItem } from "~/actions";
+import {
+  deleteUserActionFactory,
+  updateUserRoleActionFactory,
+} from "~/actions/definitions/users";
+import useActionContext from "~/hooks/useActionContext";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
 
 type Props = {
   user: User;
@@ -26,54 +31,18 @@ function UserMenu({ user }: Props) {
   const menu = useMenuState({
     modal: true,
   });
-  const can = usePolicy(user.id);
-  const { showToast } = useToasts();
+  const can = usePolicy(user);
+  const context = useActionContext({
+    isContextMenu: true,
+  });
 
-  const handlePromote = React.useCallback(
+  const handleChangeName = React.useCallback(
     (ev: React.SyntheticEvent) => {
       ev.preventDefault();
       dialogs.openModal({
-        title: t("Change role to admin"),
-        isCentered: true,
+        title: t("Change name"),
         content: (
-          <UserChangeToAdminDialog
-            user={user}
-            onSubmit={dialogs.closeAllModals}
-          />
-        ),
-      });
-    },
-    [dialogs, t, user]
-  );
-
-  const handleMember = React.useCallback(
-    (ev: React.SyntheticEvent) => {
-      ev.preventDefault();
-      dialogs.openModal({
-        title: t("Change role to member"),
-        isCentered: true,
-        content: (
-          <UserChangeToMemberDialog
-            user={user}
-            onSubmit={dialogs.closeAllModals}
-          />
-        ),
-      });
-    },
-    [dialogs, t, user]
-  );
-
-  const handleViewer = React.useCallback(
-    (ev: React.SyntheticEvent) => {
-      ev.preventDefault();
-      dialogs.openModal({
-        title: t("Change role to viewer"),
-        isCentered: true,
-        content: (
-          <UserChangeToViewerDialog
-            user={user}
-            onSubmit={dialogs.closeAllModals}
-          />
+          <UserChangeNameDialog user={user} onSubmit={dialogs.closeAllModals} />
         ),
       });
     },
@@ -84,8 +53,7 @@ function UserMenu({ user }: Props) {
     (ev: React.SyntheticEvent) => {
       ev.preventDefault();
       dialogs.openModal({
-        title: t("Suspend account"),
-        isCentered: true,
+        title: t("Suspend user"),
         content: (
           <UserSuspendDialog user={user} onSubmit={dialogs.closeAllModals} />
         ),
@@ -95,9 +63,9 @@ function UserMenu({ user }: Props) {
   );
 
   const handleRevoke = React.useCallback(
-    (ev: React.SyntheticEvent) => {
+    async (ev: React.SyntheticEvent) => {
       ev.preventDefault();
-      users.delete(user);
+      await users.delete(user);
     },
     [users, user]
   );
@@ -108,23 +76,20 @@ function UserMenu({ user }: Props) {
 
       try {
         await users.resendInvite(user);
-        showToast(t(`Invite was resent to ${user.name}`), { type: "success" });
+        toast.success(t(`Invite was resent to ${user.name}`));
       } catch (err) {
-        showToast(
-          err.message ?? t(`An error occurred while sending the invite`),
-          {
-            type: "error",
-          }
+        toast.error(
+          err.message ?? t(`An error occurred while sending the invite`)
         );
       }
     },
-    [users, user, t, showToast]
+    [users, user, t]
   );
 
   const handleActivate = React.useCallback(
-    (ev: React.SyntheticEvent) => {
+    async (ev: React.SyntheticEvent) => {
       ev.preventDefault();
-      users.activate(user);
+      await users.activate(user);
     },
     [users, user]
   );
@@ -137,22 +102,22 @@ function UserMenu({ user }: Props) {
           {...menu}
           items={[
             {
-              type: "button",
-              title: `${t("Change role to member")}…`,
-              onClick: handleMember,
-              visible: can.demote && user.role !== "member",
+              type: "submenu",
+              title: t("Change role"),
+              visible: can.demote || can.promote,
+              items: [UserRole.Admin, UserRole.Member, UserRole.Viewer].map(
+                (role) =>
+                  actionToMenuItem(
+                    updateUserRoleActionFactory(user, role),
+                    context
+                  )
+              ),
             },
             {
               type: "button",
-              title: `${t("Change role to viewer")}…`,
-              onClick: handleViewer,
-              visible: can.demote && user.role !== "viewer",
-            },
-            {
-              type: "button",
-              title: `${t("Change role to admin")}…`,
-              onClick: handlePromote,
-              visible: can.promote && user.role !== "admin",
+              title: `${t("Change name")}…`,
+              onClick: handleChangeName,
+              visible: can.update && user.role !== "admin",
             },
             {
               type: "button",
@@ -172,17 +137,20 @@ function UserMenu({ user }: Props) {
             },
             {
               type: "button",
-              title: t("Activate account"),
+              title: t("Activate user"),
               onClick: handleActivate,
               visible: !user.isInvited && user.isSuspended,
             },
             {
               type: "button",
-              title: `${t("Suspend account")}…`,
-              dangerous: true,
+              title: `${t("Suspend user")}…`,
               onClick: handleSuspend,
               visible: !user.isInvited && !user.isSuspended,
             },
+            {
+              type: "separator",
+            },
+            actionToMenuItem(deleteUserActionFactory(user.id), context),
           ]}
         />
       </ContextMenu>

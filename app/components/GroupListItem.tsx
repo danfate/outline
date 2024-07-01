@@ -4,6 +4,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { MAX_AVATAR_DISPLAY } from "@shared/constants";
+import { s } from "@shared/styles";
 import CollectionGroupMembership from "~/models/CollectionGroupMembership";
 import Group from "~/models/Group";
 import GroupMembers from "~/scenes/GroupMembers";
@@ -13,6 +14,7 @@ import ListItem from "~/components/List/Item";
 import Modal from "~/components/Modal";
 import useBoolean from "~/hooks/useBoolean";
 import useStores from "~/hooks/useStores";
+import { hover } from "~/styles";
 import NudeButton from "./NudeButton";
 
 type Props = {
@@ -26,11 +28,8 @@ type Props = {
 function GroupListItem({ group, showFacepile, renderActions }: Props) {
   const { groupMemberships } = useStores();
   const { t } = useTranslation();
-  const [
-    membersModalOpen,
-    setMembersModalOpen,
-    setMembersModalClosed,
-  ] = useBoolean();
+  const [membersModalOpen, setMembersModalOpen, setMembersModalClosed] =
+    useBoolean();
   const memberCount = group.memberCount;
   const membershipsInGroup = groupMemberships.inGroup(group.id);
   const users = membershipsInGroup
@@ -81,12 +80,12 @@ const Image = styled(Flex)`
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: ${(props) => props.theme.secondaryBackground};
+  background: ${s("secondaryBackground")};
   border-radius: 32px;
 `;
 
 const Title = styled.span`
-  &:hover {
+  &: ${hover} {
     text-decoration: underline;
     cursor: var(--pointer);
   }

@@ -1,15 +1,15 @@
 import path from "path";
 import JSZip from "jszip";
+import escapeRegExp from "lodash/escapeRegExp";
 import { FileOperationFormat, NavigationNode } from "@shared/types";
 import Logger from "@server/logging/Logger";
 import { Collection } from "@server/models";
 import Attachment from "@server/models/Attachment";
 import Document from "@server/models/Document";
-import DocumentHelper from "@server/models/helpers/DocumentHelper";
+import { DocumentHelper } from "@server/models/helpers/DocumentHelper";
+import { ProsemirrorHelper } from "@server/models/helpers/ProsemirrorHelper";
 import ZipHelper from "@server/utils/ZipHelper";
 import { serializeFilename } from "@server/utils/fs";
-import parseAttachmentIds from "@server/utils/parseAttachmentIds";
-import { getFileByKey } from "@server/utils/s3";
 import ExportTask from "./ExportTask";
 
 export default abstract class ExportDocumentTreeTask extends ExportTask {
@@ -26,14 +26,17 @@ export default abstract class ExportDocumentTreeTask extends ExportTask {
     pathInZip,
     documentId,
     format = FileOperationFormat.MarkdownZip,
+    includeAttachments,
     pathMap,
   }: {
     zip: JSZip;
     pathInZip: string;
     documentId: string;
     format: FileOperationFormat;
+    includeAttachments: boolean;
     pathMap: Map<string, string>;
   }) {
+    Logger.debug("task", `Adding document to archive`, { documentId });
     const document = await Document.findByPk(documentId);
     if (!document) {
       return;
@@ -42,34 +45,54 @@ export default abstract class ExportDocumentTreeTask extends ExportTask {
     let text =
       format === FileOperationFormat.HTMLZip
         ? await DocumentHelper.toHTML(document, { centered: true })
-        : await DocumentHelper.toMarkdown(document);
-    const attachments = await Attachment.findAll({
-      where: {
-        teamId: document.teamId,
-        id: parseAttachmentIds(document.text),
-      },
-    });
+        : DocumentHelper.toMarkdown(document);
+
+    const attachmentIds = includeAttachments
+      ? ProsemirrorHelper.parseAttachmentIds(
+          DocumentHelper.toProsemirror(document)
+        )
+      : [];
+    const attachments = attachmentIds.length
+      ? await Attachment.findAll({
+          where: {
+            teamId: document.teamId,
+            id: attachmentIds,
+          },
+        })
+      : [];
 
     // Add any referenced attachments to the zip file and replace the
     // reference in the document with the path to the attachment in the zip
     await Promise.all(
       attachments.map(async (attachment) => {
-        try {
-          const stream = getFileByKey(attachment.key);
-          const dir = path.dirname(pathInZip);
-          if (stream) {
-            zip.file(path.join(dir, attachment.key), stream, {
-              createFolders: true,
-            });
-          }
-        } catch (err) {
-          Logger.error(
-            `Failed to add attachment to archive: ${attachment.key}`,
-            err
-          );
-        }
+        Logger.debug("task", `Adding attachment to archive`, {
+          documentId,
+          key: attachment.key,
+        });
 
-        text = text.replace(attachment.redirectUrl, encodeURI(attachment.key));
+        const dir = path.dirname(pathInZip);
+        zip.file(
+          path.join(dir, attachment.key),
+          new Promise<Buffer>((resolve) => {
+            attachment.buffer.then(resolve).catch((err) => {
+              Logger.warn(`Failed to read attachment from storage`, {
+                attachmentId: attachment.id,
+                teamId: attachment.teamId,
+                error: err.message,
+              });
+              resolve(Buffer.from(""));
+            });
+          }),
+          {
+            date: attachment.updatedAt,
+            createFolders: true,
+          }
+        );
+
+        text = text.replace(
+          new RegExp(escapeRegExp(attachment.redirectUrl), "g"),
+          encodeURI(attachment.key)
+        );
       })
     );
 
@@ -110,15 +133,21 @@ export default abstract class ExportDocumentTreeTask extends ExportTask {
    * @param zip The JSZip instance to add files to
    * @param collections The collections to export
    * @param format The format to export in
+   * @param includeAttachments Whether to include attachments in the export
    *
    * @returns The path to the zip file in tmp.
    */
   protected async addCollectionsToArchive(
     zip: JSZip,
     collections: Collection[],
-    format: FileOperationFormat
+    format: FileOperationFormat,
+    includeAttachments = true
   ) {
     const pathMap = this.createPathMap(collections, format);
+    Logger.debug(
+      "task",
+      `Start adding ${Object.values(pathMap).length} documents to archive`
+    );
 
     for (const path of pathMap) {
       const documentId = path[0].replace("/doc/", "");
@@ -128,12 +157,15 @@ export default abstract class ExportDocumentTreeTask extends ExportTask {
         zip,
         pathInZip,
         documentId,
+        includeAttachments,
         format,
         pathMap,
       });
     }
 
-    return ZipHelper.toTmpFile(zip);
+    Logger.debug("task", "Completed adding documents to archive");
+
+    return await ZipHelper.toTmpFile(zip);
   }
 
   /**

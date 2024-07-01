@@ -1,9 +1,6 @@
-import { Star, Event } from "@server/models";
+import { Event, Star } from "@server/models";
 import { buildDocument, buildUser } from "@server/test/factories";
-import { setupTestDatabase } from "@server/test/support";
 import starDestroyer from "./starDestroyer";
-
-setupTestDatabase();
 
 describe("starDestroyer", () => {
   const ip = "127.0.0.1";
@@ -16,10 +13,8 @@ describe("starDestroyer", () => {
     });
 
     const star = await Star.create({
-      teamId: document.teamId,
       documentId: document.id,
       userId: user.id,
-      createdById: user.id,
       index: "P",
     });
 
@@ -29,10 +24,16 @@ describe("starDestroyer", () => {
       ip,
     });
 
-    const count = await Star.count();
+    const count = await Star.count({
+      where: {
+        userId: user.id,
+      },
+    });
     expect(count).toEqual(0);
 
-    const event = await Event.findOne();
+    const event = await Event.findLatest({
+      teamId: user.teamId,
+    });
     expect(event!.name).toEqual("stars.delete");
     expect(event!.modelId).toEqual(star.id);
   });

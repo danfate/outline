@@ -1,26 +1,40 @@
 import { Node } from "prosemirror-model";
 import { parser } from "@server/editor";
 
-export default function parseImages(text: string): string[] {
-  const value = parser.parse(text);
-  const images: string[] = [];
+type ImageProps = { src: string; alt: string };
 
-  function findImages(node: Node) {
+/**
+ * Parses a string of markdown and returns a list of images.
+ *
+ * @param text The markdown to parse
+ * @returns A unique list of images
+ */
+export default function parseImages(text: string): ImageProps[] {
+  const doc = parser.parse(text);
+  const images = new Map<string, ImageProps>();
+
+  if (!doc) {
+    return [];
+  }
+
+  doc.descendants((node: Node) => {
     if (node.type.name === "image") {
-      if (!images.includes(node.attrs.src)) {
-        images.push(node.attrs.src);
+      if (!images.has(node.attrs.src)) {
+        images.set(node.attrs.src, {
+          src: node.attrs.src,
+          alt: node.attrs.alt,
+        });
       }
 
-      return;
+      return false;
     }
 
     if (!node.content.size) {
-      return;
+      return false;
     }
 
-    node.content.descendants(findImages);
-  }
+    return true;
+  });
 
-  findImages(value);
-  return images;
+  return Array.from(images.values());
 }

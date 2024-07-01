@@ -1,36 +1,38 @@
 import { observer } from "mobx-react";
 import {
   NewDocumentIcon,
-  TrashIcon,
   ImportIcon,
   ExportIcon,
   AlphabeticalSortIcon,
   ManualSortIcon,
-  UnstarredIcon,
-  StarredIcon,
+  InputIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
 import { useMenuState, MenuButton, MenuButtonHTMLProps } from "reakit/Menu";
 import { VisuallyHidden } from "reakit/VisuallyHidden";
+import { toast } from "sonner";
 import { getEventFiles } from "@shared/utils/files";
 import Collection from "~/models/Collection";
-import CollectionDeleteDialog from "~/components/CollectionDeleteDialog";
 import ContextMenu, { Placement } from "~/components/ContextMenu";
 import OverflowMenuButton from "~/components/ContextMenu/OverflowMenuButton";
 import Template from "~/components/ContextMenu/Template";
 import ExportDialog from "~/components/ExportDialog";
 import { actionToMenuItem } from "~/actions";
 import {
+  deleteCollection,
   editCollection,
   editCollectionPermissions,
+  starCollection,
+  unstarCollection,
+  searchInCollection,
+  createTemplate,
 } from "~/actions/definitions/collections";
 import useActionContext from "~/hooks/useActionContext";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
 import { MenuItem } from "~/types";
 import { newDocumentPath } from "~/utils/routeHelpers";
 
@@ -39,6 +41,7 @@ type Props = {
   placement?: Placement;
   modal?: boolean;
   label?: (props: MenuButtonHTMLProps) => React.ReactNode;
+  onRename?: () => void;
   onOpen?: () => void;
   onClose?: () => void;
 };
@@ -48,6 +51,7 @@ function CollectionMenu({
   label,
   modal = true,
   placement,
+  onRename,
   onOpen,
   onClose,
 }: Props) {
@@ -57,7 +61,6 @@ function CollectionMenu({
   });
   const team = useCurrentTeam();
   const { documents, dialogs } = useStores();
-  const { showToast } = useToasts();
   const { t } = useTranslation();
   const history = useHistory();
   const file = React.useRef<HTMLInputElement>(null);
@@ -65,7 +68,6 @@ function CollectionMenu({
   const handleExport = React.useCallback(() => {
     dialogs.openModal({
       title: t("Export collection"),
-      isCentered: true,
       content: (
         <ExportDialog
           collection={collection}
@@ -117,13 +119,11 @@ function CollectionMenu({
         });
         history.push(document.url);
       } catch (err) {
-        showToast(err.message, {
-          type: "error",
-        });
+        toast.error(err.message);
         throw err;
       }
     },
-    [history, showToast, collection.id, documents]
+    [history, collection.id, documents]
   );
 
   const handleChangeSort = React.useCallback(
@@ -139,37 +139,6 @@ function CollectionMenu({
     [collection, menu]
   );
 
-  const handleDelete = React.useCallback(() => {
-    dialogs.openModal({
-      isCentered: true,
-      title: t("Delete collection"),
-      content: (
-        <CollectionDeleteDialog
-          collection={collection}
-          onSubmit={dialogs.closeAllModals}
-        />
-      ),
-    });
-  }, [dialogs, t, collection]);
-
-  const handleStar = React.useCallback(
-    (ev: React.SyntheticEvent) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      collection.star();
-    },
-    [collection]
-  );
-
-  const handleUnstar = React.useCallback(
-    (ev: React.SyntheticEvent) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      collection.unstar();
-    },
-    [collection]
-  );
-
   const context = useActionContext({
     isContextMenu: true,
     activeCollectionId: collection.id,
@@ -180,51 +149,43 @@ function CollectionMenu({
   const canUserInTeam = usePolicy(team);
   const items: MenuItem[] = React.useMemo(
     () => [
-      {
-        type: "button",
-        title: t("Unstar"),
-        onClick: handleUnstar,
-        visible: collection.isStarred && !!can.unstar,
-        icon: <UnstarredIcon />,
-      },
-      {
-        type: "button",
-        title: t("Star"),
-        onClick: handleStar,
-        visible: !collection.isStarred && !!can.star,
-        icon: <StarredIcon />,
-      },
+      actionToMenuItem(starCollection, context),
+      actionToMenuItem(unstarCollection, context),
       {
         type: "separator",
       },
       {
         type: "button",
         title: t("New document"),
-        visible: can.update,
+        visible: can.createDocument,
         onClick: handleNewDocument,
         icon: <NewDocumentIcon />,
       },
       {
         type: "button",
         title: t("Import document"),
-        visible: can.update,
+        visible: can.createDocument,
         onClick: handleImportDocument,
         icon: <ImportIcon />,
       },
       {
         type: "separator",
       },
+      {
+        type: "button",
+        title: `${t("Rename")}…`,
+        visible: !!can.update && !!onRename,
+        onClick: () => onRename?.(),
+        icon: <InputIcon />,
+      },
       actionToMenuItem(editCollection, context),
       actionToMenuItem(editCollectionPermissions, context),
+      actionToMenuItem(createTemplate, context),
       {
         type: "submenu",
         title: t("Sort in sidebar"),
         visible: can.update,
-        icon: alphabeticalSort ? (
-          <AlphabeticalSortIcon color="currentColor" />
-        ) : (
-          <ManualSortIcon color="currentColor" />
-        ),
+        icon: alphabeticalSort ? <AlphabeticalSortIcon /> : <ManualSortIcon />,
         items: [
           {
             type: "button",
@@ -243,38 +204,28 @@ function CollectionMenu({
       {
         type: "button",
         title: `${t("Export")}…`,
-        visible: !!(collection && canUserInTeam.createExport),
+        visible: !!(collection && canUserInTeam.createExport && can.export),
         onClick: handleExport,
         icon: <ExportIcon />,
       },
+      actionToMenuItem(searchInCollection, context),
       {
         type: "separator",
       },
-      {
-        type: "button",
-        title: `${t("Delete")}…`,
-        dangerous: true,
-        visible: !!(collection && can.delete),
-        onClick: handleDelete,
-        icon: <TrashIcon />,
-      },
+      actionToMenuItem(deleteCollection, context),
     ],
     [
       t,
-      handleUnstar,
       collection,
-      can.unstar,
-      can.star,
+      can.createDocument,
       can.update,
-      can.delete,
-      handleStar,
+      can.export,
       handleNewDocument,
       handleImportDocument,
       context,
       alphabeticalSort,
       canUserInTeam.createExport,
       handleExport,
-      handleDelete,
       handleChangeSort,
     ]
   );

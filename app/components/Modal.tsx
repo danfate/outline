@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Dialog, DialogBackdrop, useDialogState } from "reakit/Dialog";
 import styled, { DefaultTheme } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
-import { depths } from "@shared/styles";
+import { depths, s } from "@shared/styles";
 import Flex from "~/components/Flex";
 import NudeButton from "~/components/NudeButton";
 import Scrollable from "~/components/Scrollable";
@@ -16,11 +16,14 @@ import usePrevious from "~/hooks/usePrevious";
 import useUnmount from "~/hooks/useUnmount";
 import { fadeAndScaleIn } from "~/styles/animations";
 import Desktop from "~/utils/Desktop";
+import ErrorBoundary from "./ErrorBoundary";
 
 let openModals = 0;
+
 type Props = {
+  children?: React.ReactNode;
   isOpen: boolean;
-  isCentered?: boolean;
+  fullscreen?: boolean;
   title?: React.ReactNode;
   onRequestClose: () => void;
 };
@@ -28,10 +31,10 @@ type Props = {
 const Modal: React.FC<Props> = ({
   children,
   isOpen,
-  isCentered,
+  fullscreen = true,
   title = "Untitled",
   onRequestClose,
-}) => {
+}: Props) => {
   const dialog = useDialogState({
     animated: 250,
   });
@@ -65,39 +68,17 @@ const Modal: React.FC<Props> = ({
   return (
     <DialogBackdrop {...dialog}>
       {(props) => (
-        <Backdrop $isCentered={isCentered} {...props}>
+        <Backdrop $fullscreen={fullscreen} {...props}>
           <Dialog
             {...dialog}
             aria-label={typeof title === "string" ? title : undefined}
             preventBodyScroll
             hideOnEsc
-            hideOnClickOutside={!!isCentered}
+            hideOnClickOutside={!fullscreen}
             hide={onRequestClose}
           >
             {(props) =>
-              isCentered && !isMobile ? (
-                <Small {...props}>
-                  <Centered
-                    onClick={(ev) => ev.stopPropagation()}
-                    column
-                    reverse
-                  >
-                    <SmallContent shadow>{children}</SmallContent>
-                    <Header>
-                      {title && (
-                        <Text as="span" size="large">
-                          {title}
-                        </Text>
-                      )}
-                      <Text as="span" size="large">
-                        <NudeButton onClick={onRequestClose}>
-                          <CloseIcon color="currentColor" />
-                        </NudeButton>
-                      </Text>
-                    </Header>
-                  </Centered>
-                </Small>
-              ) : (
+              fullscreen || isMobile ? (
                 <Fullscreen
                   $nested={!!depth}
                   style={
@@ -111,18 +92,40 @@ const Modal: React.FC<Props> = ({
                 >
                   <Content>
                     <Centered onClick={(ev) => ev.stopPropagation()} column>
-                      {title && <h1>{title}</h1>}
-                      {children}
+                      {title && (
+                        <Text size="xlarge" weight="bold">
+                          {title}
+                        </Text>
+                      )}
+                      <ErrorBoundary>{children}</ErrorBoundary>
                     </Centered>
                   </Content>
                   <Close onClick={onRequestClose}>
-                    <CloseIcon size={32} color="currentColor" />
+                    <CloseIcon size={32} />
                   </Close>
                   <Back onClick={onRequestClose}>
-                    <BackIcon size={32} color="currentColor" />
-                    <Text as="span">{t("Back")} </Text>
+                    <BackIcon size={32} />
+                    <Text>{t("Back")} </Text>
                   </Back>
                 </Fullscreen>
+              ) : (
+                <Small {...props}>
+                  <Centered
+                    onClick={(ev) => ev.stopPropagation()}
+                    column
+                    reverse
+                  >
+                    <SmallContent shadow>
+                      <ErrorBoundary component="div">{children}</ErrorBoundary>
+                    </SmallContent>
+                    <Header>
+                      {title && <Text size="large">{title}</Text>}
+                      <NudeButton onClick={onRequestClose}>
+                        <CloseIcon />
+                      </NudeButton>
+                    </Header>
+                  </Centered>
+                </Small>
               )
             }
           </Dialog>
@@ -132,16 +135,16 @@ const Modal: React.FC<Props> = ({
   );
 };
 
-const Backdrop = styled(Flex)<{ $isCentered?: boolean }>`
+const Backdrop = styled(Flex)<{ $fullscreen?: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background-color: ${(props) =>
-    props.$isCentered
-      ? props.theme.modalBackdrop
-      : transparentize(0.25, props.theme.background)} !important;
+    props.$fullscreen
+      ? transparentize(0.25, props.theme.background)
+      : props.theme.modalBackdrop} !important;
   z-index: ${depths.modalOverlay};
   transition: opacity 50ms ease-in-out;
   opacity: 0;
@@ -168,8 +171,8 @@ const Fullscreen = styled.div<FullscreenProps>`
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  background: ${(props) => props.theme.background};
-  transition: ${(props) => props.theme.backgroundTransition};
+  background: ${s("background")};
+  transition: ${s("backgroundTransition")};
   outline: none;
 
   ${breakpoint("tablet")`
@@ -185,7 +188,7 @@ const Fullscreen = styled.div<FullscreenProps>`
 
 const Content = styled(Scrollable)`
   width: 100%;
-  padding: 8vh 32px;
+  padding: 8vh 12px;
 
   ${breakpoint("tablet")`
     padding: 13vh 2rem 2rem;
@@ -206,7 +209,7 @@ const Close = styled(NudeButton)`
   right: 0;
   margin: 12px;
   opacity: 0.75;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
   width: auto;
   height: auto;
 
@@ -226,7 +229,7 @@ const Back = styled(NudeButton)`
   top: ${Desktop.hasInsetTitlebar() ? "3rem" : "2rem"};
   left: 2rem;
   opacity: 0.75;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
   font-weight: 500;
   width: auto;
   height: auto;
@@ -241,7 +244,7 @@ const Back = styled(NudeButton)`
 `;
 
 const Header = styled(Flex)`
-  color: ${(props) => props.theme.textSecondary};
+  color: ${s("textSecondary")};
   align-items: center;
   justify-content: space-between;
   font-weight: 600;
@@ -252,23 +255,23 @@ const Small = styled.div`
   animation: ${fadeAndScaleIn} 250ms ease;
 
   margin: auto auto;
-  width: 30vw;
+  width: 75vw;
   min-width: 350px;
-  max-width: 500px;
+  max-width: 450px;
   z-index: ${depths.modal};
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  background: ${(props) => props.theme.modalBackground};
-  transition: ${(props) => props.theme.backgroundTransition};
-  box-shadow: ${(props) => props.theme.modalShadow};
+  background: ${s("modalBackground")};
+  transition: ${s("backgroundTransition")};
+  box-shadow: ${s("modalShadow")};
   border-radius: 8px;
   outline: none;
 
   ${NudeButton} {
     &:hover,
     &[aria-expanded="true"] {
-      background: ${(props) => props.theme.sidebarControlHoverBackground};
+      background: ${s("sidebarControlHoverBackground")};
     }
     vertical-align: middle;
   }

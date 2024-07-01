@@ -7,30 +7,28 @@ import {
   PublishIcon,
   MoveIcon,
   UnpublishIcon,
-  LightningIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
-import { CompositeStateReturn } from "reakit/Composite";
 import styled, { css } from "styled-components";
+import { s } from "@shared/styles";
 import Document from "~/models/Document";
 import Event from "~/models/Event";
 import Avatar from "~/components/Avatar";
-import CompositeItem, {
-  Props as ItemProps,
-} from "~/components/List/CompositeItem";
-import Item, { Actions } from "~/components/List/Item";
+import Item, { Actions, Props as ItemProps } from "~/components/List/Item";
 import Time from "~/components/Time";
 import useStores from "~/hooks/useStores";
 import RevisionMenu from "~/menus/RevisionMenu";
-import { documentHistoryUrl } from "~/utils/routeHelpers";
+import { hover } from "~/styles";
+import Logger from "~/utils/Logger";
+import { documentHistoryPath } from "~/utils/routeHelpers";
 
 type Props = {
   document: Document;
   event: Event;
   latest?: boolean;
-} & CompositeStateReturn;
+};
 
 const EventListItem = ({ event, latest, document, ...rest }: Props) => {
   const { t } = useTranslation();
@@ -49,33 +47,30 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
     ref.current?.focus();
   };
 
-  const prefetchRevision = () => {
+  const prefetchRevision = async () => {
     if (event.name === "revisions.create" && event.modelId) {
-      revisions.fetch(event.modelId);
+      await revisions.fetch(event.modelId);
     }
   };
 
   switch (event.name) {
     case "revisions.create":
-      icon = <EditIcon color="currentColor" size={16} />;
-      meta = t("{{userName}} edited", opts);
+      icon = <EditIcon size={16} />;
+      meta = latest ? (
+        <>
+          {t("Current version")} &middot; {event.actor.name}
+        </>
+      ) : (
+        t("{{userName}} edited", opts)
+      );
       to = {
-        pathname: documentHistoryUrl(document, event.modelId || ""),
-        state: { retainScrollPosition: true },
-      };
-      break;
-
-    case "documents.live_editing":
-      icon = <LightningIcon color="currentColor" size={16} />;
-      meta = t("Latest");
-      to = {
-        pathname: documentHistoryUrl(document),
+        pathname: documentHistoryPath(document, event.modelId || "latest"),
         state: { retainScrollPosition: true },
       };
       break;
 
     case "documents.archive":
-      icon = <ArchiveIcon color="currentColor" size={16} />;
+      icon = <ArchiveIcon size={16} />;
       meta = t("{{userName}} archived", opts);
       break;
 
@@ -84,8 +79,20 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
       break;
 
     case "documents.delete":
-      icon = <TrashIcon color="currentColor" size={16} />;
+      icon = <TrashIcon size={16} />;
       meta = t("{{userName}} deleted", opts);
+      break;
+    case "documents.add_user":
+      meta = t("{{userName}} added {{addedUserName}}", {
+        ...opts,
+        addedUserName: event.user?.name ?? t("a user"),
+      });
+      break;
+    case "documents.remove_user":
+      meta = t("{{userName}} removed {{removedUserName}}", {
+        ...opts,
+        removedUserName: event.user?.name ?? t("a user"),
+      });
       break;
 
     case "documents.restore":
@@ -93,22 +100,22 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
       break;
 
     case "documents.publish":
-      icon = <PublishIcon color="currentColor" size={16} />;
+      icon = <PublishIcon size={16} />;
       meta = t("{{userName}} published", opts);
       break;
 
     case "documents.unpublish":
-      icon = <UnpublishIcon color="currentColor" size={16} />;
+      icon = <UnpublishIcon size={16} />;
       meta = t("{{userName}} unpublished", opts);
       break;
 
     case "documents.move":
-      icon = <MoveIcon color="currentColor" size={16} />;
+      icon = <MoveIcon size={16} />;
       meta = t("{{userName}} moved", opts);
       break;
 
     default:
-      console.warn("Unhandled event: ", event.name);
+      Logger.warn("Unhandled event", { event });
   }
 
   if (!meta) {
@@ -150,7 +157,7 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
         </Subtitle>
       }
       actions={
-        isRevision && isActive && event.modelId ? (
+        isRevision && isActive && event.modelId && !latest ? (
           <RevisionMenu document={document} revisionId={event.modelId} />
         ) : undefined
       }
@@ -161,15 +168,12 @@ const EventListItem = ({ event, latest, document, ...rest }: Props) => {
   );
 };
 
-const BaseItem = React.forwardRef(
-  ({ to, ...rest }: ItemProps, ref?: React.Ref<HTMLAnchorElement>) => {
-    if (to) {
-      return <CompositeListItem to={to} ref={ref} {...rest} />;
-    }
-
-    return <ListItem ref={ref} {...rest} />;
-  }
-);
+const BaseItem = React.forwardRef(function _BaseItem(
+  { to, ...rest }: ItemProps,
+  ref?: React.Ref<HTMLAnchorElement>
+) {
+  return <ListItem to={to} ref={ref} {...rest} />;
+});
 
 const Subtitle = styled.span`
   svg {
@@ -197,7 +201,7 @@ const ItemStyle = css`
     left: 23px;
     width: 2px;
     height: calc(100% + 8px);
-    background: ${(props) => props.theme.textSecondary};
+    background: ${s("textSecondary")};
     opacity: 0.25;
   }
 
@@ -218,17 +222,13 @@ const ItemStyle = css`
   ${Actions} {
     opacity: 0.5;
 
-    &:hover {
+    &: ${hover} {
       opacity: 1;
     }
   }
 `;
 
 const ListItem = styled(Item)`
-  ${ItemStyle}
-`;
-
-const CompositeListItem = styled(CompositeItem)`
   ${ItemStyle}
 `;
 

@@ -3,12 +3,12 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import Dropzone from "react-dropzone";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import styled, { css } from "styled-components";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import useImportDocument from "~/hooks/useImportDocument";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
 
 type Props = {
   children: JSX.Element;
@@ -21,25 +21,29 @@ type Props = {
 function DropToImport({ disabled, children, collectionId, documentId }: Props) {
   const { t } = useTranslation();
   const { documents } = useStores();
-  const { showToast } = useToasts();
   const { handleFiles, isImporting } = useImportDocument(
     collectionId,
     documentId
   );
-  const targetId = collectionId || documentId;
-  invariant(targetId, "Must provide either collectionId or documentId");
+  invariant(
+    collectionId || documentId,
+    "Must provide either collectionId or documentId"
+  );
 
-  const can = usePolicy(targetId);
+  const canCollection = usePolicy(collectionId);
+  const canDocument = usePolicy(documentId);
+
   const handleRejection = React.useCallback(() => {
-    showToast(
-      t("Document not supported – try Markdown, Plain text, HTML, or Word"),
-      {
-        type: "error",
-      }
+    toast.error(
+      t("Document not supported – try Markdown, Plain text, HTML, or Word")
     );
-  }, [t, showToast]);
+  }, [t]);
 
-  if (disabled || !can.update) {
+  if (
+    disabled ||
+    (collectionId && !canCollection.createDocument) ||
+    (documentId && !canDocument.createChildDocument)
+  ) {
     return children;
   }
 
@@ -72,8 +76,9 @@ const DropzoneContainer = styled.div<{ $isDragActive: boolean }>`
   ${({ $isDragActive, theme }) =>
     $isDragActive &&
     css`
-      background: ${theme.slateDark};
-      a {
+      a,
+      a + * {
+        background: ${theme.slateDark} !important;
         color: ${theme.white} !important;
       }
       svg {

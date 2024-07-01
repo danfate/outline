@@ -1,11 +1,12 @@
-import { sortBy } from "lodash";
+import sortBy from "lodash/sortBy";
 import { observer } from "mobx-react";
-import { LinkIcon, WarningIcon } from "outline-icons";
+import { GlobeIcon, WarningIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { Link } from "react-router-dom";
-import { PAGINATION_SYMBOL } from "~/stores/BaseStore";
+import { PAGINATION_SYMBOL } from "~/stores/base/Store";
 import Share from "~/models/Share";
+import Fade from "~/components/Fade";
 import Heading from "~/components/Heading";
 import Notice from "~/components/Notice";
 import Scene from "~/components/Scene";
@@ -53,7 +54,7 @@ function Shares() {
       }
     };
 
-    fetchData();
+    void fetchData();
   }, [query, sort, page, direction, shares]);
 
   React.useEffect(() => {
@@ -67,12 +68,12 @@ function Shares() {
   }, [shares.orderedData, shareIds]);
 
   return (
-    <Scene title={t("Shared Links")} icon={<LinkIcon color="currentColor" />}>
+    <Scene title={t("Shared Links")} icon={<GlobeIcon />} wide>
       <Heading>{t("Shared Links")}</Heading>
 
-      {can.manage && !canShareDocuments && (
+      {can.update && !canShareDocuments && (
         <>
-          <Notice icon={<WarningIcon color="currentColor" />}>
+          <Notice icon={<WarningIcon />}>
             {t("Sharing is currently disabled.")}{" "}
             <Trans
               defaults="You can globally enable and disable public document sharing in the <em>security settings</em>."
@@ -85,7 +86,7 @@ function Shares() {
         </>
       )}
 
-      <Text type="secondary">
+      <Text as="p" type="secondary">
         <Trans>
           Documents that have been shared are listed below. Anyone that has the
           public link can access a read-only version of the document until the
@@ -93,15 +94,19 @@ function Shares() {
         </Trans>
       </Text>
 
-      <SharesTable
-        data={data}
-        canManage={can.manage}
-        isLoading={isLoading}
-        page={page}
-        pageSize={limit}
-        totalPages={totalPages}
-        defaultSortDirection="ASC"
-      />
+      {data.length ? (
+        <Fade>
+          <SharesTable
+            data={data}
+            canManage={can.update}
+            isLoading={isLoading}
+            page={page}
+            pageSize={limit}
+            totalPages={totalPages}
+            defaultSortDirection="ASC"
+          />
+        </Fade>
+      ) : null}
     </Scene>
   );
 }

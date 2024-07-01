@@ -1,5 +1,5 @@
 import * as React from "react";
-import BaseEmail from "./BaseEmail";
+import BaseEmail, { EmailProps } from "./BaseEmail";
 import Body from "./components/Body";
 import Button from "./components/Button";
 import EmailTemplate from "./components/EmailLayout";
@@ -8,8 +8,7 @@ import Footer from "./components/Footer";
 import Header from "./components/Header";
 import Heading from "./components/Heading";
 
-type Props = {
-  to: string;
+type Props = EmailProps & {
   teamUrl: string;
   webhookName: string;
 };
@@ -36,9 +35,12 @@ Webhook settings: ${teamUrl}/settings/webhooks
 `;
   }
 
-  protected render({ webhookName, teamUrl }: Props) {
+  protected render(props: Props) {
+    const { webhookName, teamUrl } = props;
+    const webhookSettingsLink = `${teamUrl}/settings/webhooks`;
+
     return (
-      <EmailTemplate>
+      <EmailTemplate previewText={this.preview(props)}>
         <Header />
 
         <Body>
@@ -50,9 +52,7 @@ Webhook settings: ${teamUrl}/settings/webhooks
           </p>
           <EmptySpace height={10} />
           <p>
-            <Button href={teamUrl + "/settings/webhooks"}>
-              Webhook settings
-            </Button>
+            <Button href={webhookSettingsLink}>Webhook settings</Button>
           </p>
         </Body>
 

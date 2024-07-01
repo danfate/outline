@@ -2,16 +2,22 @@ import Tippy, { TippyProps } from "@tippyjs/react";
 import * as React from "react";
 import styled, { createGlobalStyle } from "styled-components";
 import { roundArrow } from "tippy.js";
+import { s } from "@shared/styles";
+import useMobile from "~/hooks/useMobile";
 
 export type Props = Omit<TippyProps, "content" | "theme"> & {
-  tooltip?: React.ReactChild | React.ReactChild[];
+  /** The content to display in the tooltip. */
+  content?: React.ReactChild | React.ReactChild[];
+  /** A keyboard shortcut to display next to the content */
   shortcut?: React.ReactNode;
 };
 
-function Tooltip({ shortcut, tooltip, delay = 50, ...rest }: Props) {
+function Tooltip({ shortcut, content: tooltip, delay = 50, ...rest }: Props) {
+  const isMobile = useMobile();
+
   let content = <>{tooltip}</>;
 
-  if (!tooltip) {
+  if (!tooltip || isMobile) {
     return rest.children ?? null;
   }
 
@@ -45,9 +51,9 @@ const Shortcut = styled.kbd`
   font: 10px "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier,
     monospace;
   line-height: 10px;
-  color: ${(props) => props.theme.tooltipBackground};
+  color: ${s("tooltipBackground")};
   vertical-align: middle;
-  background-color: ${(props) => props.theme.tooltipText};
+  background-color: ${s("tooltipText")};
   border-radius: 3px;
 `;
 
@@ -60,8 +66,8 @@ export const TooltipStyles = createGlobalStyle`
   }
   .tippy-box{
       position:relative;
-      background-color: ${(props) => props.theme.tooltipBackground};
-      color: ${(props) => props.theme.tooltipText};
+      background-color: ${s("tooltipBackground")};
+      color: ${s("tooltipText")};
       border-radius:4px;
       font-size:13px;
       line-height:1.4;
@@ -113,7 +119,7 @@ export const TooltipStyles = createGlobalStyle`
   .tippy-arrow{
       width:16px;
       height:16px;
-      color: ${(props) => props.theme.tooltipBackground};
+      color: ${s("tooltipBackground")};
   }
   .tippy-arrow:before{
       content:"";
@@ -160,7 +166,7 @@ export const TooltipStyles = createGlobalStyle`
   .tippy-svg-arrow{
       width:16px;
       height:16px;
-      fill: ${(props) => props.theme.tooltipBackground};
+      fill: ${s("tooltipBackground")};
       text-align:initial
   }
   .tippy-svg-arrow,.tippy-svg-arrow>svg{

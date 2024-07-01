@@ -1,58 +1,83 @@
-import { trim } from "lodash";
-import { action, computed, observable } from "mobx";
+import invariant from "invariant";
+import { action, computed, observable, reaction, runInAction } from "mobx";
 import {
   CollectionPermission,
   FileOperationFormat,
   NavigationNode,
+  type ProsemirrorData,
 } from "@shared/types";
+import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import { sortNavigationNodes } from "@shared/utils/collections";
-import CollectionsStore from "~/stores/CollectionsStore";
+import type CollectionsStore from "~/stores/CollectionsStore";
 import Document from "~/models/Document";
-import ParanoidModel from "~/models/ParanoidModel";
+import ParanoidModel from "~/models/base/ParanoidModel";
 import { client } from "~/utils/ApiClient";
 import Field from "./decorators/Field";
 
 export default class Collection extends ParanoidModel {
+  static modelName = "Collection";
+
   store: CollectionsStore;
 
   @observable
   isSaving: boolean;
 
-  @observable
-  isLoadingUsers: boolean;
+  isFetching = false;
 
   @Field
   @observable
   id: string;
 
+  /**
+   * The name of the collection.
+   */
   @Field
   @observable
   name: string;
 
   @Field
-  @observable
-  description: string;
+  @observable.shallow
+  data: ProsemirrorData;
 
+  /**
+   * An icon (or) emoji to use as the collection icon.
+   */
   @Field
   @observable
   icon: string;
 
+  /**
+   * The color to use for the collection icon and other highlights.
+   */
   @Field
   @observable
-  color: string;
+  color?: string | null;
 
+  /**
+   * The default permission for workspace users.
+   */
   @Field
   @observable
-  permission: CollectionPermission | void;
+  permission?: CollectionPermission;
 
+  /**
+   * Whether public sharing is enabled for the collection. Note this can also be disabled at the
+   * workspace level.
+   */
   @Field
   @observable
   sharing: boolean;
 
+  /**
+   * The sort index for the collection.
+   */
   @Field
   @observable
   index: string;
 
+  /**
+   * The sort field and direction for documents in the collection.
+   */
   @Field
   @observable
   sort: {
@@ -60,37 +85,64 @@ export default class Collection extends ParanoidModel {
     direction: "asc" | "desc";
   };
 
-  documents: NavigationNode[];
+  @observable
+  documents?: NavigationNode[];
 
+  /**
+   * @deprecated Use path instead.
+   */
+  @observable
   url: string;
 
+  @observable
   urlId: string;
 
+  constructor(fields: Partial<Collection>, store: CollectionsStore) {
+    super(fields, store);
+
+    const resetDocumentPolicies = () => {
+      this.store.rootStore.documents
+        .inCollection(this.id)
+        .forEach((document) => {
+          this.store.rootStore.policies.remove(document.id);
+        });
+    };
+
+    reaction(() => this.permission, resetDocumentPolicies);
+    reaction(() => this.sharing, resetDocumentPolicies);
+  }
+
   @computed
-  get isEmpty(): boolean {
+  get isEmpty(): boolean | undefined {
+    if (!this.documents) {
+      return undefined;
+    }
+
     return (
       this.documents.length === 0 &&
       this.store.rootStore.documents.inCollection(this.id).length === 0
     );
   }
 
-  @computed
-  get documentIds(): string[] {
-    const results: string[] = [];
-
-    const travelNodes = (nodes: NavigationNode[]) =>
-      nodes.forEach((node) => {
-        results.push(node.id);
-        travelNodes(node.children);
-      });
-
-    travelNodes(this.documents);
-    return results;
+  /**
+   * Convenience method to return if a collection is considered private.
+   * This means that a membership is required to view it rather than just being
+   * a workspace member.
+   *
+   * @returns boolean
+   */
+  get isPrivate(): boolean {
+    return !this.permission;
   }
 
+  /**
+   * Check whether this collection has a description.
+   *
+   * @returns boolean
+   */
   @computed
   get hasDescription(): boolean {
-    return !!trim(this.description, "\\").trim();
+    return this.data ? !ProsemirrorHelper.isEmptyData(this.data) : false;
   }
 
   @computed
@@ -101,9 +153,50 @@ export default class Collection extends ParanoidModel {
   }
 
   @computed
-  get sortedDocuments() {
+  get sortedDocuments(): NavigationNode[] | undefined {
+    if (!this.documents) {
+      return undefined;
+    }
     return sortNavigationNodes(this.documents, this.sort);
   }
+
+  /**
+   * The initial letter of the collection name.
+   *
+   * @returns string
+   */
+  @computed
+  get initial() {
+    return (this.name ? this.name[0] : "?").toUpperCase();
+  }
+
+  @computed
+  get path() {
+    return this.url;
+  }
+
+  fetchDocuments = async (options?: { force: boolean }) => {
+    if (this.isFetching) {
+      return;
+    }
+    if (this.documents && options?.force !== true) {
+      return;
+    }
+
+    try {
+      this.isFetching = true;
+      const res = await client.post("/collections.documents", {
+        id: this.id,
+      });
+      invariant(res?.data, "Data should be available");
+
+      runInAction("Collection#fetchDocuments", () => {
+        this.documents = res.data;
+      });
+    } finally {
+      this.isFetching = false;
+    }
+  };
 
   /**
    * Updates the document identified by the given id in the collection in memory.
@@ -113,6 +206,10 @@ export default class Collection extends ParanoidModel {
    */
   @action
   updateDocument(document: Pick<Document, "id" | "title" | "url">) {
+    if (!this.documents) {
+      return;
+    }
+
     const travelNodes = (nodes: NavigationNode[]) =>
       nodes.forEach((node) => {
         if (node.id === document.id) {
@@ -134,6 +231,10 @@ export default class Collection extends ParanoidModel {
    */
   @action
   removeDocument(documentId: string) {
+    if (!this.documents) {
+      return;
+    }
+
     this.documents = this.documents.filter(function f(node): boolean {
       if (node.id === documentId) {
         return false;
@@ -166,7 +267,7 @@ export default class Collection extends ParanoidModel {
       });
     };
 
-    if (this.documents) {
+    if (this.sortedDocuments) {
       travelNodes(this.sortedDocuments);
     }
 
@@ -212,19 +313,15 @@ export default class Collection extends ParanoidModel {
   }
 
   @action
-  star = async () => {
-    return this.store.star(this);
-  };
+  star = async (index?: string) => this.store.star(this, index);
 
   @action
-  unstar = async () => {
-    return this.store.unstar(this);
-  };
+  unstar = async () => this.store.unstar(this);
 
-  export = (format: FileOperationFormat) => {
-    return client.post("/collections.export", {
+  export = (format: FileOperationFormat, includeAttachments: boolean) =>
+    client.post("/collections.export", {
       id: this.id,
       format,
+      includeAttachments,
     });
-  };
 }

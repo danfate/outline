@@ -1,4 +1,9 @@
 import {
+  InferAttributes,
+  InferCreationAttributes,
+  type SaveOptions,
+} from "sequelize";
+import {
   ForeignKey,
   BelongsTo,
   Column,
@@ -9,14 +14,20 @@ import {
   Default,
   AllowNull,
   Is,
+  Unique,
+  BeforeUpdate,
 } from "sequelize-typescript";
-import { SHARE_URL_SLUG_REGEX } from "@shared/utils/urlHelpers";
+import { UrlHelper } from "@shared/utils/UrlHelper";
+import env from "@server/env";
+import { ValidationError } from "@server/errors";
 import Collection from "./Collection";
 import Document from "./Document";
 import Team from "./Team";
 import User from "./User";
 import IdModel from "./base/IdModel";
 import Fix from "./decorators/Fix";
+import IsFQDN from "./validators/IsFQDN";
+import Length from "./validators/Length";
 
 @DefaultScope(() => ({
   include: [
@@ -34,43 +45,45 @@ import Fix from "./decorators/Fix";
   ],
 }))
 @Scopes(() => ({
-  withCollectionPermissions: (userId: string) => {
-    return {
-      include: [
-        {
-          model: Document.scope("withDrafts"),
-          paranoid: true,
-          as: "document",
-          include: [
-            {
-              attributes: [
-                "id",
-                "permission",
-                "sharing",
-                "teamId",
-                "deletedAt",
-              ],
-              model: Collection.scope({
-                method: ["withMembership", userId],
-              }),
-              as: "collection",
+  withCollectionPermissions: (userId: string) => ({
+    include: [
+      {
+        model: Document.scope("withDrafts"),
+        paranoid: true,
+        as: "document",
+        include: [
+          {
+            attributes: ["id", "permission", "sharing", "teamId", "deletedAt"],
+            model: Collection.scope({
+              method: ["withMembership", userId],
+            }),
+            as: "collection",
+          },
+          {
+            association: "memberships",
+            where: {
+              userId,
             },
-          ],
-        },
-        {
-          association: "user",
-          paranoid: false,
-        },
-        {
-          association: "team",
-        },
-      ],
-    };
-  },
+            required: false,
+          },
+        ],
+      },
+      {
+        association: "user",
+        paranoid: false,
+      },
+      {
+        association: "team",
+      },
+    ],
+  }),
 }))
 @Table({ tableName: "shares", modelName: "share" })
 @Fix
-class Share extends IdModel {
+class Share extends IdModel<
+  InferAttributes<Share>,
+  Partial<InferCreationAttributes<Share>>
+> {
   @Column
   published: boolean;
 
@@ -90,11 +103,41 @@ class Share extends IdModel {
 
   @AllowNull
   @Is({
-    args: SHARE_URL_SLUG_REGEX,
+    args: UrlHelper.SHARE_URL_SLUG_REGEX,
     msg: "Must be only alphanumeric and dashes",
   })
   @Column
   urlId: string | null | undefined;
+
+  @Unique
+  @Length({ max: 255, msg: "domain must be 255 characters or less" })
+  @IsFQDN
+  @Column
+  domain: string | null;
+
+  // hooks
+
+  @BeforeUpdate
+  static async checkDomain(model: Share, options: SaveOptions) {
+    if (!model.domain) {
+      return model;
+    }
+
+    model.domain = model.domain.toLowerCase();
+
+    const count = await Team.count({
+      ...options,
+      where: {
+        domain: model.domain,
+      },
+    });
+
+    if (count > 0) {
+      throw ValidationError("Domain is already in use");
+    }
+
+    return model;
+  }
 
   // getters
 
@@ -103,6 +146,11 @@ class Share extends IdModel {
   }
 
   get canonicalUrl() {
+    if (this.domain) {
+      const url = new URL(env.URL);
+      return `${url.protocol}//${this.domain}${url.port ? `:${url.port}` : ""}`;
+    }
+
     return this.urlId
       ? `${this.team.url}/s/${this.urlId}`
       : `${this.team.url}/s/${this.id}`;

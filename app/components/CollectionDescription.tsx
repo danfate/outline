@@ -3,16 +3,28 @@ import { observer } from "mobx-react";
 import { transparentize } from "polished";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import styled from "styled-components";
+import { richExtensions } from "@shared/editor/nodes";
+import { s } from "@shared/styles";
 import Collection from "~/models/Collection";
 import Arrow from "~/components/Arrow";
 import ButtonLink from "~/components/ButtonLink";
 import Editor from "~/components/Editor";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import NudeButton from "~/components/NudeButton";
+import BlockMenuExtension from "~/editor/extensions/BlockMenu";
+import EmojiMenuExtension from "~/editor/extensions/EmojiMenu";
+import HoverPreviewsExtension from "~/editor/extensions/HoverPreviews";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
+
+const extensions = [
+  ...richExtensions,
+  BlockMenuExtension,
+  EmojiMenuExtension,
+  HoverPreviewsExtension,
+];
 
 type Props = {
   collection: Collection;
@@ -20,7 +32,6 @@ type Props = {
 
 function CollectionDescription({ collection }: Props) {
   const { collections } = useStores();
-  const { showToast } = useToasts();
   const { t } = useTranslation();
   const [isExpanded, setExpanded] = React.useState(false);
   const [isEditing, setEditing] = React.useState(false);
@@ -54,25 +65,21 @@ function CollectionDescription({ collection }: Props) {
       debounce(async (getValue) => {
         try {
           await collection.save({
-            description: getValue(),
+            data: getValue(false),
           });
           setDirty(false);
         } catch (err) {
-          showToast(
-            t("Sorry, an error occurred saving the collection", {
-              type: "error",
-            })
-          );
+          toast.error(t("Sorry, an error occurred saving the collection"));
           throw err;
         }
       }, 1000),
-    [collection, showToast, t]
+    [collection, t]
   );
 
   const handleChange = React.useCallback(
-    (getValue) => {
+    async (getValue) => {
       setDirty(true);
-      handleSave(getValue);
+      await handleSave(getValue);
     },
     [handleSave]
   );
@@ -102,15 +109,16 @@ function CollectionDescription({ collection }: Props) {
             >
               <Editor
                 key={key}
-                defaultValue={collection.description || ""}
+                defaultValue={collection.data}
                 onChange={handleChange}
                 placeholder={placeholder}
                 readOnly={!isEditing}
                 autoFocus={isEditing}
                 onBlur={handleStopEditing}
+                extensions={extensions}
                 maxLength={1000}
                 embedsDisabled
-                readOnlyWriteCheckboxes
+                canUpdate
               />
             </React.Suspense>
           ) : (
@@ -141,7 +149,7 @@ function CollectionDescription({ collection }: Props) {
 
 const Disclosure = styled(NudeButton)`
   opacity: 0;
-  color: ${(props) => props.theme.divider};
+  color: ${s("divider")};
   position: absolute;
   top: calc(25vh - 50px);
   left: 50%;
@@ -155,12 +163,12 @@ const Disclosure = styled(NudeButton)`
   }
 
   &:active {
-    color: ${(props) => props.theme.sidebarText};
+    color: ${s("sidebarText")};
   }
 `;
 
 const Placeholder = styled(ButtonLink)`
-  color: ${(props) => props.theme.placeholder};
+  color: ${s("placeholder")};
   cursor: text;
   min-height: 27px;
 `;
@@ -169,7 +177,7 @@ const MaxHeight = styled.div`
   position: relative;
   max-height: 25vh;
   overflow: hidden;
-  margin: -12px -8px -8px;
+  margin: 8px -8px -8px;
   padding: 8px;
 
   &[data-editing="true"],
@@ -193,7 +201,7 @@ const Input = styled.div`
   margin: -8px;
   padding: 8px;
   border-radius: 8px;
-  transition: ${(props) => props.theme.backgroundTransition};
+  transition: ${s("backgroundTransition")};
 
   &:after {
     content: "";
@@ -206,7 +214,7 @@ const Input = styled.div`
     background: linear-gradient(
       180deg,
       ${(props) => transparentize(1, props.theme.background)} 0%,
-      ${(props) => props.theme.background} 100%
+      ${s("background")} 100%
     );
   }
 
@@ -218,7 +226,7 @@ const Input = styled.div`
   }
 
   &[data-editing="true"] {
-    background: ${(props) => props.theme.secondaryBackground};
+    background: ${s("secondaryBackground")};
   }
 
   .block-menu-trigger,

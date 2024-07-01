@@ -1,5 +1,4 @@
 import Token from "markdown-it/lib/token";
-import { OpenIcon } from "outline-icons";
 import { toggleMark } from "prosemirror-commands";
 import { InputRule } from "prosemirror-inputrules";
 import { MarkdownSerializerState } from "prosemirror-markdown";
@@ -9,26 +8,16 @@ import {
   Node,
   Mark as ProsemirrorMark,
 } from "prosemirror-model";
-import { EditorState, Plugin } from "prosemirror-state";
-import { Decoration, DecorationSet, EditorView } from "prosemirror-view";
-import * as React from "react";
-import ReactDOM from "react-dom";
-import { isExternalUrl, sanitizeUrl } from "../../utils/urls";
-import findLinkNodes from "../queries/findLinkNodes";
-import getMarkRange from "../queries/getMarkRange";
-import isMarkActive from "../queries/isMarkActive";
-import { EventType, Dispatch } from "../types";
+import { Command, EditorState, Plugin, TextSelection } from "prosemirror-state";
+import { EditorView } from "prosemirror-view";
+import { toast } from "sonner";
+import { sanitizeUrl } from "../../utils/urls";
+import { getMarkRange } from "../queries/getMarkRange";
+import { isMarkActive } from "../queries/isMarkActive";
+import { EventType } from "../types";
 import Mark from "./Mark";
 
 const LINK_INPUT_REGEX = /\[([^[]+)]\((\S+)\)$/;
-let icon: HTMLSpanElement;
-
-if (typeof window !== "undefined") {
-  const component = <OpenIcon color="currentColor" size={16} />;
-  icon = document.createElement("span");
-  icon.className = "external-link";
-  ReactDOM.render(component, icon);
-}
 
 function isPlainURL(
   link: ProsemirrorMark,
@@ -85,8 +74,9 @@ export default class Link extends Mark {
       toDOM: (node) => [
         "a",
         {
-          ...node.attrs,
+          title: node.attrs.title,
           href: sanitizeUrl(node.attrs.href),
+          class: "use-hover-preview",
           rel: "noopener noreferrer nofollow",
         },
         0,
@@ -113,21 +103,17 @@ export default class Link extends Mark {
     ];
   }
 
-  commands({ type }: { type: MarkType }) {
-    return ({ href } = { href: "" }) => toggleMark(type, { href });
-  }
-
-  keys({ type }: { type: MarkType }) {
+  keys({ type }: { type: MarkType }): Record<string, Command> {
     return {
-      "Mod-k": (state: EditorState, dispatch: Dispatch) => {
+      "Mod-k": (state, dispatch) => {
         if (state.selection.empty) {
-          this.editor.events.emit(EventType.linkMenuOpen);
+          this.editor.events.emit(EventType.LinkToolbarOpen);
           return true;
         }
 
         return toggleMark(type, { href: "" })(state, dispatch);
       },
-      "Mod-Enter": (state: EditorState) => {
+      "Mod-Enter": (state) => {
         if (isMarkActive(type)(state)) {
           const range = getMarkRange(
             state.selection.$from,
@@ -141,9 +127,7 @@ export default class Link extends Mark {
                 event
               );
             } catch (err) {
-              this.editor.props.onShowToast(
-                this.options.dictionary.openLinkError
-              );
+              toast.error(this.options.dictionary.openLinkError);
             }
             return true;
           }
@@ -154,75 +138,43 @@ export default class Link extends Mark {
   }
 
   get plugins() {
-    const getLinkDecorations = (state: EditorState) => {
-      const decorations: Decoration[] = [];
-      const links = findLinkNodes(state.doc);
+    const handleClick = (view: EditorView, pos: number) => {
+      const { doc, tr } = view.state;
+      const range = getMarkRange(
+        doc.resolve(pos),
+        this.editor.schema.marks.link
+      );
 
-      links.forEach((nodeWithPos) => {
-        const linkMark = nodeWithPos.node.marks.find(
-          (mark) => mark.type.name === "link"
-        );
-        if (linkMark && isExternalUrl(linkMark.attrs.href)) {
-          decorations.push(
-            Decoration.widget(
-              // place the decoration at the end of the link
-              nodeWithPos.pos + nodeWithPos.node.nodeSize,
-              () => {
-                const cloned = icon.cloneNode(true);
-                cloned.addEventListener("click", (event) => {
-                  try {
-                    if (this.options.onClickLink) {
-                      event.stopPropagation();
-                      event.preventDefault();
-                      this.options.onClickLink(
-                        sanitizeUrl(linkMark.attrs.href),
-                        event
-                      );
-                    }
-                  } catch (err) {
-                    this.editor.props.onShowToast(
-                      this.options.dictionary.openLinkError
-                    );
-                  }
-                });
-                return cloned;
-              },
-              {
-                // position on the right side of the position
-                side: 1,
-                key: "external-link",
-              }
-            )
-          );
-        }
-      });
+      if (!range || range.from === pos || range.to === pos) {
+        return false;
+      }
 
-      return DecorationSet.create(state.doc, decorations);
+      try {
+        const $start = doc.resolve(range.from);
+        const $end = doc.resolve(range.to);
+        tr.setSelection(new TextSelection($start, $end));
+
+        view.dispatch(tr);
+        return true;
+      } catch (err) {
+        // Failed to set selection
+      }
+      return false;
     };
 
     const plugin: Plugin = new Plugin({
-      state: {
-        init: (config, state) => {
-          return getLinkDecorations(state);
-        },
-        apply: (tr, decorationSet, _oldState, newState) => {
-          return tr.docChanged ? getLinkDecorations(newState) : decorationSet;
-        },
-      },
       props: {
         decorations: (state: EditorState) => plugin.getState(state),
         handleDOMEvents: {
-          mouseover: (view: EditorView, event: MouseEvent) => {
-            const target = (event.target as HTMLElement)?.closest("a");
-            if (
-              target instanceof HTMLAnchorElement &&
-              !target.className.includes("ProseMirror-widget") &&
-              (!view.editable || (view.editable && !view.hasFocus()))
-            ) {
-              if (this.options.onHoverLink) {
-                return this.options.onHoverLink(target);
-              }
+          contextmenu: (view: EditorView, event: MouseEvent) => {
+            const result = view.posAtCoords({
+              left: event.clientX,
+              top: event.clientY,
+            });
+            if (result) {
+              return handleClick(view, result.pos);
             }
+
             return false;
           },
           mousedown: (view: EditorView, event: MouseEvent) => {
@@ -232,6 +184,10 @@ export default class Link extends Mark {
             }
 
             if (target.matches(".component-attachment *")) {
+              return false;
+            }
+
+            if (target.role === "button") {
               return false;
             }
 
@@ -251,11 +207,19 @@ export default class Link extends Mark {
                   this.options.onClickLink(sanitizeUrl(href), event);
                 }
               } catch (err) {
-                this.editor.props.onShowToast(
-                  this.options.dictionary.openLinkError
-                );
+                toast.error(this.options.dictionary.openLinkError);
               }
 
+              return true;
+            }
+
+            const result = view.posAtCoords({
+              left: event.clientX,
+              top: event.clientY,
+            });
+
+            if (result && handleClick(view, result.pos)) {
+              event.preventDefault();
               return true;
             }
 
@@ -291,27 +255,24 @@ export default class Link extends Mark {
 
   toMarkdown() {
     return {
-      open(
+      open: (
         _state: MarkdownSerializerState,
         mark: ProsemirrorMark,
         parent: Node,
         index: number
-      ) {
-        return isPlainURL(mark, parent, index, 1) ? "<" : "[";
-      },
-      close(
+      ) => (isPlainURL(mark, parent, index, 1) ? "<" : "["),
+      close: (
         state: MarkdownSerializerState,
         mark: ProsemirrorMark,
         parent: Node,
         index: number
-      ) {
-        return isPlainURL(mark, parent, index, -1)
+      ) =>
+        isPlainURL(mark, parent, index, -1)
           ? ">"
           : "](" +
-              state.esc(mark.attrs.href) +
-              (mark.attrs.title ? " " + state.quote(mark.attrs.title) : "") +
-              ")";
-      },
+            state.esc(mark.attrs.href) +
+            (mark.attrs.title ? " " + quote(mark.attrs.title) : "") +
+            ")",
     };
   }
 
@@ -324,4 +285,10 @@ export default class Link extends Mark {
       }),
     };
   }
+}
+
+function quote(str: string) {
+  const wrap =
+    str.indexOf('"') === -1 ? '""' : str.indexOf("'") === -1 ? "''" : "()";
+  return wrap[0] + str + wrap[1];
 }

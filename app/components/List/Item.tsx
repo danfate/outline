@@ -1,26 +1,68 @@
+import {
+  useFocusEffect,
+  useRovingTabIndex,
+} from "@getoutline/react-roving-tabindex";
 import { LocationDescriptor } from "history";
 import * as React from "react";
 import styled, { useTheme } from "styled-components";
+import { s, ellipsis } from "@shared/styles";
 import Flex from "~/components/Flex";
 import NavLink from "~/components/NavLink";
+import { hover } from "~/styles";
 
 export type Props = Omit<React.HTMLAttributes<HTMLAnchorElement>, "title"> & {
+  /** An icon or image to display to the left of the list item */
   image?: React.ReactNode;
+  /** An internal location to navigate to on click, if provided the list item will have hover styles */
   to?: LocationDescriptor;
+  /** An optional click handler, if provided the list item will have hover styles */
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  /** An optional keydown handler, if provided the list item will have hover styles */
+  onKeyDown?: React.KeyboardEventHandler<HTMLAnchorElement>;
+  /** Whether to match the location exactly */
   exact?: boolean;
+  /** The title of the list item */
   title: React.ReactNode;
+  /** The subtitle of the list item, displayed below the title */
   subtitle?: React.ReactNode;
+  /** Actions to display to the right of the list item */
   actions?: React.ReactNode;
+  /** Whether to display a border below the list item */
   border?: boolean;
+  /** Whether to display the list item in a compact style */
   small?: boolean;
+  /** Whether to enable keyboard navigation */
+  keyboardNavigation?: boolean;
 };
 
 const ListItem = (
-  { image, title, subtitle, actions, small, border, to, ...rest }: Props,
+  {
+    image,
+    title,
+    subtitle,
+    actions,
+    small,
+    border,
+    to,
+    keyboardNavigation,
+    ...rest
+  }: Props,
   ref?: React.Ref<HTMLAnchorElement>
 ) => {
   const theme = useTheme();
   const compact = !subtitle;
+
+  let itemRef: React.Ref<HTMLAnchorElement> =
+    React.useRef<HTMLAnchorElement>(null);
+  if (ref) {
+    itemRef = ref;
+  }
+
+  const { focused, ...rovingTabIndex } = useRovingTabIndex(
+    itemRef as React.RefObject<HTMLAnchorElement>,
+    keyboardNavigation || to ? false : true
+  );
+  useFocusEffect(focused, itemRef as React.RefObject<HTMLAnchorElement>);
 
   const content = (selected: boolean) => (
     <>
@@ -48,13 +90,26 @@ const ListItem = (
   if (to) {
     return (
       <Wrapper
-        ref={ref}
+        ref={itemRef}
         $border={border}
         $small={small}
         activeStyle={{
-          background: theme.primary,
+          background: theme.accent,
         }}
         {...rest}
+        {...rovingTabIndex}
+        onClick={(ev) => {
+          if (rest.onClick) {
+            rest.onClick(ev);
+          }
+          rovingTabIndex.onClick(ev);
+        }}
+        onKeyDown={(ev) => {
+          if (rest.onKeyDown) {
+            rest.onKeyDown(ev);
+          }
+          rovingTabIndex.onKeyDown(ev);
+        }}
         as={NavLink}
         to={to}
       >
@@ -64,7 +119,22 @@ const ListItem = (
   }
 
   return (
-    <Wrapper ref={ref} $border={border} $small={small} {...rest}>
+    <Wrapper
+      ref={itemRef}
+      $border={border}
+      $small={small}
+      $hover={!!rest.onClick}
+      {...rest}
+      {...rovingTabIndex}
+      onClick={(ev) => {
+        rest.onClick?.(ev);
+        rovingTabIndex.onClick(ev);
+      }}
+      onKeyDown={(ev) => {
+        rest.onKeyDown?.(ev);
+        rovingTabIndex.onKeyDown(ev);
+      }}
+    >
       {content(false)}
     </Wrapper>
   );
@@ -73,10 +143,13 @@ const ListItem = (
 const Wrapper = styled.a<{
   $small?: boolean;
   $border?: boolean;
+  $hover?: boolean;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
   to?: LocationDescriptor;
 }>`
   display: flex;
   padding: ${(props) => (props.$border === false ? 0 : "8px 0")};
+  min-height: 32px;
   margin: ${(props) =>
     props.$border === false ? (props.$small ? "8px 0" : "16px 0") : 0};
   border-bottom: 1px solid
@@ -87,7 +160,19 @@ const Wrapper = styled.a<{
     border-bottom: 0;
   }
 
-  cursor: ${({ to }) => (to ? "var(--pointer)" : "default")};
+  &:focus-visible {
+    outline: none;
+  }
+
+  &:${hover},
+  &:focus,
+  &:focus-within {
+    background: ${(props) =>
+      props.$hover ? props.theme.secondaryBackground : "inherit"};
+  }
+
+  cursor: ${(props) =>
+    props.to || props.onClick ? "var(--pointer)" : "default"};
 `;
 
 const Image = styled(Flex)`
@@ -97,15 +182,13 @@ const Image = styled(Flex)`
   user-select: none;
   flex-shrink: 0;
   align-self: center;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
 `;
 
 const Heading = styled.p<{ $small?: boolean }>`
   font-size: ${(props) => (props.$small ? 14 : 16)}px;
   font-weight: 500;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  ${ellipsis()}
   line-height: ${(props) => (props.$small ? 1.3 : 1.2)};
   margin: 0;
 `;
@@ -127,6 +210,7 @@ const Subtitle = styled.p<{ $small?: boolean; $selected?: boolean }>`
 export const Actions = styled(Flex)<{ $selected?: boolean }>`
   align-self: center;
   justify-content: center;
+  flex-shrink: 0;
   color: ${(props) =>
     props.$selected ? props.theme.white : props.theme.textSecondary};
 `;

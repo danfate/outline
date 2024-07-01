@@ -1,10 +1,17 @@
-import { isArrayLike } from "lodash";
+import isArrayLike from "lodash/isArrayLike";
+import sanitize from "sanitize-filename";
 import { Primitive } from "utility-types";
 import validator from "validator";
-import { CollectionPermission } from "../shared/types";
-import { validateColorHex } from "../shared/utils/color";
-import { validateIndexCharacters } from "../shared/utils/indexCharacters";
+import isIn from "validator/lib/isIn";
+import isUUID from "validator/lib/isUUID";
+import { CollectionPermission } from "@shared/types";
+import { UrlHelper } from "@shared/utils/UrlHelper";
+import { validateColorHex } from "@shared/utils/color";
+import { validateIndexCharacters } from "@shared/utils/indexCharacters";
+import parseMentionUrl from "@shared/utils/parseMentionUrl";
+import { isUrl } from "@shared/utils/urls";
 import { ParamRequiredError, ValidationError } from "./errors";
+import { Buckets } from "./models/helpers/AttachmentHelper";
 
 type IncomingValue = Primitive | string[];
 
@@ -165,3 +172,77 @@ export const assertCollectionPermission = (
 ) => {
   assertIn(value, [...Object.values(CollectionPermission), null], message);
 };
+
+export class ValidateKey {
+  public static isValid = (key: string) => {
+    let parts = key.split("/");
+    const bucket = parts[0];
+
+    // Avatars do not have a file name at the end of the key
+    parts = bucket === Buckets.avatars ? parts : parts.slice(0, -1);
+
+    return (
+      parts.length === 3 &&
+      isIn(parts[0], Object.values(Buckets)) &&
+      isUUID(parts[1]) &&
+      isUUID(parts[2])
+    );
+  };
+
+  public static sanitize = (key: string) => {
+    const [filename] = key.split("/").slice(-1);
+    return key
+      .split("/")
+      .slice(0, -1)
+      .join("/")
+      .concat(`/${sanitize(filename)}`);
+  };
+
+  public static message = "Must be of the form <bucket>/<uuid>/<uuid>/<name>";
+}
+
+export class ValidateDocumentId {
+  /**
+   * Checks if documentId is valid. A valid documentId is either
+   * a UUID or a url slug matching a particular regex.
+   *
+   * @param documentId
+   * @returns true if documentId is valid, false otherwise
+   */
+  public static isValid = (documentId: string) =>
+    isUUID(documentId) || UrlHelper.SLUG_URL_REGEX.test(documentId);
+
+  public static message = "Must be uuid or url slug";
+}
+
+export class ValidateIndex {
+  public static regex = new RegExp("^[\x20-\x7E]+$");
+  public static message = "Must be between x20 to x7E ASCII";
+  public static maxLength = 100;
+}
+
+export class ValidateURL {
+  public static isValidMentionUrl = (url: string) => {
+    if (!isUrl(url)) {
+      return false;
+    }
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.protocol !== "mention:") {
+        return false;
+      }
+
+      const { id, mentionType, modelId } = parseMentionUrl(url);
+      return id && isUUID(id) && mentionType === "user" && isUUID(modelId);
+    } catch (err) {
+      return false;
+    }
+  };
+
+  public static message = "Must be a valid url";
+}
+
+export class ValidateColor {
+  public static regex = /(^#[0-9A-F]{6}$)|(^#[0-9A-F]{3}$)/i;
+  public static message = "Must be a hex value (please use format #FFFFFF)";
+}

@@ -5,17 +5,20 @@ import {
   differenceInCalendarMonths,
   differenceInCalendarYears,
   format as formatDate,
+  isTomorrow,
+  isSameWeek,
+  isPast,
 } from "date-fns";
 import { TFunction } from "i18next";
-import { startCase } from "lodash";
+import startCase from "lodash/startCase";
 import {
   getCurrentDateAsString,
   getCurrentDateTimeAsString,
   getCurrentTimeAsString,
   unicodeCLDRtoBCP47,
+  dateLocale,
 } from "@shared/utils/date";
 import User from "~/models/User";
-import { dateLocale } from "~/utils/i18n";
 
 export function dateToHeading(
   dateTime: string,
@@ -68,6 +71,53 @@ export function dateToHeading(
   // If older than the current calendar year then just print the year e.g 2020
   return formatDate(Date.parse(dateTime), "y", {
     locale,
+  });
+}
+
+/**
+ * Converts a date string to a human-readable expiry string.
+ *
+ * @param dateTime The date string to convert
+ * @param t The translation function
+ * @param userLocale The user's locale
+ */
+export function dateToExpiry(
+  dateTime: string,
+  t: TFunction,
+  userLocale: string | null | undefined
+) {
+  const date = Date.parse(dateTime);
+  const now = new Date();
+  const locale = dateLocale(userLocale);
+
+  if (isYesterday(date)) {
+    return t("Expired yesterday");
+  }
+
+  if (isPast(date)) {
+    return `${t("Expired {{ date }}", {
+      date: formatDate(date, "MMM dd, yyyy", { locale }),
+    })}`;
+  }
+
+  if (isToday(date)) {
+    return t("Expires today");
+  }
+
+  if (isTomorrow(date)) {
+    return t("Expires tomorrow");
+  }
+
+  if (isSameWeek(date, now)) {
+    return t("Expires {{ date }}", {
+      date: formatDate(Date.parse(dateTime), "iiii", {
+        locale,
+      }),
+    });
+  }
+
+  return t("Expires {{ date }}", {
+    date: formatDate(date, "MMM dd, yyyy", { locale }),
   });
 }
 

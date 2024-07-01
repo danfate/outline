@@ -1,5 +1,8 @@
 import invariant from "invariant";
-import { concat, find, last } from "lodash";
+import concat from "lodash/concat";
+import find from "lodash/find";
+import last from "lodash/last";
+import sortBy from "lodash/sortBy";
 import { computed, action } from "mobx";
 import {
   CollectionPermission,
@@ -7,10 +10,10 @@ import {
   NavigationNode,
 } from "@shared/types";
 import Collection from "~/models/Collection";
+import { Properties } from "~/types";
 import { client } from "~/utils/ApiClient";
-import { AuthorizationError, NotFoundError } from "~/utils/errors";
-import BaseStore from "./BaseStore";
 import RootStore from "./RootStore";
+import Store from "./base/Store";
 
 enum DocumentPathItemType {
   Collection = "collection",
@@ -29,13 +32,18 @@ export type DocumentPath = DocumentPathItem & {
   path: DocumentPathItem[];
 };
 
-export default class CollectionsStore extends BaseStore<Collection> {
+export default class CollectionsStore extends Store<Collection> {
   constructor(rootStore: RootStore) {
     super(rootStore, Collection);
   }
 
+  /**
+   * Returns the currently active collection, or undefined if not in the context of a collection.
+   *
+   * @returns The active Collection or undefined
+   */
   @computed
-  get active(): Collection | null | undefined {
+  get active(): Collection | undefined {
     return this.rootStore.ui.activeCollectionId
       ? this.data.get(this.rootStore.ui.activeCollectionId)
       : undefined;
@@ -44,9 +52,12 @@ export default class CollectionsStore extends BaseStore<Collection> {
   @computed
   get orderedData(): Collection[] {
     let collections = Array.from(this.data.values());
-    collections = collections.filter((collection) =>
-      collection.deletedAt ? false : true
-    );
+    collections = collections
+      .filter((collection) => !collection.deletedAt)
+      .filter(
+        (collection) =>
+          this.rootStore.policies.abilities(collection.id).readDocument
+      );
     return collections.sort((a, b) => {
       if (a.index === b.index) {
         return a.updatedAt > b.updatedAt ? -1 : 1;
@@ -54,6 +65,33 @@ export default class CollectionsStore extends BaseStore<Collection> {
 
       return a.index < b.index ? -1 : 1;
     });
+  }
+
+  /**
+   * Returns all collections that are require explicit permission to access.
+   */
+  @computed
+  get private(): Collection[] {
+    return this.all.filter((collection) => collection.isPrivate);
+  }
+
+  /**
+   * Returns all collections that are accessible by default.
+   */
+  @computed
+  get nonPrivate(): Collection[] {
+    return this.all.filter((collection) => !collection.isPrivate);
+  }
+
+  /**
+   * Returns all collections that are accessible to the current user.
+   */
+  @computed
+  get all(): Collection[] {
+    return sortBy(
+      Array.from(this.data.values()),
+      (collection) => collection.name
+    );
   }
 
   /**
@@ -83,16 +121,19 @@ export default class CollectionsStore extends BaseStore<Collection> {
 
     if (this.isLoaded) {
       this.data.forEach((collection) => {
-        const { id, name, url } = collection;
+        const { id, name, path } = collection;
         const node = {
           type: DocumentPathItemType.Collection,
           id,
           collectionId: id,
           title: name,
-          url,
+          url: path,
         };
         results.push([node]);
-        travelDocuments(collection.documents, id, [node]);
+
+        if (collection.documents) {
+          travelDocuments(collection.documents, id, [node]);
+        }
       });
     }
 
@@ -103,11 +144,13 @@ export default class CollectionsStore extends BaseStore<Collection> {
   }
 
   @action
-  import = async (attachmentId: string, format?: string) => {
+  import = async (
+    attachmentId: string,
+    options: { format?: string; permission?: CollectionPermission | null }
+  ) => {
     await client.post("/collections.import", {
-      type: "outline",
-      format,
       attachmentId,
+      ...options,
     });
   };
 
@@ -125,52 +168,26 @@ export default class CollectionsStore extends BaseStore<Collection> {
     }
   };
 
-  async update(params: Record<string, any>): Promise<Collection> {
+  async update(params: Properties<Collection>): Promise<Collection> {
     const result = await super.update(params);
 
     // If we're changing sharing permissions on the collection then we need to
     // remove all locally cached policies for documents in the collection as they
     // are now invalid
     if (params.sharing !== undefined) {
-      const collection = this.get(params.id);
-
-      if (collection) {
-        collection.documentIds.forEach((id) => {
-          this.rootStore.policies.remove(id);
-        });
-      }
+      this.rootStore.documents.inCollection(result.id).forEach((document) => {
+        this.rootStore.policies.remove(document.id);
+      });
     }
 
     return result;
   }
 
   @action
-  async fetch(
-    id: string,
-    options: Record<string, any> = {}
-  ): Promise<Collection> {
-    const item = this.get(id) || this.getByUrl(id);
-    if (item && !options.force) {
-      return item;
-    }
-    this.isFetching = true;
-
-    try {
-      const res = await client.post(`/collections.info`, {
-        id,
-      });
-      invariant(res?.data, "Collection not available");
-      this.addPolicies(res.policies);
-      return this.add(res.data);
-    } catch (err) {
-      if (err instanceof AuthorizationError || err instanceof NotFoundError) {
-        this.remove(id);
-      }
-
-      throw err;
-    } finally {
-      this.isFetching = false;
-    }
+  async fetch(id: string, options?: { force: boolean }): Promise<Collection> {
+    const model = await super.fetch(id, options);
+    await model.fetchDocuments(options);
+    return model;
   }
 
   @computed
@@ -182,9 +199,10 @@ export default class CollectionsStore extends BaseStore<Collection> {
     );
   }
 
-  star = async (collection: Collection) => {
+  star = async (collection: Collection, index?: string) => {
     await this.rootStore.stars.create({
       collectionId: collection.id,
+      index,
     });
   };
 
@@ -199,8 +217,10 @@ export default class CollectionsStore extends BaseStore<Collection> {
     return this.pathsToDocuments.find((path) => path.id === documentId);
   }
 
-  titleForDocument(documentUrl: string): string | undefined {
-    const path = this.pathsToDocuments.find((path) => path.url === documentUrl);
+  titleForDocument(documentPath: string): string | undefined {
+    const path = this.pathsToDocuments.find(
+      (path) => path.url === documentPath
+    );
     if (path) {
       return path.title;
     }
@@ -212,15 +232,15 @@ export default class CollectionsStore extends BaseStore<Collection> {
     return find(this.orderedData, (col: Collection) => url.endsWith(col.urlId));
   }
 
-  delete = async (collection: Collection) => {
+  async delete(collection: Collection) {
     await super.delete(collection);
-    this.rootStore.documents.fetchRecentlyUpdated();
-    this.rootStore.documents.fetchRecentlyViewed();
-  };
+    await this.rootStore.documents.fetchRecentlyUpdated();
+    await this.rootStore.documents.fetchRecentlyViewed();
+  }
 
-  export = (format: FileOperationFormat) => {
-    return client.post("/collections.export_all", {
+  export = (format: FileOperationFormat, includeAttachments: boolean) =>
+    client.post("/collections.export_all", {
       format,
+      includeAttachments,
     });
-  };
 }

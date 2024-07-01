@@ -1,12 +1,11 @@
-import { filter } from "lodash";
 import { computed } from "mobx";
-import { IntegrationService } from "@shared/types";
+import { IntegrationService, IntegrationType } from "@shared/types";
 import naturalSort from "@shared/utils/naturalSort";
-import BaseStore from "~/stores/BaseStore";
 import RootStore from "~/stores/RootStore";
+import Store from "~/stores/base/Store";
 import Integration from "~/models/Integration";
 
-class IntegrationsStore extends BaseStore<Integration> {
+class IntegrationsStore extends Store<Integration> {
   constructor(rootStore: RootStore) {
     super(rootStore, Integration);
   }
@@ -17,10 +16,10 @@ class IntegrationsStore extends BaseStore<Integration> {
   }
 
   @computed
-  get slackIntegrations(): Integration[] {
-    return filter(this.orderedData, {
-      service: IntegrationService.Slack,
-    });
+  get github(): Integration<IntegrationType.Embed>[] {
+    return this.orderedData.filter(
+      (integration) => integration.service === IntegrationService.GitHub
+    );
   }
 }
 

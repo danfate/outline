@@ -1,14 +1,15 @@
-import BaseModel from "./BaseModel";
 import User from "./User";
+import Model from "./base/Model";
+import Relation from "./decorators/Relation";
 
-class Event extends BaseModel {
+class Event extends Model {
+  static modelName = "Event";
+
   id: string;
 
   name: string;
 
   modelId: string | null | undefined;
-
-  actorId: string;
 
   actorIpAddress: string | null | undefined;
 
@@ -16,11 +17,15 @@ class Event extends BaseModel {
 
   collectionId: string | null | undefined;
 
+  @Relation(() => User)
+  user: User;
+
   userId: string;
 
-  createdAt: string;
-
+  @Relation(() => User)
   actor: User;
+
+  actorId: string;
 
   data: {
     name: string;

@@ -1,15 +1,17 @@
-import { sortBy, filter, uniq, isEqual } from "lodash";
+import filter from "lodash/filter";
+import isEqual from "lodash/isEqual";
+import sortBy from "lodash/sortBy";
+import uniq from "lodash/uniq";
 import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { usePopoverState, PopoverDisclosure } from "reakit/Popover";
 import Document from "~/models/Document";
-import { AvatarWithPresence } from "~/components/Avatar";
+import AvatarWithPresence from "~/components/Avatar/AvatarWithPresence";
 import DocumentViews from "~/components/DocumentViews";
 import Facepile from "~/components/Facepile";
 import NudeButton from "~/components/NudeButton";
 import Popover from "~/components/Popover";
-import useCurrentTeam from "~/hooks/useCurrentTeam";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useStores from "~/hooks/useStores";
 
@@ -20,7 +22,6 @@ type Props = {
 function Collaborators(props: Props) {
   const { t } = useTranslation();
   const user = useCurrentUser();
-  const team = useCurrentTeam();
   const currentUserId = user?.id;
   const [requestedUserIds, setRequestedUserIds] = React.useState<string[]>([]);
   const { users, presence, ui } = useStores();
@@ -59,7 +60,7 @@ function Collaborators(props: Props) {
 
     if (!isEqual(requestedUserIds, ids) && ids.length > 0) {
       setRequestedUserIds(ids);
-      users.fetchPage({ ids, limit: 100 });
+      void users.fetchPage({ ids, limit: 100 });
     }
   }, [document, users, presentIds, document.collaboratorIds, requestedUserIds]);
 
@@ -79,8 +80,7 @@ function Collaborators(props: Props) {
                 const isPresent = presentIds.includes(collaborator.id);
                 const isEditing = editingIds.includes(collaborator.id);
                 const isObserving = ui.observingUserId === collaborator.id;
-                const isObservable =
-                  team.collaborativeEditing && collaborator.id !== user.id;
+                const isObservable = collaborator.id !== user.id;
 
                 return (
                   <AvatarWithPresence

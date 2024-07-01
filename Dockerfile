@@ -5,7 +5,9 @@ ARG APP_PATH
 WORKDIR $APP_PATH
 
 # ---
-FROM node:16.14.2-alpine3.15 AS runner
+FROM node:20-slim AS runner
+
+LABEL org.opencontainers.image.source="https://github.com/outline/outline"
 
 ARG APP_PATH
 WORKDIR $APP_PATH
@@ -18,9 +20,19 @@ COPY --from=base $APP_PATH/.sequelizerc ./.sequelizerc
 COPY --from=base $APP_PATH/node_modules ./node_modules
 COPY --from=base $APP_PATH/package.json ./package.json
 
-RUN addgroup -g 1001 -S nodejs && \
-  adduser -S nodejs -u 1001 && \
-  chown -R nodejs:nodejs $APP_PATH/build
+# Create a non-root user compatible with Debian and BusyBox based images
+RUN addgroup --gid 1001 nodejs && \
+  adduser --uid 1001 --ingroup nodejs nodejs && \
+  chown -R nodejs:nodejs $APP_PATH/build && \
+  mkdir -p /var/lib/outline && \
+	chown -R nodejs:nodejs /var/lib/outline
+
+ENV FILE_STORAGE_LOCAL_ROOT_DIR /var/lib/outline/data
+RUN mkdir -p "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+  chown -R nodejs:nodejs "$FILE_STORAGE_LOCAL_ROOT_DIR" && \
+  chmod 1777 "$FILE_STORAGE_LOCAL_ROOT_DIR"
+
+VOLUME /var/lib/outline/data
 
 USER nodejs
 

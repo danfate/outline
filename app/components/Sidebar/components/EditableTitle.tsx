@@ -1,6 +1,7 @@
 import * as React from "react";
+import { toast } from "sonner";
 import styled from "styled-components";
-import useToasts from "~/hooks/useToasts";
+import { s } from "@shared/styles";
 
 type Props = {
   onSubmit: (title: string) => Promise<void>;
@@ -10,17 +11,21 @@ type Props = {
   maxLength?: number;
 };
 
-function EditableTitle({
-  title,
-  onSubmit,
-  canUpdate,
-  onEditing,
-  ...rest
-}: Props) {
+export type RefHandle = {
+  setIsEditing: (isEditing: boolean) => void;
+};
+
+function EditableTitle(
+  { title, onSubmit, canUpdate, onEditing, ...rest }: Props,
+  ref: React.RefObject<RefHandle>
+) {
   const [isEditing, setIsEditing] = React.useState(false);
   const [originalValue, setOriginalValue] = React.useState(title);
   const [value, setValue] = React.useState(title);
-  const { showToast } = useToasts();
+
+  React.useImperativeHandle(ref, () => ({
+    setIsEditing,
+  }));
 
   React.useEffect(() => {
     setValue(title);
@@ -72,14 +77,12 @@ function EditableTitle({
           setOriginalValue(trimmedValue);
         } catch (error) {
           setValue(originalValue);
-          showToast(error.message, {
-            type: "error",
-          });
+          toast.error(error.message);
           throw error;
         }
       }
     },
-    [originalValue, showToast, value, onSubmit]
+    [originalValue, value, onSubmit]
   );
 
   React.useEffect(() => {
@@ -93,6 +96,7 @@ function EditableTitle({
           <Input
             dir="auto"
             type="text"
+            lang=""
             value={value}
             onClick={stopPropagation}
             onKeyDown={handleKeyDown}
@@ -113,18 +117,18 @@ function EditableTitle({
 }
 
 const Input = styled.input`
-  color: ${(props) => props.theme.text};
-  background: ${(props) => props.theme.background};
+  color: ${s("text")};
+  background: ${s("background")};
   width: calc(100% + 12px);
   border-radius: 3px;
   border: 0;
   padding: 5px 6px;
   margin: -4px;
-  height: 32px;
+  height: 30px;
 
   &:focus {
-    outline-color: ${(props) => props.theme.primary};
+    outline-color: ${s("accent")};
   }
 `;
 
-export default EditableTitle;
+export default React.forwardRef(EditableTitle);

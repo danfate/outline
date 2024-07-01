@@ -3,13 +3,15 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import { EditorStyleHelper } from "@shared/editor/styles/EditorStyleHelper";
+import { depths, s } from "@shared/styles";
 import Text from "~/components/Text";
 import useWindowScrollPosition from "~/hooks/useWindowScrollPosition";
 
 const HEADING_OFFSET = 20;
 
 type Props = {
-  isFullWidth: boolean;
+  /** The headings to render in the contents. */
   headings: {
     title: string;
     level: number;
@@ -17,9 +19,9 @@ type Props = {
   }[];
 };
 
-export default function Contents({ headings, isFullWidth }: Props) {
+export default function Contents({ headings }: Props) {
   const [activeSlug, setActiveSlug] = React.useState<string>();
-  const position = useWindowScrollPosition({
+  const scrollPosition = useWindowScrollPosition({
     throttle: 100,
   });
 
@@ -40,11 +42,11 @@ export default function Contents({ headings, isFullWidth }: Props) {
         }
       }
     }
-  }, [position, headings]);
+  }, [scrollPosition, headings]);
 
   // calculate the minimum heading level and adjust all the headings to make
   // that the top-most. This prevents the contents from being weirdly indented
-  // if all of the headings in the document are level 3, for example.
+  // if all of the headings in the document start at level 3, for example.
   const minHeading = headings.reduce(
     (memo, heading) => (heading.level < memo ? heading.level : memo),
     Infinity
@@ -53,104 +55,85 @@ export default function Contents({ headings, isFullWidth }: Props) {
   const { t } = useTranslation();
 
   return (
-    <Wrapper isFullWidth={isFullWidth}>
-      <Sticky>
-        <Heading>{t("Contents")}</Heading>
-        {headings.length ? (
-          <List>
-            {headings
-              .filter((heading) => heading.level < 4)
-              .map((heading) => (
-                <ListItem
-                  key={heading.id}
-                  level={heading.level - headingAdjustment}
-                  active={activeSlug === heading.id}
-                >
-                  <Link href={`#${heading.id}`}>{heading.title}</Link>
-                </ListItem>
-              ))}
-          </List>
-        ) : (
-          <Empty>
-            {t("Headings you add to the document will appear here")}
-          </Empty>
-        )}
-      </Sticky>
-    </Wrapper>
+    <StickyWrapper>
+      <Heading>{t("Contents")}</Heading>
+      {headings.length ? (
+        <List>
+          {headings
+            .filter((heading) => heading.level < 4)
+            .map((heading) => (
+              <ListItem
+                key={heading.id}
+                level={heading.level - headingAdjustment}
+                active={activeSlug === heading.id}
+              >
+                <Link href={`#${heading.id}`}>{heading.title}</Link>
+              </ListItem>
+            ))}
+        </List>
+      ) : (
+        <Empty>{t("Headings you add to the document will appear here")}</Empty>
+      )}
+    </StickyWrapper>
   );
 }
 
-const Wrapper = styled.div<{ isFullWidth: boolean }>`
-  width: 256px;
+const StickyWrapper = styled.div`
   display: none;
 
-  ${breakpoint("tablet")`
-    display: block;
-  `};
-
-  ${(props) =>
-    !props.isFullWidth &&
-    breakpoint("desktopLarge")`
-    transform: translateX(-256px);
-    width: 0;
-    `}
-`;
-
-const Sticky = styled.div`
   position: sticky;
-  top: 80px;
-  max-height: calc(100vh - 80px);
+  top: 90px;
+  max-height: calc(100vh - 90px);
+  width: ${EditorStyleHelper.tocWidth}px;
 
-  background: ${(props) => props.theme.background};
-  transition: ${(props) => props.theme.backgroundTransition};
-
-  margin-top: 72px;
-  margin-right: 52px;
-  min-width: 204px;
-  width: 228px;
-  min-height: 40px;
+  padding: 0 16px;
   overflow-y: auto;
-  padding: 4px 16px;
   border-radius: 8px;
+
+  background: ${s("background")};
+  transition: ${s("backgroundTransition")};
 
   @supports (backdrop-filter: blur(20px)) {
     backdrop-filter: blur(20px);
     background: ${(props) => transparentize(0.2, props.theme.background)};
   }
+
+  ${breakpoint("tablet")`
+    display: block;
+    z-index: ${depths.toc};
+  `};
 `;
 
 const Heading = styled.h3`
   font-size: 13px;
   font-weight: 600;
-  color: ${(props) => props.theme.textTertiary};
+  color: ${s("textTertiary")};
   letter-spacing: 0.03em;
+  margin-top: 10px;
 `;
 
 const Empty = styled(Text)`
-  margin: 1em 0 4em;
-  padding-right: 2em;
   font-size: 14px;
 `;
 
 const ListItem = styled.li<{ level: number; active?: boolean }>`
   margin-left: ${(props) => (props.level - 1) * 10}px;
   margin-bottom: 8px;
-  padding-right: 2em;
   line-height: 1.3;
+  word-break: break-word;
 
   a {
     font-weight: ${(props) => (props.active ? "600" : "inherit")};
-    color: ${(props) =>
-      props.active ? props.theme.primary : props.theme.text};
+    color: ${(props) => (props.active ? props.theme.accent : props.theme.text)};
   }
 `;
 
 const Link = styled.a`
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
   font-size: 14px;
 
   &:hover {
-    color: ${(props) => props.theme.primary};
+    color: ${s("accent")};
   }
 `;
 

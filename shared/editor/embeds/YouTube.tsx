@@ -2,20 +2,33 @@ import * as React from "react";
 import Frame from "../components/Frame";
 import { EmbedProps as Props } from ".";
 
-function YouTube(props: Props) {
-  const { matches } = props.attrs;
+function YouTube({ matches, ...props }: Props) {
   const videoId = matches[1];
-  return (
-    <Frame
-      {...props}
-      src={`https://www.youtube.com/embed/${videoId}?modestbranding=1`}
-      title={`YouTube (${videoId})`}
-    />
-  );
-}
 
-YouTube.ENABLED = [
-  /(?:https?:\/\/)?(?:www\.)?youtu\.?be(?:\.com)?\/?.*(?:watch|embed)?(?:.*v=|v\/|\/)([a-zA-Z0-9_-]{11})$/i,
-];
+  let src;
+  try {
+    const url = new URL(props.attrs.href);
+    const searchParams = new URLSearchParams(url.search);
+    const start = searchParams.get("t")?.replace(/s$/, "");
+
+    // Youtube returns the url in a html encoded format where
+    // '&' is replaced by '&amp;'. So we also check if the search params
+    // contain html encoded query params.
+    const clip = (
+      searchParams.get("clip") || searchParams.get("amp;clip")
+    )?.replace(/s$/, "");
+    const clipt = (
+      searchParams.get("clipt") || searchParams.get("amp;clipt")
+    )?.replace(/s$/, "");
+
+    src = `https://www.youtube.com/embed/${videoId}?modestbranding=1${
+      start ? `&start=${start}` : ""
+    }${clip ? `&clip=${clip}` : ""}${clipt ? `&clipt=${clipt}` : ""}`;
+  } catch (_e) {
+    // noop
+  }
+
+  return <Frame {...props} src={src} title={`YouTube (${videoId})`} />;
+}
 
 export default YouTube;

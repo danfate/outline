@@ -1,9 +1,13 @@
 // Note: Updating the available languages? Make sure to also update the
-// locales array in app/utils/i18n.js to enable translation for timestamps.
+// locales array in shared/utils/date.ts to enable translation for timestamps.
 export const languageOptions = [
   {
     label: "English (US)",
     value: "en_US",
+  },
+  {
+    label: "Čeština (Czech)",
+    value: "cs_CZ",
   },
   {
     label: "简体中文 (Chinese, Simplified)",
@@ -42,6 +46,10 @@ export const languageOptions = [
     value: "nl_NL",
   },
   {
+    label: "Norsk Bokmål (Norwegian)",
+    value: "nb_NO",
+  },
+  {
     label: "Português (Portuguese, Brazil)",
     value: "pt_BR",
   },
@@ -58,12 +66,16 @@ export const languageOptions = [
     value: "fa_IR",
   },
   {
-    label: "Pусский (Russian)",
-    value: "ru_RU",
+    label: "Svenska (Swedish)",
+    value: "sv_SE",
   },
   {
     label: "Türkçe (Turkish)",
     value: "tr_TR",
+  },
+  {
+    label: "Українська (Ukrainian)",
+    value: "uk_UA",
   },
   {
     label: "Tiếng Việt (Vietnamese)",
@@ -71,4 +83,4 @@ export const languageOptions = [
   },
 ];
 
-export const languages: string[] = languageOptions.map((i) => i.value);
+export const languages = languageOptions.map((i) => i.value);

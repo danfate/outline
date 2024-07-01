@@ -1,9 +1,13 @@
+import {
+  useFocusEffect,
+  useRovingTabIndex,
+} from "@getoutline/react-roving-tabindex";
 import { observer } from "mobx-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { CompositeItem } from "reakit/Composite";
 import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import { s, ellipsis } from "@shared/styles";
 import Document from "~/models/Document";
 import Highlight, { Mark } from "~/components/Highlight";
 import { hover } from "~/styles";
@@ -33,10 +37,18 @@ function DocumentListItem(
 ) {
   const { document, highlight, context, shareId, ...rest } = props;
 
+  let itemRef: React.Ref<HTMLAnchorElement> =
+    React.useRef<HTMLAnchorElement>(null);
+  if (ref) {
+    itemRef = ref;
+  }
+
+  const { focused, ...rovingTabIndex } = useRovingTabIndex(itemRef, false);
+  useFocusEffect(focused, itemRef);
+
   return (
-    <CompositeItem
-      as={DocumentLink}
-      ref={ref}
+    <DocumentLink
+      ref={itemRef}
       dir={document.dir}
       to={{
         pathname: shareId
@@ -47,6 +59,13 @@ function DocumentListItem(
         },
       }}
       {...rest}
+      {...rovingTabIndex}
+      onClick={(ev) => {
+        if (rest.onClick) {
+          rest.onClick(ev);
+        }
+        rovingTabIndex.onClick(ev);
+      }}
     >
       <Content>
         <Heading dir={document.dir}>
@@ -65,7 +84,7 @@ function DocumentListItem(
           />
         }
       </Content>
-    </CompositeItem>
+    </DocumentLink>
   );
 }
 
@@ -101,13 +120,13 @@ const DocumentLink = styled(Link)<{
   &:active,
   &:focus,
   &:focus-within {
-    background: ${(props) => props.theme.listItemHoverBackground};
+    background: ${s("listItemHoverBackground")};
   }
 
   ${(props) =>
     props.$menuOpen &&
     css`
-      background: ${(props) => props.theme.listItemHoverBackground};
+      background: ${s("listItemHoverBackground")};
     `}
 `;
 
@@ -115,18 +134,17 @@ const Heading = styled.h4<{ rtl?: boolean }>`
   display: flex;
   justify-content: ${(props) => (props.rtl ? "flex-end" : "flex-start")};
   align-items: center;
-  height: 18px;
+  height: 22px;
   margin-top: 0;
   margin-bottom: 0.25em;
   overflow: hidden;
   white-space: nowrap;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
 `;
 
 const Title = styled(Highlight)`
   max-width: 90%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  ${ellipsis()}
 
   ${Mark} {
     padding: 0;
@@ -135,14 +153,11 @@ const Title = styled(Highlight)`
 
 const ResultContext = styled(Highlight)`
   display: block;
-  color: ${(props) => props.theme.textTertiary};
+  color: ${s("textTertiary")};
   font-size: 14px;
   margin-top: -0.25em;
-  margin-bottom: 0.25em;
-
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-bottom: 0;
+  ${ellipsis()}
 
   ${Mark} {
     padding: 0;

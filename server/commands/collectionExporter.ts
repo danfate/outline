@@ -1,4 +1,5 @@
 import { Transaction } from "sequelize";
+import { v4 as uuidv4 } from "uuid";
 import {
   FileOperationFormat,
   FileOperationType,
@@ -6,27 +7,43 @@ import {
 } from "@shared/types";
 import { traceFunction } from "@server/logging/tracing";
 import { Collection, Event, Team, User, FileOperation } from "@server/models";
-import { getAWSKeyForFileOp } from "@server/utils/s3";
+import { Buckets } from "@server/models/helpers/AttachmentHelper";
 
 type Props = {
   collection?: Collection;
   team: Team;
   user: User;
   format?: FileOperationFormat;
+  includeAttachments?: boolean;
   ip: string;
   transaction: Transaction;
 };
+
+function getKeyForFileOp(
+  teamId: string,
+  format: FileOperationFormat,
+  name: string
+) {
+  return `${
+    Buckets.uploads
+  }/${teamId}/${uuidv4()}/${name}-export.${format.replace(/outline-/, "")}.zip`;
+}
 
 async function collectionExporter({
   collection,
   team,
   user,
   format = FileOperationFormat.MarkdownZip,
+  includeAttachments = true,
   ip,
   transaction,
 }: Props) {
   const collectionId = collection?.id;
-  const key = getAWSKeyForFileOp(user.teamId, collection?.name || team.name);
+  const key = getKeyForFileOp(
+    user.teamId,
+    format,
+    collection?.name || team.name
+  );
   const fileOperation = await FileOperation.create(
     {
       type: FileOperationType.Export,
@@ -38,6 +55,9 @@ async function collectionExporter({
       collectionId,
       userId: user.id,
       teamId: user.teamId,
+      options: {
+        includeAttachments,
+      },
     },
     {
       transaction,

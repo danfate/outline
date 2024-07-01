@@ -1,10 +1,9 @@
 import retry from "fetch-retry";
-import invariant from "invariant";
-import { trim } from "lodash";
+import trim from "lodash/trim";
 import queryString from "query-string";
 import EDITOR_VERSION from "@shared/editor/version";
+import { JSONObject } from "@shared/types";
 import stores from "~/stores";
-import isCloudHosted from "~/utils/isCloudHosted";
 import Logger from "./Logger";
 import download from "./download";
 import {
@@ -14,6 +13,7 @@ import {
   NetworkError,
   NotFoundError,
   OfflineError,
+  PaymentRequiredError,
   RateLimitExceededError,
   RequestError,
   ServiceUnavailableError,
@@ -24,11 +24,12 @@ type Options = {
   baseUrl?: string;
 };
 
-type FetchOptions = {
+interface FetchOptions {
   download?: boolean;
+  retry?: boolean;
   credentials?: "omit" | "same-origin" | "include";
   headers?: Record<string, string>;
-};
+}
 
 const fetchWithRetry = retry(fetch);
 
@@ -39,12 +40,12 @@ class ApiClient {
     this.baseUrl = options.baseUrl || "/api";
   }
 
-  fetch = async (
+  fetch = async <T = any>(
     path: string,
     method: string,
-    data: Record<string, any> | FormData | undefined,
+    data: JSONObject | FormData | undefined,
     options: FetchOptions = {}
-  ) => {
+  ): Promise<T> => {
     let body: string | FormData | undefined;
     let modifiedPath;
     let urlToFetch;
@@ -83,6 +84,7 @@ class ApiClient {
       Accept: "application/json",
       "cache-control": "no-cache",
       "x-editor-version": EDITOR_VERSION,
+      "x-api-version": "3",
       pragma: "no-cache",
       ...options?.headers,
     };
@@ -95,32 +97,21 @@ class ApiClient {
     }
 
     const headers = new Headers(headerOptions);
-
-    if (stores.auth.authenticated) {
-      invariant(stores.auth.token, "JWT token not set properly");
-      headers.set("Authorization", `Bearer ${stores.auth.token}`);
-    }
-
-    let response;
     const timeStart = window.performance.now();
+    let response;
 
     try {
-      response = await fetchWithRetry(urlToFetch, {
-        method,
-        body,
-        headers,
-        redirect: "follow",
-        // For the hosted deployment we omit cookies on API requests as they are
-        // not needed for authentication this offers a performance increase.
-        // For self-hosted we include them to support a wide variety of
-        // authenticated proxies, e.g. Pomerium, Cloudflare Access etc.
-        credentials: options.credentials
-          ? options.credentials
-          : isCloudHosted
-          ? "omit"
-          : "same-origin",
-        cache: "no-cache",
-      });
+      response = await (options?.retry === false ? fetch : fetchWithRetry)(
+        urlToFetch,
+        {
+          method,
+          body,
+          headers,
+          redirect: "follow",
+          credentials: "same-origin",
+          cache: "no-cache",
+        }
+      );
     } catch (err) {
       if (window.navigator.onLine) {
         throw new NetworkError("A network error occurred, try again?");
@@ -138,17 +129,17 @@ class ApiClient {
         response.headers.get("content-disposition") || ""
       ).split("filename=")[1];
       download(blob, trim(fileName, '"'));
-      return;
+      return undefined as T;
     } else if (success && response.status === 204) {
-      return;
+      return undefined as T;
     } else if (success) {
       return response.json();
     }
 
     // Handle 401, log out user
     if (response.status === 401) {
-      stores.auth.logout();
-      return;
+      await stores.auth.logout(true, false);
+      throw new AuthorizationError();
     }
 
     // Handle failed responses
@@ -176,10 +167,13 @@ class ApiClient {
       throw new BadRequestError(error.message);
     }
 
+    if (response.status === 402) {
+      throw new PaymentRequiredError(error.message);
+    }
+
     if (response.status === 403) {
       if (error.error === "user_suspended") {
-        stores.auth.logout();
-        return;
+        await stores.auth.logout(false, false);
       }
 
       throw new AuthorizationError(error.message);
@@ -215,21 +209,17 @@ class ApiClient {
     throw err;
   };
 
-  get = (
+  get = <T = any>(
     path: string,
-    data: Record<string, any> | undefined,
+    data: JSONObject | undefined,
     options?: FetchOptions
-  ) => {
-    return this.fetch(path, "GET", data, options);
-  };
+  ) => this.fetch<T>(path, "GET", data, options);
 
-  post = (
+  post = <T = any>(
     path: string,
-    data?: Record<string, any> | undefined,
+    data?: JSONObject | FormData | undefined,
     options?: FetchOptions
-  ) => {
-    return this.fetch(path, "POST", data, options);
-  };
+  ) => this.fetch<T>(path, "POST", data, options);
 }
 
 export const client = new ApiClient();

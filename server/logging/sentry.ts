@@ -32,9 +32,6 @@ if (env.SENTRY_DSN) {
 export function requestErrorHandler(error: any, ctx: AppContext) {
   // we don't need to report every time a request stops to the bug tracker
   if (error.code === "EPIPE" || error.code === "ECONNRESET") {
-    console.warn("Connection error", {
-      error,
-    });
     return;
   }
 
@@ -68,7 +65,8 @@ export function requestErrorHandler(error: any, ctx: AppContext) {
       });
       Sentry.captureException(error);
     });
-  } else {
+  } else if (env.ENVIRONMENT !== "test") {
+    // eslint-disable-next-line no-console
     console.error(error);
   }
 }

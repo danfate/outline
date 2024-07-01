@@ -1,8 +1,5 @@
 import { buildUser, buildTeam } from "@server/test/factories";
-import { setupTestDatabase } from "@server/test/support";
 import { serialize } from "./index";
-
-setupTestDatabase();
 
 it("should serialize policy", async () => {
   const user = await buildUser();
@@ -18,5 +15,5 @@ it("should serialize domain policies on Team", async () => {
   });
   const response = serialize(user, team);
   expect(response.createDocument).toEqual(true);
-  expect(response.inviteUser).toEqual(false);
+  expect(response.inviteUser).toEqual(true);
 });

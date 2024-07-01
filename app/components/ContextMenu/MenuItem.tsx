@@ -1,13 +1,16 @@
 import { LocationDescriptor } from "history";
 import { CheckmarkIcon } from "outline-icons";
+import { ellipsis, transparentize } from "polished";
 import * as React from "react";
 import { mergeRefs } from "react-merge-refs";
 import { MenuItem as BaseMenuItem } from "reakit/Menu";
 import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
-import MenuIconWrapper from "../MenuIconWrapper";
+import Text from "../Text";
+import MenuIconWrapper from "./MenuIconWrapper";
 
 type Props = {
+  id?: string;
   onClick?: (event: React.SyntheticEvent) => void | Promise<void>;
   active?: boolean;
   selected?: boolean;
@@ -21,6 +24,7 @@ type Props = {
   level?: number;
   icon?: React.ReactElement;
   children?: React.ReactNode;
+  ref?: React.LegacyRef<HTMLButtonElement> | undefined;
 };
 
 const MenuItem = (
@@ -37,34 +41,26 @@ const MenuItem = (
   }: Props,
   ref: React.Ref<HTMLAnchorElement>
 ) => {
-  const handleClick = React.useCallback(
-    (ev) => {
-      if (onClick) {
+  const content = React.useCallback(
+    (props) => {
+      const handleClick = async (ev: React.MouseEvent) => {
+        hide?.();
+
+        if (onClick) {
+          ev.preventDefault();
+          await onClick(ev);
+        }
+      };
+
+      // Preventing default mousedown otherwise menu items do not work in Firefox,
+      // which triggers the hideOnClickOutside handler first via mousedown – hiding
+      // and un-rendering the menu contents.
+      const handleMouseDown = (ev: React.MouseEvent) => {
         ev.preventDefault();
-        onClick(ev);
-      }
+        ev.stopPropagation();
+      };
 
-      hide?.();
-    },
-    [onClick, hide]
-  );
-
-  // Preventing default mousedown otherwise menu items do not work in Firefox,
-  // which triggers the hideOnClickOutside handler first via mousedown – hiding
-  // and un-rendering the menu contents.
-  const handleMouseDown = React.useCallback((ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-  }, []);
-
-  return (
-    <BaseMenuItem
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      hide={hide}
-      {...rest}
-    >
-      {(props) => (
+      return (
         <MenuAnchor
           {...props}
           $active={active}
@@ -77,19 +73,26 @@ const MenuItem = (
           ])}
         >
           {selected !== undefined && (
-            <>
-              {selected ? <CheckmarkIcon color="currentColor" /> : <Spacer />}
-              &nbsp;
-            </>
-          )}
-          {icon && (
-            <MenuIconWrapper>
-              {React.cloneElement(icon, { color: "currentColor" })}
+            <MenuIconWrapper aria-hidden>
+              {selected ? <CheckmarkIcon /> : <Spacer />}
             </MenuIconWrapper>
           )}
-          {children}
+          {icon && <MenuIconWrapper aria-hidden>{icon}</MenuIconWrapper>}
+          <Title>{children}</Title>
         </MenuAnchor>
-      )}
+      );
+    },
+    [active, as, hide, icon, onClick, ref, children, selected]
+  );
+
+  return (
+    <BaseMenuItem
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      hide={hide}
+      {...rest}
+    >
+      {content}
     </BaseMenuItem>
   );
 };
@@ -98,6 +101,12 @@ const Spacer = styled.svg`
   width: 24px;
   height: 24px;
   flex-shrink: 0;
+`;
+
+const Title = styled.div`
+  ${ellipsis()}
+  flex-grow: 1;
+  display: flex;
 `;
 
 type MenuAnchorProps = {
@@ -128,10 +137,6 @@ export const MenuAnchorCSS = css<MenuAnchorProps>`
   white-space: nowrap;
   position: relative;
 
-  svg:not(:last-child) {
-    margin-right: 4px;
-  }
-
   svg {
     flex-shrink: 0;
     opacity: ${(props) => (props.disabled ? ".5" : 1)};
@@ -147,13 +152,18 @@ export const MenuAnchorCSS = css<MenuAnchorProps>`
     &:hover,
     &:focus,
     &.focus-visible {
-      color: ${props.theme.white};
-      background: ${props.dangerous ? props.theme.danger : props.theme.primary};
+      color: ${props.theme.accentText};
+      background: ${props.dangerous ? props.theme.danger : props.theme.accent};
       box-shadow: none;
       cursor: var(--pointer);
 
       svg {
-        fill: ${props.theme.white};
+        color: ${props.theme.accentText};
+        fill: ${props.theme.accentText};
+      }
+
+      ${Text} {
+        color: ${transparentize(0.5, props.theme.accentText)};
       }
     }
   }
@@ -163,13 +173,13 @@ export const MenuAnchorCSS = css<MenuAnchorProps>`
     props.$active &&
     !props.disabled &&
     `
-      color: ${props.theme.white};
-      background: ${props.dangerous ? props.theme.danger : props.theme.primary};
+      color: ${props.theme.accentText};
+      background: ${props.dangerous ? props.theme.danger : props.theme.accent};
       box-shadow: none;
       cursor: var(--pointer);
 
       svg {
-        fill: ${props.theme.white};
+        fill: ${props.theme.accentText};
       }
     `}
 

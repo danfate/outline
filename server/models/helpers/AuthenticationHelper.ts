@@ -1,9 +1,20 @@
-import { find } from "lodash";
+/* eslint-disable @typescript-eslint/no-var-requires */
+import find from "lodash/find";
 import env from "@server/env";
 import Team from "@server/models/Team";
-import providerConfigs from "../../routes/auth/providers";
+import { Hook, PluginManager } from "@server/utils/PluginManager";
 
 export default class AuthenticationHelper {
+  /**
+   * Returns the enabled authentication provider configurations for the current
+   * installation.
+   *
+   * @returns A list of authentication providers
+   */
+  public static get providers() {
+    return PluginManager.getHooks(Hook.AuthProvider);
+  }
+
   /**
    * Returns the enabled authentication provider configurations for a team,
    * if given otherwise all enabled providers are returned.
@@ -11,20 +22,15 @@ export default class AuthenticationHelper {
    * @param team The team to get enabled providers for
    * @returns A list of authentication providers
    */
-  static providersForTeam(team?: Team) {
-    const isCloudHosted = env.isCloudHosted();
+  public static providersForTeam(team?: Team) {
+    const isCloudHosted = env.isCloudHosted;
 
-    return providerConfigs
-      .sort((config) => (config.id === "email" ? 1 : -1))
-      .filter((config) => {
-        // Don't return authentication methods that are not enabled.
-        if (!config.enabled) {
-          return false;
-        }
-
-        // Guest sign-in is an exception as it does not have an authentication
+    return AuthenticationHelper.providers
+      .sort((hook) => (hook.value.id === "email" ? 1 : -1))
+      .filter((hook) => {
+        // Email sign-in is an exception as it does not have an authentication
         // provider using passport, instead it exists as a boolean option.
-        if (config.id === "email") {
+        if (hook.value.id === "email") {
           return team?.emailSigninEnabled;
         }
 
@@ -34,7 +40,7 @@ export default class AuthenticationHelper {
         }
 
         const authProvider = find(team.authenticationProviders, {
-          name: config.id,
+          name: hook.value.id,
         });
 
         // If cloud hosted then the auth provider must be enabled for the team,

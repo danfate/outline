@@ -1,7 +1,11 @@
-import fs from "fs";
-import path from "path";
+import crypto from "crypto";
 import { URL } from "url";
-import util from "util";
+import { subMinutes } from "date-fns";
+import {
+  InferAttributes,
+  InferCreationAttributes,
+  type SaveOptions,
+} from "sequelize";
 import { Op } from "sequelize";
 import {
   Column,
@@ -11,35 +15,37 @@ import {
   Table,
   Unique,
   IsIn,
+  IsDate,
   HasMany,
   Scopes,
   Is,
   DataType,
   IsUUID,
-  IsUrl,
   AllowNull,
   AfterUpdate,
+  BeforeUpdate,
+  BeforeCreate,
 } from "sequelize-typescript";
-import { CollectionPermission, TeamPreference } from "@shared/types";
+import { TeamPreferenceDefaults } from "@shared/constants";
+import { TeamPreference, TeamPreferences, UserRole } from "@shared/types";
 import { getBaseDomain, RESERVED_SUBDOMAINS } from "@shared/utils/domains";
 import env from "@server/env";
+import { ValidationError } from "@server/errors";
 import DeleteAttachmentTask from "@server/queues/tasks/DeleteAttachmentTask";
 import parseAttachmentIds from "@server/utils/parseAttachmentIds";
 import Attachment from "./Attachment";
 import AuthenticationProvider from "./AuthenticationProvider";
 import Collection from "./Collection";
 import Document from "./Document";
+import Share from "./Share";
 import TeamDomain from "./TeamDomain";
 import User from "./User";
 import ParanoidModel from "./base/ParanoidModel";
 import Fix from "./decorators/Fix";
 import IsFQDN from "./validators/IsFQDN";
+import IsUrlOrRelativePath from "./validators/IsUrlOrRelativePath";
 import Length from "./validators/Length";
 import NotContainsUrl from "./validators/NotContainsUrl";
-
-const readFile = util.promisify(fs.readFile);
-
-export type TeamPreferences = Record<string, unknown>;
 
 @Scopes(() => ({
   withDomains: {
@@ -56,7 +62,10 @@ export type TeamPreferences = Record<string, unknown>;
 }))
 @Table({ tableName: "teams", modelName: "team" })
 @Fix
-class Team extends ParanoidModel {
+class Team extends ParanoidModel<
+  InferAttributes<Team>,
+  Partial<InferCreationAttributes<Team>>
+> {
   @NotContainsUrl
   @Length({ min: 2, max: 255, msg: "name must be between 2 to 255 characters" })
   @Column
@@ -66,9 +75,9 @@ class Team extends ParanoidModel {
   @Unique
   @Length({
     min: 2,
-    max: env.isCloudHosted() ? 32 : 255,
+    max: env.isCloudHosted ? 32 : 255,
     msg: `subdomain must be between 2 and ${
-      env.isCloudHosted() ? 32 : 255
+      env.isCloudHosted ? 32 : 255
     } characters`,
   })
   @Is({
@@ -93,7 +102,7 @@ class Team extends ParanoidModel {
   defaultCollectionId: string | null;
 
   @AllowNull
-  @IsUrl
+  @IsUrlOrRelativePath
   @Length({ max: 4096, msg: "avatarUrl must be 4096 characters or less" })
   @Column(DataType.STRING)
   get avatarUrl() {
@@ -118,7 +127,6 @@ class Team extends ParanoidModel {
   @Column
   inviteRequired: boolean;
 
-  @Default(true)
   @Column(DataType.JSONB)
   signupQueryParams: { [key: string]: string } | null;
 
@@ -136,18 +144,33 @@ class Team extends ParanoidModel {
 
   @Default(true)
   @Column
-  collaborativeEditing: boolean;
+  memberTeamCreate: boolean;
 
-  @Default("member")
-  @IsIn([["viewer", "member"]])
-  @Column
-  defaultUserRole: string;
+  @Default(UserRole.Member)
+  @IsIn([[UserRole.Viewer, UserRole.Member]])
+  @Column(DataType.STRING)
+  defaultUserRole: UserRole;
 
   @AllowNull
   @Column(DataType.JSONB)
   preferences: TeamPreferences | null;
 
+  @IsDate
+  @Column
+  suspendedAt: Date | null;
+
+  @IsDate
+  @Column
+  lastActiveAt: Date | null;
+
   // getters
+
+  /**
+   * Returns whether the team has been suspended and is no longer accessible.
+   */
+  get isSuspended(): boolean {
+    return !!this.suspendedAt;
+  }
 
   /**
    * Returns whether the team has email login enabled. For self-hosted installs
@@ -156,9 +179,7 @@ class Team extends ParanoidModel {
    * @return {boolean} Whether to show email login options
    */
   get emailSigninEnabled(): boolean {
-    return (
-      this.guestSignin && (!!env.SMTP_HOST || env.ENVIRONMENT === "development")
-    );
+    return this.guestSignin && (!!env.SMTP_HOST || env.isDevelopment);
   }
 
   get url() {
@@ -169,12 +190,28 @@ class Team extends ParanoidModel {
       return `${url.protocol}//${this.domain}${url.port ? `:${url.port}` : ""}`;
     }
 
-    if (!this.subdomain || !env.SUBDOMAINS_ENABLED) {
+    if (!this.subdomain || !env.isCloudHosted) {
       return env.URL;
     }
 
     url.host = `${this.subdomain}.${getBaseDomain()}`;
     return url.href.replace(/\/$/, "");
+  }
+
+  /**
+   * Returns a code that can be used to delete the user's team. The code will
+   * be rotated when the user signs out.
+   *
+   * @returns The deletion code.
+   */
+  public getDeleteConfirmationCode(user: User) {
+    return crypto
+      .createHash("md5")
+      .update(`${this.id}${user.jwtSecret}`)
+      .digest("hex")
+      .replace(/[l1IoO0]/gi, "")
+      .slice(0, 8)
+      .toUpperCase();
   }
 
   /**
@@ -184,78 +221,55 @@ class Team extends ParanoidModel {
    * @param value Sets the preference value
    * @returns The current team preferences
    */
-  public setPreference = (preference: TeamPreference, value: boolean) => {
+  public setPreference = <T extends keyof TeamPreferences>(
+    preference: T,
+    value: TeamPreferences[T]
+  ) => {
     if (!this.preferences) {
       this.preferences = {};
     }
-    this.preferences[preference] = value;
-    this.changed("preferences", true);
+
+    this.preferences = {
+      ...this.preferences,
+      [preference]: value,
+    };
 
     return this.preferences;
   };
 
   /**
-   * Returns the passed preference value
+   * Returns the value of the given preference.
    *
-   * @param preference The user preference to retrieve
-   * @param fallback An optional fallback value, defaults to false.
-   * @returns The preference value if set, else undefined
+   * @param preference The team preference to retrieve
+   * @returns The preference value if set, else the default value
    */
-  public getPreference = (preference: TeamPreference, fallback = false) => {
-    return this.preferences?.[preference] ?? fallback;
-  };
+  public getPreference = (preference: TeamPreference) =>
+    this.preferences?.[preference] ??
+    TeamPreferenceDefaults[preference] ??
+    false;
 
-  provisionFirstCollection = async (userId: string) => {
-    await this.sequelize!.transaction(async (transaction) => {
-      const collection = await Collection.create(
-        {
-          name: "Welcome",
-          description: `This collection is a quick guide to what ${env.APP_NAME} is all about. Feel free to delete this collection once your team is up to speed with the basics!`,
-          teamId: this.id,
-          createdById: userId,
-          sort: Collection.DEFAULT_SORT,
-          permission: CollectionPermission.ReadWrite,
-        },
-        {
-          transaction,
-        }
-      );
+  /**
+   * Updates the lastActiveAt timestamp to the current time.
+   *
+   * @param force Whether to force the update even if the last update was recent
+   * @returns A promise that resolves with the updated team
+   */
+  public updateActiveAt = async (force = false) => {
+    const fiveMinutesAgo = subMinutes(new Date(), 5);
 
-      // For the first collection we go ahead and create some intitial documents to get
-      // the team started. You can edit these in /server/onboarding/x.md
-      const onboardingDocs = [
-        "Integrations & API",
-        "Our Editor",
-        "Getting Started",
-        "What is Outline",
-      ];
+    // ensure this is updated only every few minutes otherwise
+    // we'll be constantly writing to the DB as API requests happen
+    if (!this.lastActiveAt || this.lastActiveAt < fiveMinutesAgo || force) {
+      this.lastActiveAt = new Date();
+    }
 
-      for (const title of onboardingDocs) {
-        const text = await readFile(
-          path.join(process.cwd(), "server", "onboarding", `${title}.md`),
-          "utf8"
-        );
-        const document = await Document.create(
-          {
-            version: 2,
-            isWelcome: true,
-            parentDocumentId: null,
-            collectionId: collection.id,
-            teamId: collection.teamId,
-            userId: collection.createdById,
-            lastModifiedById: collection.createdById,
-            createdById: collection.createdById,
-            title,
-            text,
-          },
-          { transaction }
-        );
-        await document.publish(collection.createdById, { transaction });
-      }
+    // Save only writes to the database if there are changes
+    return this.save({
+      hooks: false,
     });
   };
 
-  public collectionIds = async function (this: Team, paranoid = true) {
+  public collectionIds = async function (paranoid = true) {
     const models = await Collection.findAll({
       attributes: ["id"],
       where: {
@@ -307,16 +321,45 @@ class Team extends ParanoidModel {
 
   // hooks
 
+  @BeforeCreate
+  static async setPreferences(model: Team) {
+    // Set here rather than in TeamPreferenceDefaults as we only want to enable by default for new
+    // workspaces.
+    model.setPreference(TeamPreference.MembersCanInvite, true);
+
+    // Set last active at on creation.
+    model.lastActiveAt = new Date();
+
+    return model;
+  }
+
+  @BeforeUpdate
+  static async checkDomain(model: Team, options: SaveOptions) {
+    if (!model.domain) {
+      return model;
+    }
+
+    model.domain = model.domain.toLowerCase();
+
+    const count = await Share.count({
+      ...options,
+      where: {
+        domain: model.domain,
+      },
+    });
+
+    if (count > 0) {
+      throw ValidationError("Domain is already in use");
+    }
+
+    return model;
+  }
+
   @AfterUpdate
   static deletePreviousAvatar = async (model: Team) => {
-    if (
-      model.previous("avatarUrl") &&
-      model.previous("avatarUrl") !== model.avatarUrl
-    ) {
-      const attachmentIds = parseAttachmentIds(
-        model.previous("avatarUrl"),
-        true
-      );
+    const previousAvatarUrl = model.previous("avatarUrl");
+    if (previousAvatarUrl && previousAvatarUrl !== model.avatarUrl) {
+      const attachmentIds = parseAttachmentIds(previousAvatarUrl, true);
       if (!attachmentIds.length) {
         return;
       }

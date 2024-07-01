@@ -1,35 +1,38 @@
-import path from "path";
-import glob from "glob";
 import Koa, { BaseContext } from "koa";
 import bodyParser from "koa-body";
 import Router from "koa-router";
 import userAgent, { UserAgentContext } from "koa-useragent";
 import env from "@server/env";
 import { NotFoundError } from "@server/errors";
-import Logger from "@server/logging/Logger";
+import coalesceBody from "@server/middlewares/coaleseBody";
 import { AppState, AppContext } from "@server/types";
+import { Hook, PluginManager } from "@server/utils/PluginManager";
 import apiKeys from "./apiKeys";
 import attachments from "./attachments";
 import auth from "./auth";
 import authenticationProviders from "./authenticationProviders";
 import collections from "./collections";
-import utils from "./cron";
+import comments from "./comments/comments";
+import cron from "./cron";
 import developer from "./developer";
 import documents from "./documents";
 import events from "./events";
 import fileOperationsRoute from "./fileOperations";
 import groups from "./groups";
 import integrations from "./integrations";
-import apiWrapper from "./middlewares/apiWrapper";
+import apiResponse from "./middlewares/apiResponse";
+import apiTracer from "./middlewares/apiTracer";
 import editor from "./middlewares/editor";
-import notificationSettings from "./notificationSettings";
+import notifications from "./notifications";
 import pins from "./pins";
 import revisions from "./revisions";
 import searches from "./searches";
 import shares from "./shares";
 import stars from "./stars";
 import subscriptions from "./subscriptions";
-import team from "./team";
+import teams from "./teams";
+import urls from "./urls";
+import userMemberships from "./userMemberships";
 import users from "./users";
 import views from "./views";
 
@@ -41,23 +44,24 @@ api.use(
   bodyParser({
     multipart: true,
     formidable: {
+      maxFileSize: Math.max(
+        env.FILE_STORAGE_UPLOAD_MAX_SIZE,
+        env.FILE_STORAGE_IMPORT_MAX_SIZE
+      ),
       maxFieldsSize: 10 * 1024 * 1024,
     },
   })
 );
+api.use(coalesceBody());
 api.use<BaseContext, UserAgentContext>(userAgent);
-api.use(apiWrapper());
+api.use(apiTracer());
+api.use(apiResponse());
 api.use(editor());
 
-// register package API routes before others to allow for overrides
-glob
-  .sync("build/plugins/*/server/api/!(*.test).js")
-  .forEach((filePath: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pkg: Router = require(path.join(process.cwd(), filePath)).default;
-    router.use("/", pkg.routes());
-    Logger.debug("lifecycle", `Registered API routes for ${filePath}`);
-  });
+// Register plugin API routes before others to allow for overrides
+PluginManager.getHooks(Hook.API).forEach((hook) =>
+  router.use("/", hook.value.routes())
+);
 
 // routes
 router.use("/", auth.routes());
@@ -65,6 +69,7 @@ router.use("/", authenticationProviders.routes());
 router.use("/", events.routes());
 router.use("/", users.routes());
 router.use("/", collections.routes());
+router.use("/", comments.routes());
 router.use("/", documents.routes());
 router.use("/", pins.routes());
 router.use("/", revisions.routes());
@@ -74,15 +79,17 @@ router.use("/", searches.routes());
 router.use("/", shares.routes());
 router.use("/", stars.routes());
 router.use("/", subscriptions.routes());
-router.use("/", team.routes());
+router.use("/", teams.routes());
 router.use("/", integrations.routes());
-router.use("/", notificationSettings.routes());
+router.use("/", notifications.routes());
 router.use("/", attachments.routes());
-router.use("/", utils.routes());
+router.use("/", cron.routes());
 router.use("/", groups.routes());
 router.use("/", fileOperationsRoute.routes());
+router.use("/", urls.routes());
+router.use("/", userMemberships.routes());
 
-if (env.ENVIRONMENT === "development") {
+if (env.isDevelopment) {
   router.use("/", developer.routes());
 }
 

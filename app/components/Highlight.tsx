@@ -1,4 +1,4 @@
-import { escapeRegExp } from "lodash";
+import escapeRegExp from "lodash/escapeRegExp";
 import * as React from "react";
 import replace from "string-replace-to-array";
 import styled from "styled-components";
@@ -43,9 +43,9 @@ function Highlight({
 }
 
 export const Mark = styled.mark`
-  background: ${(props) => props.theme.searchHighlight};
-  border-radius: 2px;
-  padding: 0 2px;
+  color: inherit;
+  background: transparent;
+  font-weight: 600;
 `;
 
 export default Highlight;

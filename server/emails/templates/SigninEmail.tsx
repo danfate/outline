@@ -2,7 +2,7 @@ import * as React from "react";
 import { Client } from "@shared/types";
 import env from "@server/env";
 import logger from "@server/logging/Logger";
-import BaseEmail from "./BaseEmail";
+import BaseEmail, { EmailProps } from "./BaseEmail";
 import Body from "./components/Body";
 import Button from "./components/Button";
 import EmailTemplate from "./components/EmailLayout";
@@ -11,8 +11,7 @@ import Footer from "./components/Footer";
 import Header from "./components/Header";
 import Heading from "./components/Heading";
 
-type Props = {
-  to: string;
+type Props = EmailProps & {
   token: string;
   teamUrl: string;
   client: Client;
@@ -21,7 +20,7 @@ type Props = {
 /**
  * Email sent to a user when they request a magic sign-in link.
  */
-export default class SigninEmail extends BaseEmail<Props> {
+export default class SigninEmail extends BaseEmail<Props, Record<string, any>> {
   protected subject() {
     return "Magic signin link";
   }
@@ -42,12 +41,15 @@ signin page at: ${teamUrl}
   }
 
   protected render({ token, client, teamUrl }: Props) {
-    if (env.ENVIRONMENT === "development") {
+    if (env.isDevelopment) {
       logger.debug("email", `Sign-In link: ${this.signinLink(token, client)}`);
     }
 
     return (
-      <EmailTemplate>
+      <EmailTemplate
+        previewText={this.preview()}
+        goToAction={{ url: this.signinLink(token, client), name: "Sign In" }}
+      >
         <Header />
 
         <Body>

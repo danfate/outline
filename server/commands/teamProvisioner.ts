@@ -1,13 +1,13 @@
 import teamCreator from "@server/commands/teamCreator";
-import { sequelize } from "@server/database/sequelize";
 import env from "@server/env";
 import {
   DomainNotAllowedError,
   InvalidAuthenticationError,
-  MaximumTeamsError,
+  TeamPendingDeletionError,
 } from "@server/errors";
 import { traceFunction } from "@server/logging/tracing";
 import { Team, AuthenticationProvider } from "@server/models";
+import { sequelize } from "@server/storage/database";
 
 type TeamProvisionerResult = {
   team: Team;
@@ -58,6 +58,7 @@ async function teamProvisioner({
         model: Team,
         as: "team",
         required: true,
+        paranoid: false,
       },
     ],
   });
@@ -65,6 +66,10 @@ async function teamProvisioner({
   // This authentication provider already exists which means we have a team and
   // there is nothing left to do but return the existing credentials
   if (authP) {
+    if (authP.team.deletedAt) {
+      throw TeamPendingDeletionError();
+    }
+
     return {
       authenticationProvider: authP,
       team: authP.team,
@@ -72,7 +77,7 @@ async function teamProvisioner({
     };
   } else if (teamId) {
     // The user is attempting to log into a team with an unfamiliar SSO provider
-    if (env.isCloudHosted()) {
+    if (env.isCloudHosted) {
       throw InvalidAuthenticationError();
     }
 
@@ -101,13 +106,13 @@ async function teamProvisioner({
     }
 
     if (team) {
-      throw MaximumTeamsError();
+      throw InvalidAuthenticationError();
     }
   }
 
   // We cannot find an existing team, so we create a new one
-  const team = await sequelize.transaction((transaction) => {
-    return teamCreator({
+  const team = await sequelize.transaction((transaction) =>
+    teamCreator({
       name,
       domain,
       subdomain,
@@ -115,8 +120,8 @@ async function teamProvisioner({
       authenticationProviders: [authenticationProvider],
       ip,
       transaction,
-    });
-  });
+    })
+  );
 
   return {
     team,

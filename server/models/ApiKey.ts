@@ -1,4 +1,6 @@
+import { subMinutes } from "date-fns";
 import randomstring from "randomstring";
+import { InferAttributes, InferCreationAttributes } from "sequelize";
 import {
   Column,
   Table,
@@ -6,7 +8,9 @@ import {
   BeforeValidate,
   BelongsTo,
   ForeignKey,
+  IsDate,
 } from "sequelize-typescript";
+import { ApiKeyValidation } from "@shared/validations";
 import User from "./User";
 import ParanoidModel from "./base/ParanoidModel";
 import Fix from "./decorators/Fix";
@@ -14,13 +18,16 @@ import Length from "./validators/Length";
 
 @Table({ tableName: "apiKeys", modelName: "apiKey" })
 @Fix
-class ApiKey extends ParanoidModel {
+class ApiKey extends ParanoidModel<
+  InferAttributes<ApiKey>,
+  Partial<InferCreationAttributes<ApiKey>>
+> {
   static prefix = "ol_api_";
 
   @Length({
-    min: 3,
-    max: 255,
-    msg: "Name must be between 3 and 255 characters",
+    min: ApiKeyValidation.minNameLength,
+    max: ApiKeyValidation.maxNameLength,
+    msg: `Name must be between ${ApiKeyValidation.minNameLength} and ${ApiKeyValidation.maxNameLength} characters`,
   })
   @Column
   name: string;
@@ -28,6 +35,14 @@ class ApiKey extends ParanoidModel {
   @Unique
   @Column
   secret: string;
+
+  @IsDate
+  @Column
+  expiresAt: Date | null;
+
+  @IsDate
+  @Column
+  lastActiveAt: Date | null;
 
   // hooks
 
@@ -57,6 +72,18 @@ class ApiKey extends ParanoidModel {
   @ForeignKey(() => User)
   @Column
   userId: string;
+
+  updateActiveAt = async () => {
+    const fiveMinutesAgo = subMinutes(new Date(), 5);
+
+    // ensure this is updated only every few minutes otherwise
+    // we'll be constantly writing to the DB as API requests happen
+    if (!this.lastActiveAt || this.lastActiveAt < fiveMinutesAgo) {
+      this.lastActiveAt = new Date();
+    }
+
+    return this.save();
+  };
 }
 
 export default ApiKey;

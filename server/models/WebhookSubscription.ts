@@ -1,6 +1,10 @@
 import crypto from "crypto";
-import { bool } from "aws-sdk/clients/signer";
-import { isEmpty } from "lodash";
+import isEmpty from "lodash/isEmpty";
+import {
+  InferAttributes,
+  InferCreationAttributes,
+  InstanceUpdateOptions,
+} from "sequelize";
 import {
   Column,
   Table,
@@ -13,7 +17,6 @@ import {
   DefaultScope,
   AllowNull,
 } from "sequelize-typescript";
-import { SaveOptions } from "sequelize/types";
 import { WebhookSubscriptionValidation } from "@shared/validations";
 import { ValidationError } from "@server/errors";
 import { Event } from "@server/types";
@@ -40,7 +43,10 @@ import Length from "./validators/Length";
   modelName: "webhook_subscription",
 })
 @Fix
-class WebhookSubscription extends ParanoidModel {
+class WebhookSubscription extends ParanoidModel<
+  InferAttributes<WebhookSubscription>,
+  Partial<InferCreationAttributes<WebhookSubscription>>
+> {
   @NotEmpty
   @Length({ max: 255, msg: "Webhook name be less than 255 characters" })
   @Column
@@ -111,7 +117,9 @@ class WebhookSubscription extends ParanoidModel {
    * @param options Save options
    * @returns Promise<WebhookSubscription>
    */
-  public async disable(options?: SaveOptions<WebhookSubscription>) {
+  public async disable(
+    options?: InstanceUpdateOptions<InferAttributes<WebhookSubscription>>
+  ) {
     return this.update({ enabled: false }, options);
   }
 
@@ -122,7 +130,7 @@ class WebhookSubscription extends ParanoidModel {
    * @param event Event to ceck
    * @returns true if event is valid
    */
-  public validForEvent = (event: Event): bool => {
+  public validForEvent = (event: Event): boolean => {
     if (this.events.length === 1 && this.events[0] === "*") {
       return true;
     }

@@ -1,19 +1,21 @@
+import includes from "lodash/includes";
 import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { NavigationNode } from "@shared/types";
 import Collection from "~/models/Collection";
 import Document from "~/models/Document";
+import Icon from "~/components/Icon";
 import useStores from "~/hooks/useStores";
 import { sharedDocumentPath } from "~/utils/routeHelpers";
-import Disclosure from "./Disclosure";
+import { descendants } from "~/utils/tree";
 import SidebarLink from "./SidebarLink";
 
 type Props = {
   node: NavigationNode;
   collection?: Collection;
-  activeDocumentId: string | undefined;
-  activeDocument: Document | undefined;
+  activeDocumentId?: string;
+  activeDocument?: Document;
   isDraft?: boolean;
   depth: number;
   index: number;
@@ -41,10 +43,20 @@ function DocumentLink(
   const hasChildDocuments =
     !!node.children.length || activeDocument?.parentDocumentId === node.id;
   const document = documents.get(node.id);
-
-  const showChildren = React.useMemo(() => {
-    return !!hasChildDocuments;
-  }, [hasChildDocuments]);
+  const showChildren = React.useMemo(
+    () =>
+      !!(
+        hasChildDocuments &&
+        ((activeDocumentId &&
+          includes(
+            descendants(node).map((n) => n.id),
+            activeDocumentId
+          )) ||
+          isActiveDocument ||
+          depth <= 1)
+      ),
+    [hasChildDocuments, activeDocumentId, isActiveDocument, depth, node]
+  );
 
   const [expanded, setExpanded] = React.useState(showChildren);
 
@@ -98,22 +110,16 @@ function DocumentLink(
             title: node.title,
           },
         }}
-        label={
-          <>
-            {hasChildDocuments && depth !== 0 && (
-              <Disclosure expanded={expanded} onClick={handleDisclosureClick} />
-            )}
-            {title}
-          </>
-        }
+        expanded={hasChildDocuments && depth !== 0 ? expanded : undefined}
+        onDisclosureClick={handleDisclosureClick}
+        icon={node.icon && <Icon value={node.icon} color={node.color} />}
+        label={title}
         depth={depth}
         exact={false}
         scrollIntoViewIfNeeded={!document?.isStarred}
         isDraft={isDraft}
         ref={ref}
-        isActive={() => {
-          return !!isActiveDocument;
-        }}
+        isActive={() => !!isActiveDocument}
       />
       {expanded &&
         nodeChildren.map((childNode, index) => (

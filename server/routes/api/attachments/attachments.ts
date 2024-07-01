@@ -5,14 +5,17 @@ import { bytesToHumanReadable } from "@shared/utils/files";
 import { AttachmentValidation } from "@shared/validations";
 import { AuthorizationError, ValidationError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
+import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
 import { Attachment, Document, Event } from "@server/models";
 import AttachmentHelper from "@server/models/helpers/AttachmentHelper";
 import { authorize } from "@server/policies";
 import { presentAttachment } from "@server/presenters";
+import FileStorage from "@server/storage/files";
+import BaseStorage from "@server/storage/files/BaseStorage";
 import { APIContext } from "@server/types";
-import { getPresignedPost, publicS3Endpoint } from "@server/utils/s3";
+import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import { assertIn } from "@server/validation";
 import * as T from "./schema";
 
@@ -20,6 +23,7 @@ const router = new Router();
 
 router.post(
   "attachments.create",
+  rateLimiter(RateLimiterStrategy.TenPerMinute),
   auth(),
   validate(T.AttachmentsCreateSchema),
   transaction(),
@@ -34,6 +38,7 @@ router.post(
     } else if (preset === AttachmentPreset.DocumentAttachment && documentId) {
       const document = await Document.findByPk(documentId, {
         userId: user.id,
+        transaction,
       });
       authorize(user, "update", document);
     } else {
@@ -73,21 +78,19 @@ router.post(
       },
       { transaction }
     );
-    await Event.create(
+    await Event.createFromContext(
+      ctx,
       {
         name: "attachments.create",
         data: {
           name,
         },
         modelId,
-        teamId: user.teamId,
-        actorId: user.id,
-        ip: ctx.request.ip,
       },
       { transaction }
     );
 
-    const presignedPost = await getPresignedPost(
+    const presignedPost = await FileStorage.getPresignedPost(
       key,
       acl,
       maxUploadSize,
@@ -96,7 +99,7 @@ router.post(
 
     ctx.body = {
       data: {
-        uploadUrl: publicS3Endpoint(),
+        uploadUrl: FileStorage.getUploadUrl(),
         form: {
           "Cache-Control": "max-age=31557600",
           "Content-Type": contentType,
@@ -136,11 +139,8 @@ router.post(
 
     authorize(user, "delete", attachment);
     await attachment.destroy();
-    await Event.create({
+    await Event.createFromContext(ctx, {
       name: "attachments.delete",
-      teamId: user.teamId,
-      actorId: user.id,
-      ip: ctx.request.ip,
     });
 
     ctx.body = {
@@ -168,8 +168,13 @@ const handleAttachmentsRedirect = async (
   });
 
   if (attachment.isPrivate) {
+    ctx.set(
+      "Cache-Control",
+      `max-age=${BaseStorage.defaultSignedUrlExpires}, immutable`
+    );
     ctx.redirect(await attachment.signedUrl);
   } else {
+    ctx.set("Cache-Control", `max-age=604800, immutable`);
     ctx.redirect(attachment.canonicalUrl);
   }
 };

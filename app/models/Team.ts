@@ -1,10 +1,13 @@
 import { computed, observable } from "mobx";
-import { TeamPreference, TeamPreferences } from "@shared/types";
+import { TeamPreferenceDefaults } from "@shared/constants";
+import { TeamPreference, TeamPreferences, UserRole } from "@shared/types";
 import { stringToColor } from "@shared/utils/color";
-import BaseModel from "./BaseModel";
+import Model from "./base/Model";
 import Field from "./decorators/Field";
 
-class Team extends BaseModel {
+class Team extends Model {
+  static modelName = "Team";
+
   @Field
   @observable
   id: string;
@@ -27,7 +30,7 @@ class Team extends BaseModel {
 
   @Field
   @observable
-  collaborativeEditing: boolean;
+  commenting: boolean;
 
   @Field
   @observable
@@ -43,6 +46,10 @@ class Team extends BaseModel {
 
   @Field
   @observable
+  memberTeamCreate: boolean;
+
+  @Field
+  @observable
   guestSignin: boolean;
 
   @Field
@@ -51,14 +58,16 @@ class Team extends BaseModel {
 
   @Field
   @observable
-  defaultUserRole: string;
+  defaultUserRole: UserRole;
 
   @Field
   @observable
   preferences: TeamPreferences | null;
 
+  @observable
   domain: string | null | undefined;
 
+  @observable
   url: string;
 
   @Field
@@ -77,33 +86,25 @@ class Team extends BaseModel {
 
   @computed
   get initial(): string {
-    return this.name ? this.name[0] : "?";
+    return (this.name ? this.name[0] : "?").toUpperCase();
   }
 
   /**
-   * Returns whether this team is using a separate editing mode behind an "Edit"
-   * button rather than seamless always-editing.
+   * Returns the value of the provided preference.
    *
-   * @returns True if editing mode is seamless (no button)
+   * @param preference The team preference to retrieve
+   * @returns The preference value if set, else the default value
    */
-  @computed
-  get seamlessEditing(): boolean {
+  getPreference<T extends keyof TeamPreferences>(
+    key: T,
+    defaultValue?: TeamPreferences[T]
+  ): TeamPreferences[T] | false {
     return (
-      this.collaborativeEditing &&
-      this.getPreference(TeamPreference.SeamlessEdit, true)
+      this.preferences?.[key] ??
+      TeamPreferenceDefaults[key] ??
+      defaultValue ??
+      false
     );
-  }
-
-  /**
-   * Get the value for a specific preference key, or return the fallback if
-   * none is set.
-   *
-   * @param key The TeamPreference key to retrieve
-   * @param fallback An optional fallback value, defaults to false.
-   * @returns The value
-   */
-  getPreference(key: TeamPreference, fallback = false): boolean {
-    return this.preferences?.[key] ?? fallback;
   }
 
   /**

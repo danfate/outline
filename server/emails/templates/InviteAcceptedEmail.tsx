@@ -1,7 +1,8 @@
 import * as React from "react";
+import { NotificationEventType } from "@shared/types";
 import env from "@server/env";
-import { NotificationSetting } from "@server/models";
-import BaseEmail from "./BaseEmail";
+import NotificationSettingsHelper from "@server/models/helpers/NotificationSettingsHelper";
+import BaseEmail, { EmailProps } from "./BaseEmail";
 import Body from "./components/Body";
 import Button from "./components/Button";
 import EmailTemplate from "./components/EmailLayout";
@@ -10,33 +11,36 @@ import Footer from "./components/Footer";
 import Header from "./components/Header";
 import Heading from "./components/Heading";
 
-type Props = {
-  to: string;
+type InputProps = EmailProps & {
   inviterId: string;
   invitedName: string;
   teamUrl: string;
 };
 
-type BeforeSendProps = {
+type BeforeSend = {
   unsubscribeUrl: string;
 };
+
+type Props = InputProps & BeforeSend;
 
 /**
  * Email sent to a user when someone they invited successfully signs up.
  */
-export default class InviteAcceptedEmail extends BaseEmail<Props> {
-  protected async beforeSend({ inviterId }: Props) {
-    const notificationSetting = await NotificationSetting.findOne({
-      where: {
-        userId: inviterId,
-        event: "emails.invite_accepted",
-      },
-    });
-    if (!notificationSetting) {
-      return false;
-    }
+export default class InviteAcceptedEmail extends BaseEmail<
+  InputProps,
+  BeforeSend
+> {
+  protected async beforeSend(props: InputProps) {
+    return {
+      unsubscribeUrl: this.unsubscribeUrl(props),
+    };
+  }
 
-    return { unsubscribeUrl: notificationSetting.unsubscribeUrl };
+  protected unsubscribeUrl({ inviterId }: InputProps) {
+    return NotificationSettingsHelper.unsubscribeUrl(
+      inviterId,
+      NotificationEventType.InviteAccepted
+    );
   }
 
   protected subject({ invitedName }: Props) {
@@ -55,13 +59,9 @@ Open ${env.APP_NAME}: ${teamUrl}
 `;
   }
 
-  protected render({
-    invitedName,
-    teamUrl,
-    unsubscribeUrl,
-  }: Props & BeforeSendProps) {
+  protected render({ invitedName, teamUrl, unsubscribeUrl }: Props) {
     return (
-      <EmailTemplate>
+      <EmailTemplate previewText={this.preview({ invitedName } as Props)}>
         <Header />
 
         <Body>

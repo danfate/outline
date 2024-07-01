@@ -1,10 +1,10 @@
-import { sortBy, filter } from "lodash";
+import orderBy from "lodash/orderBy";
 import { computed } from "mobx";
 import Event from "~/models/Event";
-import BaseStore, { RPCAction } from "./BaseStore";
 import RootStore from "./RootStore";
+import Store, { RPCAction } from "./base/Store";
 
-export default class EventsStore extends BaseStore<Event> {
+export default class EventsStore extends Store<Event> {
   actions = [RPCAction.List];
 
   constructor(rootStore: RootStore) {
@@ -13,10 +13,6 @@ export default class EventsStore extends BaseStore<Event> {
 
   @computed
   get orderedData(): Event[] {
-    return sortBy(Array.from(this.data.values()), "createdAt").reverse();
-  }
-
-  inDocument(documentId: string): Event[] {
-    return filter(this.orderedData, (event) => event.documentId === documentId);
+    return orderBy(Array.from(this.data.values()), "createdAt", "desc");
   }
 }

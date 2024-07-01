@@ -1,4 +1,4 @@
-import { escapeRegExp } from "lodash";
+import escapeRegExp from "lodash/escapeRegExp";
 import env from "../env";
 import { parseDomain } from "./domains";
 
@@ -9,15 +9,11 @@ import { parseDomain } from "./domains";
  * @returns The path with the CDN url prepended.
  */
 export function cdnPath(path: string): string {
-  return `${env.CDN_URL}${path}`;
+  return `${env.CDN_URL ?? ""}${path}`;
 }
 
 /**
  * Returns true if the given string is a link to inside the application.
- *
- * Important Note: If this is called server-side, it will always return false.
- * The reason this is in a shared util is because it's used in an editor plugin
- * which is also in the shared code
  *
  * @param url The url to check.
  * @returns True if the url is internal, false otherwise.
@@ -36,10 +32,31 @@ export function isInternalUrl(href: string) {
   const outline =
     typeof window !== "undefined"
       ? parseDomain(window.location.href)
-      : undefined;
-
+      : parseDomain(env.URL);
   const domain = parseDomain(href);
-  return outline?.host === domain.host;
+
+  return (
+    outline.host === domain.host ||
+    (typeof window !== "undefined" && window.location.hostname === domain.host)
+  );
+}
+
+/**
+ * Returns true if the given string is a link to a documement.
+ *
+ * @param options Parsing options.
+ * @returns True if a document, false otherwise.
+ */
+export function isDocumentUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return (
+      isInternalUrl(url) &&
+      (parsed.pathname.startsWith("/doc/") || parsed.pathname.startsWith("/d/"))
+    );
+  } catch (err) {
+    return false;
+  }
 }
 
 /**
@@ -91,6 +108,17 @@ export function isExternalUrl(url: string) {
 }
 
 /**
+ * Returns match if the given string is a base64 encoded url.
+ *
+ * @param url The url to check.
+ * @returns A RegExp match if the url is base64, false otherwise.
+ */
+export function isBase64Url(url: string) {
+  const match = url.match(/^data:([a-z]+\/[^;]+);base64,(.*)/i);
+  return match ? match : false;
+}
+
+/**
  * For use in the editor, this function will ensure that a url is
  * potentially valid, and filter out unsupported and malicious protocols.
  *
@@ -124,4 +152,14 @@ export function urlRegex(url: string | null | undefined): RegExp | undefined {
   const urlObj = new URL(sanitizeUrl(url) as string);
 
   return new RegExp(escapeRegExp(`${urlObj.protocol}//${urlObj.host}`));
+}
+
+/**
+ * Extracts LIKELY urls from the given text, note this does not validate the urls.
+ *
+ * @param text The text to extract urls from.
+ * @returns An array of likely urls.
+ */
+export function getUrls(text: string) {
+  return Array.from(text.match(/(?:https?):\/\/[^\s]+/gi) || []);
 }

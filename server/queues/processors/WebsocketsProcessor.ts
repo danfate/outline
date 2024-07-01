@@ -2,18 +2,23 @@ import { subHours } from "date-fns";
 import { Op } from "sequelize";
 import { Server } from "socket.io";
 import {
+  Comment,
   Document,
   Collection,
   FileOperation,
   Group,
-  CollectionGroup,
+  GroupPermission,
   GroupUser,
   Pin,
   Star,
   Team,
   Subscription,
+  Notification,
+  UserMembership,
+  User,
 } from "@server/models";
 import {
+  presentComment,
   presentCollection,
   presentDocument,
   presentFileOperation,
@@ -22,13 +27,17 @@ import {
   presentStar,
   presentSubscription,
   presentTeam,
+  presentMembership,
+  presentUser,
 } from "@server/presenters";
+import presentNotification from "@server/presenters/notification";
 import { Event } from "../../types";
 
 export default class WebsocketsProcessor {
-  async perform(event: Event, socketio: Server) {
+  public async perform(event: Event, socketio: Server) {
     switch (event.name) {
       case "documents.publish":
+      case "documents.unpublish":
       case "documents.restore":
       case "documents.unarchive": {
         const document = await Document.findByPk(event.documentId, {
@@ -38,10 +47,8 @@ export default class WebsocketsProcessor {
           return;
         }
 
-        const channel = document.publishedAt
-          ? `collection-${document.collectionId}`
-          : `user-${event.actorId}`;
-        return socketio.to(channel).emit("entities", {
+        const channels = await this.getDocumentEventChannels(event, document);
+        return socketio.to(channels).emit("entities", {
           event: event.name,
           documentIds: [
             {
@@ -74,12 +81,9 @@ export default class WebsocketsProcessor {
         if (!document) {
           return;
         }
-        const channel = document.publishedAt
-          ? `collection-${document.collectionId}`
-          : `user-${event.actorId}`;
-
-        const data = await presentDocument(document);
-        return socketio.to(channel).emit(event.name, data);
+        const data = await presentDocument(undefined, document);
+        const channels = await this.getDocumentEventChannels(event, document);
+        return socketio.to(channels).emit(event.name, data);
       }
 
       case "documents.create": {
@@ -87,7 +91,9 @@ export default class WebsocketsProcessor {
         if (!document) {
           return;
         }
-        return socketio.to(`user-${event.actorId}`).emit("entities", {
+
+        const channels = await this.getDocumentEventChannels(event, document);
+        return socketio.to(channels).emit("entities", {
           event: event.name,
           documentIds: [
             {
@@ -134,6 +140,35 @@ export default class WebsocketsProcessor {
         return;
       }
 
+      case "documents.add_user": {
+        const [document, membership] = await Promise.all([
+          Document.findByPk(event.documentId),
+          UserMembership.findByPk(event.modelId),
+        ]);
+        if (!document || !membership) {
+          return;
+        }
+
+        const channels = await this.getDocumentEventChannels(event, document);
+        socketio.to(channels).emit(event.name, presentMembership(membership));
+        return;
+      }
+
+      case "documents.remove_user": {
+        const document = await Document.findByPk(event.documentId);
+        if (!document) {
+          return;
+        }
+
+        const channels = await this.getDocumentEventChannels(event, document);
+        socketio.to([...channels, `user-${event.userId}`]).emit(event.name, {
+          id: event.modelId,
+          userId: event.userId,
+          documentId: event.documentId,
+        });
+        return;
+      }
+
       case "collections.create": {
         const collection = await Collection.findByPk(event.collectionId, {
           paranoid: false,
@@ -147,7 +182,7 @@ export default class WebsocketsProcessor {
               ? `team-${collection.teamId}`
               : `user-${collection.createdById}`
           )
-          .emit(event.name, presentCollection(collection));
+          .emit(event.name, await presentCollection(undefined, collection));
 
         return socketio
           .to(
@@ -168,20 +203,30 @@ export default class WebsocketsProcessor {
         if (!collection) {
           return;
         }
-        return socketio.to(`team-${collection.teamId}`).emit("entities", {
-          event: event.name,
-          collectionIds: [
-            {
-              id: collection.id,
-              updatedAt: collection.updatedAt,
-            },
-          ],
-        });
+
+        return socketio
+          .to(
+            collection.permission
+              ? `collection-${event.collectionId}`
+              : `team-${collection.teamId}`
+          )
+          .emit(event.name, await presentCollection(undefined, collection));
       }
 
       case "collections.delete": {
+        const collection = await Collection.findByPk(event.collectionId, {
+          paranoid: false,
+        });
+        if (!collection) {
+          return;
+        }
+
         return socketio
-          .to(`collection-${event.collectionId}`)
+          .to(
+            collection.permission
+              ? `collection-${event.collectionId}`
+              : `team-${collection.teamId}`
+          )
           .emit(event.name, {
             modelId: event.collectionId,
           });
@@ -355,6 +400,62 @@ export default class WebsocketsProcessor {
           });
       }
 
+      case "comments.create":
+      case "comments.update": {
+        const comment = await Comment.findByPk(event.modelId, {
+          include: [
+            {
+              model: Document.scope(["withoutState", "withDrafts"]),
+              as: "document",
+              required: true,
+            },
+          ],
+        });
+        if (!comment) {
+          return;
+        }
+
+        const channels = await this.getDocumentEventChannels(
+          event,
+          comment.document
+        );
+        return socketio.to(channels).emit(event.name, presentComment(comment));
+      }
+
+      case "comments.delete": {
+        const comment = await Comment.findByPk(event.modelId, {
+          include: [
+            {
+              model: Document.scope(["withoutState", "withDrafts"]),
+              as: "document",
+              required: true,
+            },
+          ],
+        });
+        if (!comment) {
+          return;
+        }
+
+        const channels = await this.getDocumentEventChannels(
+          event,
+          comment.document
+        );
+        return socketio.to(channels).emit(event.name, {
+          modelId: event.modelId,
+        });
+      }
+
+      case "notifications.create":
+      case "notifications.update": {
+        const notification = await Notification.findByPk(event.modelId);
+        if (!notification) {
+          return;
+        }
+
+        const data = await presentNotification(undefined, notification);
+        return socketio.to(`user-${event.userId}`).emit(event.name, data);
+      }
+
       case "stars.create":
       case "stars.update": {
         const star = await Star.findByPk(event.modelId);
@@ -387,7 +488,9 @@ export default class WebsocketsProcessor {
 
       case "groups.add_user": {
         // do an add user for every collection that the group is a part of
-        const collectionGroupMemberships = await CollectionGroup.findAll({
+        const collectionGroupMemberships = await GroupPermission.scope(
+          "withCollection"
+        ).findAll({
           where: {
             groupId: event.modelId,
           },
@@ -420,7 +523,9 @@ export default class WebsocketsProcessor {
       }
 
       case "groups.remove_user": {
-        const collectionGroupMemberships = await CollectionGroup.findAll({
+        const collectionGroupMemberships = await GroupPermission.scope(
+          "withCollection"
+        ).findAll({
           where: {
             groupId: event.modelId,
           },
@@ -429,9 +534,11 @@ export default class WebsocketsProcessor {
         for (const collectionGroup of collectionGroupMemberships) {
           // if the user has any memberships remaining on the collection
           // we need to emit add instead of remove
-          const collection = await Collection.scope({
-            method: ["withMembership", event.userId],
-          }).findByPk(collectionGroup.collectionId);
+          const collection = collectionGroup.collectionId
+            ? await Collection.scope({
+                method: ["withMembership", event.userId],
+              }).findByPk(collectionGroup.collectionId)
+            : null;
 
           if (!collection) {
             continue;
@@ -487,7 +594,9 @@ export default class WebsocketsProcessor {
             },
           },
         });
-        const collectionGroupMemberships = await CollectionGroup.findAll({
+        const collectionGroupMemberships = await GroupPermission.scope(
+          "withCollection"
+        ).findAll({
           paranoid: false,
           where: {
             groupId: event.modelId,
@@ -498,9 +607,9 @@ export default class WebsocketsProcessor {
         });
 
         for (const collectionGroup of collectionGroupMemberships) {
-          const membershipUserIds = await Collection.membershipUserIds(
-            collectionGroup.collectionId
-          );
+          const membershipUserIds = collectionGroup.collectionId
+            ? await Collection.membershipUserIds(collectionGroup.collectionId)
+            : [];
 
           for (const groupUser of groupUsers) {
             if (membershipUserIds.includes(groupUser.userId)) {
@@ -560,8 +669,60 @@ export default class WebsocketsProcessor {
           .emit(event.name, presentTeam(team));
       }
 
+      case "users.update": {
+        const user = await User.findByPk(event.userId);
+        if (!user) {
+          return;
+        }
+        socketio
+          .to(`user-${event.userId}`)
+          .emit(event.name, presentUser(user, { includeDetails: true }));
+
+        socketio.to(`team-${user.teamId}`).emit(event.name, presentUser(user));
+        return;
+      }
+
+      case "users.demote": {
+        return socketio
+          .to(`user-${event.userId}`)
+          .emit(event.name, { id: event.userId });
+      }
+
+      case "userMemberships.update": {
+        return socketio
+          .to(`user-${event.userId}`)
+          .emit(event.name, { id: event.modelId, ...event.data });
+      }
+
       default:
         return;
     }
+  }
+
+  private async getDocumentEventChannels(
+    event: Event,
+    document: Document
+  ): Promise<string[]> {
+    const channels = [];
+
+    if (event.actorId) {
+      channels.push(`user-${event.actorId}`);
+    }
+
+    if (document.publishedAt) {
+      channels.push(`collection-${document.collectionId}`);
+    }
+
+    const memberships = await UserMembership.findAll({
+      where: {
+        documentId: document.id,
+      },
+    });
+
+    for (const membership of memberships) {
+      channels.push(`user-${membership.userId}`);
+    }
+
+    return channels;
   }
 }

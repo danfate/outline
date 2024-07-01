@@ -1,128 +1,303 @@
 /* eslint-disable no-irregular-whitespace */
-import { darken, lighten, transparentize } from "polished";
-import styled, { DefaultTheme } from "styled-components";
-import depths from "../../styles/depths";
+import { lighten, transparentize } from "polished";
+import styled, { DefaultTheme, css, keyframes } from "styled-components";
+import { EditorStyleHelper } from "../styles/EditorStyleHelper";
+import { videoStyle } from "./Video";
 
 export type Props = {
   rtl: boolean;
   readOnly?: boolean;
   readOnlyWriteCheckboxes?: boolean;
+  staticHTML?: boolean;
+  editorStyle?: React.CSSProperties;
   grow?: boolean;
   theme: DefaultTheme;
 };
 
-const mathStyle = (props: Props) => `
-/* Based on https://github.com/benrbray/prosemirror-math/blob/master/style/math.css */
-
-.math-node {
-  min-width: 1em;
-  min-height: 1em;
-  font-size: 0.95em;
-  font-family: ${props.theme.fontFamilyMono};
-  cursor: auto;
-}
-
-.math-node.empty-math .math-render::before {
-  content: "(empty math)";
-  color: ${props.theme.brand.red};
-}
-
-.math-node .math-render.parse-error::before {
-  content: "(math error)";
-  color: ${props.theme.brand.red};
-  cursor: help;
-}
-
-.math-node.ProseMirror-selectednode {
-  outline: none;
-}
-
-.math-node .math-src {
-  display: none;
-  color: ${props.theme.codeStatement};
-  tab-size: 4;
-}
-
-.math-node.ProseMirror-selectednode .math-src {
-  display: inline;
-}
-
-.math-node.ProseMirror-selectednode .math-render {
-  display: none;
-}
-
-math-inline {
-  display: inline; white-space: nowrap;
-
-}
-
-math-inline .math-render { 
-  display: inline-block;
-  font-size: 0.85em;
-}
-
-math-inline .math-src .ProseMirror {
-  display: inline;
-  border-radius: 4px;
-  border: 1px solid ${props.theme.codeBorder};
-  padding: 3px 4px;
-  margin: 0px 3px;
-  font-family: ${props.theme.fontFamilyMono};
-  font-size: 80%;
-}
-
-math-block {
-  display: block;
-}
-
-math-block .math-render {
-  display: block;
-}
-
-math-block.ProseMirror-selectednode {
-  border-radius: 4px;
-  border: 1px solid ${props.theme.codeBorder};
-  background: ${props.theme.codeBackground};
-  padding: 0.75em 1em;
-  font-family: ${props.theme.fontFamilyMono};
-  font-size: 80%;
-}
-
-math-block .math-src .ProseMirror {
-  width: 100%;
-  display: block;
-}
-
-math-block .katex-display {
-  margin: 0;
-}
-
-p::selection, p > *::selection {
-  background-color: #c0c0c0;
-}
-
-.katex-html *::selection {
-  background-color: none !important;
-}
-
-.math-node.math-select .math-render {
-  background-color: #c0c0c0ff;
-}
-
-math-inline.math-select .math-render {
-  padding-top: 2px;
-}
+export const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
 `;
 
-const style = (props: Props) => `
+export const pulse = keyframes`
+  0% { box-shadow: 0 0 0 1px rgba(255, 213, 0, 0.75) }
+  50% { box-shadow: 0 0 0 4px rgba(255, 213, 0, 0.75) }
+  100% { box-shadow: 0 0 0 1px rgba(255, 213, 0, 0.75) }
+`;
+
+const codeMarkCursor = () => css`
+  /* Based on https://github.com/curvenote/editor/blob/main/packages/prosemirror-codemark/src/codemark.css */
+  .no-cursor {
+    caret-color: transparent;
+  }
+
+  div:focus .fake-cursor,
+  span:focus .fake-cursor {
+    margin-right: -1px;
+    border-left-width: 1px;
+    border-left-style: solid;
+    animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+    position: relative;
+    z-index: 1;
+  }
+`;
+
+const mathStyle = (props: Props) => css`
+  /* Based on https://github.com/benrbray/prosemirror-math/blob/master/style/math.css */
+
+  .math-node {
+    min-width: 1em;
+    min-height: 1em;
+    font-size: 0.95em;
+    font-family: ${props.theme.fontFamilyMono};
+    cursor: auto;
+  }
+
+  .math-node.empty-math .math-render::before {
+    content: "Empty math";
+    color: ${props.theme.placeholder};
+    font-size: 14px;
+  }
+
+  .math-node .math-render.parse-error::before {
+    content: "(math error)";
+    color: ${props.theme.brand.red};
+    cursor: help;
+  }
+
+  .math-node.ProseMirror-selectednode {
+    outline: none;
+  }
+
+  .math-node .math-src {
+    display: none;
+    color: ${props.theme.codeStatement};
+    tab-size: 4;
+  }
+
+  .math-node.ProseMirror-selectednode .math-src {
+    display: inline;
+  }
+
+  .math-node.ProseMirror-selectednode .math-render {
+    display: none;
+  }
+
+  math-inline {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  math-inline .math-render {
+    display: inline-block;
+    font-size: 0.85em;
+  }
+
+  math-inline .math-src .ProseMirror {
+    display: inline;
+    margin: 0px 3px;
+  }
+
+  math-block {
+    display: block;
+  }
+
+  math-block .math-render {
+    display: block;
+  }
+
+  math-block.ProseMirror-selectednode,
+  math-block.empty-math {
+    border-radius: 4px;
+    border: 1px solid ${props.theme.codeBorder};
+    background: ${props.theme.codeBackground};
+    padding: 0.75em 1em;
+    font-family: ${props.theme.fontFamilyMono};
+    font-size: 80%;
+  }
+
+  math-block.empty-math {
+    text-align: center;
+  }
+
+  math-block .math-src .ProseMirror {
+    width: 100%;
+    display: block;
+  }
+
+  math-block .katex-display {
+    margin: 0;
+  }
+
+  .katex-html *::selection {
+    background-color: none !important;
+  }
+
+  .math-node.math-select .math-render {
+    background-color: #c0c0c0ff;
+  }
+
+  math-inline.math-select .math-render {
+    padding-top: 2px;
+  }
+`;
+
+const codeBlockStyle = (props: Props) => css`
+  .token.comment,
+  .token.prolog,
+  .token.doctype,
+  .token.cdata {
+    color: ${props.theme.codeComment};
+  }
+
+  .token.punctuation {
+    color: ${props.theme.codePunctuation};
+  }
+
+  .token.namespace {
+    opacity: 0.7;
+  }
+
+  .token.operator,
+  .token.boolean,
+  .token.number {
+    color: ${props.theme.codeNumber};
+  }
+
+  .token.property {
+    color: ${props.theme.codeProperty};
+  }
+
+  .token.tag {
+    color: ${props.theme.codeTag};
+  }
+
+  .token.string {
+    color: ${props.theme.codeString};
+  }
+
+  .token.selector {
+    color: ${props.theme.codeSelector};
+  }
+
+  .token.attr-name {
+    color: ${props.theme.codeAttr};
+  }
+
+  .token.entity,
+  .token.url,
+  .language-css .token.string,
+  .style .token.string {
+    color: ${props.theme.codeEntity};
+  }
+
+  .token.attr-value,
+  .token.keyword,
+  .token.control,
+  .token.directive,
+  .token.unit {
+    color: ${props.theme.codeKeyword};
+  }
+
+  .token.function,
+  .token.class-name-definition {
+    color: ${props.theme.codeFunction};
+  }
+
+  .token.class-name {
+    color: ${props.theme.codeClassName};
+  }
+
+  .token.statement,
+  .token.regex,
+  .token.atrule {
+    color: ${props.theme.codeStatement};
+  }
+
+  .token.placeholder,
+  .token.variable {
+    color: ${props.theme.codePlaceholder};
+  }
+
+  .token.deleted {
+    text-decoration: line-through;
+  }
+
+  .token.inserted {
+    border-bottom: 1px dotted ${props.theme.codeInserted};
+    text-decoration: none;
+  }
+
+  .token.italic {
+    font-style: italic;
+  }
+
+  .token.important,
+  .token.bold {
+    font-weight: bold;
+  }
+
+  .token.important {
+    color: ${props.theme.codeImportant};
+  }
+
+  .token.entity {
+    cursor: help;
+  }
+`;
+
+const findAndReplaceStyle = () => css`
+  .find-result {
+    background: rgba(255, 213, 0, 0.25);
+
+    &.current-result {
+      background: rgba(255, 213, 0, 0.75);
+      animation: ${pulse} 150ms 1;
+    }
+  }
+`;
+
+const emailStyle = (props: Props) => css`
+  .attachment {
+    display: block;
+    color: ${props.theme.text} !important;
+    box-shadow: 0 0 0 1px ${props.theme.divider};
+    white-space: nowrap;
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+
+  .image > img {
+    width: auto;
+    height: auto;
+  }
+`;
+
+const style = (props: Props) => css`
 flex-grow: ${props.grow ? 1 : 0};
 justify-content: start;
 color: ${props.theme.text};
 font-family: ${props.theme.fontFamily};
-font-weight: ${props.theme.fontWeight};
+font-weight: ${props.theme.fontWeightRegular};
 font-size: 1em;
-line-height: 1.6em;
+line-height: -0.011;
 width: 100%;
+
+.mention {
+  background: ${props.theme.mentionBackground};
+  border-radius: 8px;
+  padding-bottom: 2px;
+  padding-top: 1px;
+  padding-left: 4px;
+  padding-right: 4px;
+  font-weight: 500;
+  font-size: 0.9em;
+  cursor: default;
+
+  &:before {
+    content: "@";
+  }
+}
 
 > div {
   background: transparent;
@@ -138,9 +313,13 @@ width: 100%;
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
-  -webkit-font-variant-ligatures: none;
-  font-variant-ligatures: none;
-  font-feature-settings: "liga" 0; /* the above doesn't seem to work in Edge */
+  padding: ${props.editorStyle?.padding ?? "initial"};
+  margin: ${props.editorStyle?.margin ?? "initial"};
+
+  .ProseMirror {
+    padding: 0;
+    margin: 0;
+  }
 
   & > .ProseMirror-yjs-cursor {
     display: none;
@@ -160,27 +339,52 @@ width: 100%;
     margin-top: 0;
   }
 
+  h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
     margin-top: 1em;
-  }
-
-  h1 {
-    margin-top: .75em;
     margin-bottom: 0.25em;
+    font-weight: 600;
+    cursor: text;
+
+    & + p,
+    // accounts for block insert trigger and other widgets between heading and paragraph
+    & + .ProseMirror-widget + p {
+      margin-top: 0.25em;
+    }
+
+    &:not(.placeholder):before {
+      display: none;
+      font-family: ${props.theme.fontFamilyMono};
+      color: ${props.theme.textSecondary};
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 0;
+      margin-${props.rtl ? "right" : "left"}: -24px;
+      transition: opacity 150ms ease-in-out;
+      opacity: 0;
+      width: 24px;
+    }
+
+    &:hover,
+    &:focus-within {
+      .heading-actions {
+        opacity: 1;
+      }
+    }
   }
 
   // all of heading sizes are stepped down one from global styles, except h1
   // which is between h1 and h2
-  h1 { font-size: 1.75em; }
-  h2 { font-size: 1.25em; }
-  h3 { font-size: 1em; }
-  h4 { font-size: 0.875em; }
-  h5 { font-size: 0.75em; }
-  h6 { font-size: 0.75em; }
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; }
+  h3 { font-size: 18px; }
+  h4 { font-size: 16px; }
+  h5 { font-size: 15px; }
+  h6 { font-size: 15px; }
 
   .ProseMirror-yjs-cursor {
     position: relative;
@@ -239,7 +443,15 @@ li {
   position: relative;
 }
 
-.image {
+iframe.embed {
+  width: 100%;
+  height: 400px;
+  border: 1px solid ${props.theme.embedBorder};
+  border-radius: 6px;
+}
+
+.image,
+.video {
   line-height: 0;
   text-align: center;
   max-width: 100%;
@@ -247,10 +459,16 @@ li {
   position: relative;
   z-index: 1;
 
-  img {
+  img,
+  video {
     pointer-events: ${props.readOnly ? "initial" : "none"};
     display: inline-block;
     max-width: 100%;
+  }
+
+  video {
+    pointer-events: initial;
+    ${videoStyle}
   }
 
   .ProseMirror-selectednode img {
@@ -258,12 +476,60 @@ li {
   }
 }
 
-.image.placeholder {
+.image.placeholder,
+.video.placeholder {
   position: relative;
   background: ${props.theme.background};
   margin-bottom: calc(28px + 1.2em);
 
-  img {
+  img,
+  video {
+    opacity: 0.5;
+  }
+
+  video {
+    border-radius: 8px;
+  }
+}
+
+.file.placeholder {
+  display: flex;
+  align-items: center;
+  background: ${props.theme.background};
+  box-shadow: 0 0 0 1px ${props.theme.divider};
+  white-space: nowrap;
+  border-radius: 8px;
+  padding: 6px 8px;
+  max-width: 840px;
+  cursor: default;
+
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+
+  .title,
+  .subtitle {
+    margin-left: 8px;
+  }
+
+  .title {
+    font-weight: 600;
+    font-size: 14px;
+    color:  ${props.theme.text};
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: ${props.theme.textTertiary};
+    line-height: 0;
+  }
+
+  span {
+    font-family: ${props.theme.fontFamilyMono};
+  }
+}
+
+.attachment-replacement-uploading {
+  .widget {
     opacity: 0.5;
   }
 }
@@ -276,7 +542,6 @@ li {
 
 .image-right-50 {
   float: right;
-  width: 33.3%;
   margin-left: 2em;
   margin-bottom: 1em;
   clear: initial;
@@ -284,7 +549,6 @@ li {
 
 .image-left-50 {
   float: left;
-  width: 33.3%;
   margin-right: 2em;
   margin-bottom: 1em;
   clear: initial;
@@ -295,14 +559,47 @@ li {
   max-width: 100vw;
   clear: both;
   position: initial;
-  ${props.rtl ? `margin-right: var(--offset)` : `margin-left: var(--offset)`};
+  transform: translateX(calc(50% + var(--container-width) * -0.5));
 
   img {
     max-width: 100vw;
-    max-height: 50vh;
+    max-height: min(450px, 50vh);
     object-fit: cover;
     object-position: center;
   }
+}
+
+.${EditorStyleHelper.tableFullWidth} {
+  transform: translateX(calc(50% + ${EditorStyleHelper.padding
+  }px + var(--container-width) * -0.5));
+
+  .${EditorStyleHelper.tableScrollable},
+  table {
+    width: calc(var(--container-width) - ${EditorStyleHelper.padding * 2}px);
+  }
+
+  &.${EditorStyleHelper.tableShadowRight}::after {
+    left: calc(var(--container-width) - ${EditorStyleHelper.padding * 3}px);
+  }
+}
+
+.column-resize-handle {
+  animation: ${fadeIn} 150ms ease-in-out;
+  ${props.readOnly ? "display: none;" : ""}
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: -1px;
+  width: 2px;
+  z-index: 20;
+  background-color: ${props.theme.text};
+  pointer-events: none;
+}
+
+.resize-cursor {
+  ${props.readOnly ? "pointer-events: none;" : ""}
+  cursor: ew-resize;
+  cursor: col-resize;
 }
 
 .ProseMirror-hideselection *::selection {
@@ -318,6 +615,10 @@ li {
 .ProseMirror-selectednode {
   outline: 2px solid
     ${props.readOnly ? "transparent" : props.theme.selected};
+
+  @media print {
+    outline: none;
+  }
 }
 
 /* Make sure li selections wrap around markers */
@@ -356,35 +657,6 @@ img.ProseMirror-separator {
   }
   .caption:empty {
     visibility: hidden;
-  }
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-weight: 500;
-  cursor: text;
-
-  &:not(.placeholder):before {
-    display: ${props.readOnly ? "none" : "inline-block"};
-    font-family: ${props.theme.fontFamilyMono};
-    color: ${props.theme.textSecondary};
-    font-size: 13px;
-    line-height: 0;
-    margin-${props.rtl ? "right" : "left"}: -24px;
-    transition: opacity 150ms ease-in-out;
-    opacity: 0;
-    width: 24px;
-  }
-
-  &:hover,
-  &:focus-within {
-    .heading-actions {
-      opacity: 1;
-    }
   }
 }
 
@@ -478,6 +750,7 @@ h6:not(.placeholder):before {
   margin: 0;
   padding: 0;
   text-align: left;
+  font-weight: 500;
   font-family: ${props.theme.fontFamilyMono};
   font-size: 14px;
   line-height: 0;
@@ -496,11 +769,11 @@ h6:not(.placeholder):before {
 
 .heading-actions {
   opacity: 0;
-  z-index: ${depths.editorHeadingActions};
+  user-select: none;
   background: ${props.theme.background};
   margin-${props.rtl ? "right" : "left"}: -26px;
   flex-direction: ${props.rtl ? "row-reverse" : "row"};
-  display: inline-flex;
+  display: none;
   position: relative;
   top: -2px;
   width: 26px;
@@ -531,6 +804,22 @@ h6 {
     }
     .heading-anchor:hover {
       opacity: 1 !important;
+    }
+  }
+}
+
+.ProseMirror > {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    .heading-actions {
+      display: inline-flex;
+    }
+    &:not(.placeholder):before {
+      display: ${props.readOnly ? "none" : "inline-block"};
     }
   }
 }
@@ -567,6 +856,17 @@ h6 {
   opacity: 1;
 }
 
+.comment-marker {
+  border-bottom: 2px solid ${props.theme.commentMarkBackground};
+  transition: background 100ms ease-in-out;
+  border-radius: 2px;
+
+  &:hover {
+    ${props.readOnly ? "cursor: var(--pointer);" : ""}
+    background: ${props.theme.commentMarkBackground};
+  }
+}
+
 .notice-block {
   display: flex;
   align-items: center;
@@ -579,9 +879,6 @@ h6 {
 
   a {
     color: ${props.theme.noticeInfoText};
-  }
-
-  a:not(.heading-name) {
     text-decoration: underline;
   }
 
@@ -635,10 +932,23 @@ h6 {
   }
 }
 
+.notice-block.success {
+  background: ${transparentize(0.9, props.theme.noticeSuccessBackground)};
+  border-left: 4px solid ${props.theme.noticeSuccessBackground};
+  color: ${props.theme.noticeSuccessText};
+
+  .icon {
+    color: ${props.theme.noticeSuccessBackground};
+  }
+
+  a {
+    color: ${props.theme.noticeSuccessText};
+  }
+}
+
 blockquote {
   margin: 0;
-  padding-left: 1.5em;
-  font-style: italic;
+  padding: 8px 10px 8px 1.5em;
   overflow: hidden;
   position: relative;
 
@@ -675,24 +985,21 @@ strong {
 p {
   margin: 0;
   min-height: 1.6em;
+}
 
-  span:first-child + br:last-child {
-    display: none;
-  }
+.heading-content a,
+p a {
+  color: ${props.theme.text};
+  text-decoration: underline;
+  text-decoration-color: ${lighten(0.5, props.theme.text)};
+  text-decoration-thickness: 1px;
+  text-underline-offset: .15em;
+  font-weight: 500;
 
-  a {
-    color: ${props.theme.text};
+  &:hover {
     text-decoration: underline;
-    text-decoration-color: ${lighten(0.5, props.theme.text)};
+    text-decoration-color: ${props.theme.text};
     text-decoration-thickness: 1px;
-    text-underline-offset: .15em;
-    font-weight: 500;
-
-    &:hover {
-      text-decoration: underline;
-      text-decoration-color: ${props.theme.text};
-      text-decoration-thickness: 1px;
-    }
   }
 }
 
@@ -714,7 +1021,7 @@ a:hover {
 ul,
 ol {
   margin: ${props.rtl ? "0 -26px 0 0.1em" : "0 0.1em 0 -26px"};
-  padding: ${props.rtl ? "0 44px 0 0" : "0 0 0 44px"};
+  padding: ${props.rtl ? "0 48px 0 0" : "0 0 0 48px"};
 }
 
 ol ol {
@@ -797,8 +1104,7 @@ ul.checkbox_list > li::before {
 ul.checkbox_list li .checkbox {
   display: inline-block;
   cursor: var(--pointer);
-  pointer-events: ${
-    props.readOnly && !props.readOnlyWriteCheckboxes ? "none" : "initial"
+  pointer-events: ${props.readOnly && !props.readOnlyWriteCheckboxes ? "none" : "initial"
   };
   opacity: ${props.readOnly && !props.readOnlyWriteCheckboxes ? 0.75 : 1};
   margin: ${props.rtl ? "0 0 0 0.5em" : "0 0.5em 0 0"};
@@ -817,10 +1123,10 @@ ul.checkbox_list li .checkbox {
   &[aria-checked=true] {
     opacity: 1;
     background-image: ${`url(
-        "data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM4.26825 5.85982L5.95873 7.88839L9.70003 2.9C10.0314 2.45817 10.6582 2.36863 11.1 2.7C11.5419 3.03137 11.6314 3.65817 11.3 4.1L6.80002 10.1C6.41275 10.6164 5.64501 10.636 5.2318 10.1402L2.7318 7.14018C2.37824 6.71591 2.43556 6.08534 2.85984 5.73178C3.28412 5.37821 3.91468 5.43554 4.26825 5.85982Z' fill='${props.theme.primary.replace(
-          "#",
-          "%23"
-        )}' /%3E%3C/svg%3E%0A"
+        "data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM4.26825 5.85982L5.95873 7.88839L9.70003 2.9C10.0314 2.45817 10.6582 2.36863 11.1 2.7C11.5419 3.03137 11.6314 3.65817 11.3 4.1L6.80002 10.1C6.41275 10.6164 5.64501 10.636 5.2318 10.1402L2.7318 7.14018C2.37824 6.71591 2.43556 6.08534 2.85984 5.73178C3.28412 5.37821 3.91468 5.43554 4.26825 5.85982Z' fill='${props.theme.accent.replace(
+    "#",
+    "%23"
+  )}' /%3E%3C/svg%3E%0A"
       )`};
   }
 
@@ -858,22 +1164,23 @@ hr.page-break:before {
   border-top: 1px dashed ${props.theme.horizontalRule};
 }
 
+.math-inline .math-src .ProseMirror,
 code {
   border-radius: 4px;
   border: 1px solid ${props.theme.codeBorder};
   background: ${props.theme.codeBackground};
   padding: 3px 4px;
+  color: ${props.theme.codeString};
   font-family: ${props.theme.fontFamilyMono};
   font-size: 80%;
 }
 
 mark {
   border-radius: 1px;
-  color: ${props.theme.textHighlightForeground};
-  background: ${props.theme.textHighlight};
+  color: ${props.theme.text};
 
   a {
-    color: ${props.theme.textHighlightForeground};
+    color: ${props.theme.text};
   }
 }
 
@@ -886,106 +1193,40 @@ mark {
   height: 16px;
 }
 
-.code-actions,
-.notice-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  position: absolute;
-  z-index: 1;
-  top: 8px;
-  right: 8px;
-}
-
-.notice-actions {
-  ${props.rtl ? "left" : "right"}: 8px;
-}
-
-.code-block,
-.notice-block {
+.code-block {
   position: relative;
+}
 
-  select,
-  button {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: ${props.theme.buttonNeutralBackground};
-    color: ${props.theme.buttonNeutralText};
-    box-shadow: rgba(0, 0, 0, 0.07) 0px 1px 2px, ${
-      props.theme.buttonNeutralBorder
-    } 0 0 0 1px inset;
-    border-radius: 4px;
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    flex-shrink: 0;
-    cursor: var(--pointer);
-    user-select: none;
-    appearance: none !important;
-    padding: 6px 8px;
-    display: none;
+.code-block[data-language=mermaidjs] {
+  margin: 0.75em 0;
 
-    &::-moz-focus-inner {
-      padding: 0;
-      border: 0;
-    }
-
-    &:hover:not(:disabled) {
-      background-color: ${darken(0.05, props.theme.buttonNeutralBackground)};
-      box-shadow: rgba(0, 0, 0, 0.07) 0px 1px 2px, ${
-        props.theme.buttonNeutralBorder
-      } 0 0 0 1px inset;
-    }
+  ${!props.staticHTML &&
+  css`
+      pre {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        margin-bottom: -20px;
+        overflow: hidden;
+      }
+    `
   }
 
-  select {
-    background-image: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path fill-rule="evenodd" clip-rule="evenodd" d="M9.03087 9C8.20119 9 7.73238 9.95209 8.23824 10.6097L11.2074 14.4696C11.6077 14.99 12.3923 14.99 12.7926 14.4696L15.7618 10.6097C16.2676 9.95209 15.7988 9 14.9691 9L9.03087 9Z" fill="currentColor"/> </svg>');
-    background-repeat: no-repeat;
-    background-position: center right;
-    padding-right: 20px;
+  // Hide code without display none so toolbar can still be positioned against it
+  &:not(.code-active) {
+    height: ${props.staticHTML ? "auto" : "0"};
+    margin: -0.75em 0;
+    overflow: hidden;
+
+    // Allows the margin to collapse correctly by moving div out of the flow
+    position: ${props.staticHTML ? "relative" : "absolute"};
   }
+}
 
-  &:focus-within,
-  &:hover {
-    select {
-      display: ${props.readOnly ? "none" : "inline"};
-    }
-
-    button {
-      display: inline;
-    }
-  }
-
-  select:focus,
-  select:active,
-  button:focus,
-  button:active {
-    display: inline;
-  }
-
-  button.show-source-button {
-    display: none;
-  }
-  button.show-diagram-button {
-    display: inline;
-  }
-
-  &.code-hidden { 
-    button,
-    select,
-    button.show-diagram-button {
-      display: none;
-    }
-
-    button.show-source-button {
-      display: inline;
-    }
-
-    pre {
-      display: none;
-    }
-  }
+/* Hide code without display none so toolbar can still be positioned against it */
+.ProseMirror[contenteditable="false"] .code-block[data-language=mermaidjs] {
+  height: ${props.staticHTML ? "auto" : "0"};
+  margin: -0.5em 0;
+  overflow: hidden;
 }
 
 .code-block.with-line-numbers {
@@ -996,13 +1237,17 @@ mark {
   &:after {
     content: attr(data-line-numbers);
     position: absolute;
-    left: 1em;
+    padding-left: 0.5em;
+    left: 1px;
     top: calc(1px + 0.75em);
-
+    width: calc(var(--line-number-gutter-width,0) * 1em + .25em);
+    word-break: break-all;
+    white-space: break-spaces;
     font-family: ${props.theme.fontFamilyMono};
     font-size: 13px;
     line-height: 1.4em;
     color: ${props.theme.textTertiary};
+    background: ${props.theme.codeBackground};
     text-align: right;
     font-variant-numeric: tabular-nums;
     user-select: none;
@@ -1013,6 +1258,8 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0.75em 0;
+  min-height: 1.6em;
   background: ${props.theme.codeBackground};
   border-radius: 6px;
   border: 1px solid ${props.theme.codeBorder};
@@ -1024,8 +1271,16 @@ mark {
     font-family: ${props.theme.fontFamily};
   }
 
-  &.diagram-hidden {
-    display: none;
+  &.empty {
+    font-family: ${props.theme.fontFamilyMono};
+    font-size: 14px;
+    color: ${props.theme.placeholder};
+  }
+
+  &.parse-error {
+    font-family: ${props.theme.fontFamilyMono};
+    font-size: 14px;
+    color: ${props.theme.brand.red};
   }
 }
 
@@ -1065,103 +1320,6 @@ pre {
   }
 }
 
-.token.comment,
-.token.prolog,
-.token.doctype,
-.token.cdata {
-  color: ${props.theme.codeComment};
-}
-
-.token.punctuation {
-  color: ${props.theme.codePunctuation};
-}
-
-.token.namespace {
-  opacity: 0.7;
-}
-
-.token.operator,
-.token.boolean,
-.token.number {
-  color: ${props.theme.codeNumber};
-}
-
-.token.property {
-  color: ${props.theme.codeProperty};
-}
-
-.token.tag {
-  color: ${props.theme.codeTag};
-}
-
-.token.string {
-  color: ${props.theme.codeString};
-}
-
-.token.selector {
-  color: ${props.theme.codeSelector};
-}
-
-.token.attr-name {
-  color: ${props.theme.codeAttr};
-}
-
-.token.entity,
-.token.url,
-.language-css .token.string,
-.style .token.string {
-  color: ${props.theme.codeEntity};
-}
-
-.token.attr-value,
-.token.keyword,
-.token.control,
-.token.directive,
-.token.unit {
-  color: ${props.theme.codeKeyword};
-}
-
-.token.function {
-  color: ${props.theme.codeFunction};
-}
-
-.token.statement,
-.token.regex,
-.token.atrule {
-  color: ${props.theme.codeStatement};
-}
-
-.token.placeholder,
-.token.variable {
-  color: ${props.theme.codePlaceholder};
-}
-
-.token.deleted {
-  text-decoration: line-through;
-}
-
-.token.inserted {
-  border-bottom: 1px dotted ${props.theme.codeInserted};
-  text-decoration: none;
-}
-
-.token.italic {
-  font-style: italic;
-}
-
-.token.important,
-.token.bold {
-  font-weight: bold;
-}
-
-.token.important {
-  color: ${props.theme.codeImportant};
-}
-
-.token.entity {
-  cursor: help;
-}
-
 table {
   width: 100%;
   border-collapse: collapse;
@@ -1175,49 +1333,182 @@ table {
 
   tr {
     position: relative;
-    border-bottom: 1px solid ${props.theme.tableDivider};
-  }
-
-  th {
-    background: transparent;
+    border-bottom: 1px solid ${props.theme.divider};
   }
 
   td,
   th {
     position: relative;
     vertical-align: top;
-    border: 1px solid ${props.theme.tableDivider};
+    border: 1px solid ${props.theme.divider};
     position: relative;
     padding: 4px 8px;
     text-align: ${props.rtl ? "right" : "left"};
     min-width: 100px;
+    font-weight: normal;
+  }
+
+  th {
+    background: ${transparentize(0.75, props.theme.divider)};
+    color: ${props.theme.textSecondary};
+    font-weight: 500;
+  }
+
+  td .component-embed {
+    padding: 4px 0;
   }
 
   .selectedCell {
-    background: ${
-      props.readOnly ? "inherit" : props.theme.tableSelectedBackground
-    };
+    background: ${props.readOnly ? "inherit" : props.theme.tableSelectedBackground
+  };
 
     /* fixes Firefox background color painting over border:
      * https://bugzilla.mozilla.org/show_bug.cgi?id=688556 */
     background-clip: padding-box;
   }
 
-  .grip-column {
+  .${EditorStyleHelper.tableAddRow},
+  .${EditorStyleHelper.tableAddColumn},
+  .${EditorStyleHelper.tableGrip},
+  .${EditorStyleHelper.tableGripColumn},
+  .${EditorStyleHelper.tableGripRow} {
+    @media print {
+      display: none;
+    }
+  }
+
+  .${EditorStyleHelper.tableAddRow},
+  .${EditorStyleHelper.tableAddColumn} {
+    display: block;
+    position: absolute;
+    background: ${props.theme.accent};
+    cursor: var(--pointer);
+
+    &:hover::after {
+      width: 16px;
+      height: 16px;
+      z-index: 20;
+      background-color: ${props.theme.accent};
+      background-size: 16px 16px;
+      background-position: 50% 50%;
+      background-image: url("data:image/svg+xml;base64,${btoa(
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 5C11.4477 5 11 5.44772 11 6V11H6C5.44772 11 5 11.4477 5 12C5 12.5523 5.44772 13 6 13H11V18C11 18.5523 11.4477 19 12 19C12.5523 19 13 18.5523 13 18V13H18C18.5523 13 19 12.5523 19 12C19 11.4477 18.5523 11 18 11H13V6C13 5.44772 12.5523 5 12 5Z" fill="white"/></svg>'
+  )}")
+    }
+
+    // extra clickable area
+    &::before {
+      content: "";
+      display: block;
+      cursor: var(--pointer);
+      position: absolute;
+      width: 24px;
+      height: 24px;
+    }
+  }
+
+  .${EditorStyleHelper.tableAddRow} {
+    bottom: -1px;
+    left: -16px;
+    width: 0;
+    height: 2px;
+
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: -10px;
+      width: 4px;
+      height: 4px;
+      display: ${props.readOnly ? "none" : "block"};
+      border-radius: 100%;
+      background-color: ${props.theme.divider};
+    }
+
+    &:hover {
+      width: calc(var(--table-width) - ${EditorStyleHelper.padding * 1.5}px);
+    }
+
+    &:hover::after {
+      bottom: -7.5px;
+      left: -16px;
+    }
+
+    // extra clickable area
+    &::before {
+      bottom: -12px;
+      left: -18px;
+    }
+
+    &.first {
+      bottom: auto;
+      top: -1px;
+
+      &::before {
+        bottom: auto;
+        top: -12px;
+      }
+    }
+  }
+
+  .${EditorStyleHelper.tableAddColumn} {
+    top: -16px;
+    right: -1px;
+    width: 2px;
+    height: 0;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: -10px;
+      right: -1px;
+      width: 4px;
+      height: 4px;
+      display: ${props.readOnly ? "none" : "block"};
+      border-radius: 100%;
+      background-color: ${props.theme.divider};
+    }
+
+    &:hover {
+      height: calc(var(--table-height) - ${EditorStyleHelper.padding}px + 6px);
+    }
+
+    &:hover::after {
+      top: -16px;
+      right: -7px;
+    }
+
+    // extra clickable area
+    &::before {
+      top: -16px;
+      right: -12px;
+    }
+
+    &.first {
+      right: auto;
+      left: -1px;
+
+      &::before {
+        right: auto;
+        left: -12px;
+      }
+    }
+  }
+
+  .${EditorStyleHelper.tableGripColumn} {
     /* usage of ::after for all of the table grips works around a bug in
      * prosemirror-tables that causes Safari to hang when selecting a cell
      * in an empty table:
      * https://github.com/ProseMirror/prosemirror/issues/947 */
     &::after {
       content: "";
-      cursor: pointer;
+      cursor: var(--pointer);
       position: absolute;
       top: -16px;
       ${props.rtl ? "right" : "left"}: 0;
       width: 100%;
       height: 12px;
-      background: ${props.theme.tableDivider};
-      border-bottom: 3px solid ${props.theme.background};
+      background: ${props.theme.divider};
       display: ${props.readOnly ? "none" : "block"};
     }
 
@@ -1226,26 +1517,27 @@ table {
     }
     &.first::after {
       border-top-${props.rtl ? "right" : "left"}-radius: 3px;
+      border-bottom-${props.rtl ? "right" : "left"}-radius: 3px;
     }
     &.last::after {
       border-top-${props.rtl ? "left" : "right"}-radius: 3px;
+      border-bottom-${props.rtl ? "left" : "right"}-radius: 3px;
     }
     &.selected::after {
       background: ${props.theme.tableSelected};
     }
   }
 
-  .grip-row {
+  .${EditorStyleHelper.tableGripRow} {
     &::after {
       content: "";
-      cursor: pointer;
+      cursor: var(--pointer);
       position: absolute;
       ${props.rtl ? "right" : "left"}: -16px;
       top: 0;
       height: 100%;
       width: 12px;
-      background: ${props.theme.tableDivider};
-      border-${props.rtl ? "left" : "right"}: 3px solid;
+      background: ${props.theme.divider};
       border-color: ${props.theme.background};
       display: ${props.readOnly ? "none" : "block"};
     }
@@ -1254,21 +1546,23 @@ table {
       background: ${props.theme.text};
     }
     &.first::after {
-      border-top-${props.rtl ? "right" : "left"}-radius: 3px;
+      border-top-left-radius: 3px;
+      border-top-right-radius: 3px;
     }
     &.last::after {
-      border-bottom-${props.rtl ? "right" : "left"}-radius: 3px;
+      border-bottom-left-radius: 3px;
+      border-bottom-right-radius: 3px;
     }
     &.selected::after {
       background: ${props.theme.tableSelected};
     }
   }
 
-  .grip-table {
+  .${EditorStyleHelper.tableGrip} {
     &::after {
       content: "";
-      cursor: pointer;
-      background: ${props.theme.tableDivider};
+      cursor: var(--pointer);
+      background: ${props.theme.divider};
       width: 13px;
       height: 13px;
       border-radius: 13px;
@@ -1277,6 +1571,7 @@ table {
       top: -18px;
       ${props.rtl ? "right" : "left"}: -18px;
       display: ${props.readOnly ? "none" : "block"};
+      z-index: 10;
     }
 
     &:hover::after {
@@ -1288,16 +1583,26 @@ table {
   }
 }
 
-.scrollable-wrapper {
+.${EditorStyleHelper.table} {
   position: relative;
-  margin: 0.5em 0px;
+}
+
+.${EditorStyleHelper.tableScrollable} {
+  position: relative;
+  margin: -1em ${-EditorStyleHelper.padding}px -0.5em;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+  overflow-y: hidden;
+  overflow-x: auto;
+  padding-top: 1em;
+  padding-bottom: .5em;
+  padding-left: ${EditorStyleHelper.padding}px;
+  padding-right: ${EditorStyleHelper.padding}px;
+  transition: border 250ms ease-in-out 0s;
 
   &:hover {
-    scrollbar-color: ${props.theme.scrollbarThumb} ${
-  props.theme.scrollbarBackground
-};
+    scrollbar-color: ${props.theme.scrollbarThumb} ${props.theme.scrollbarBackground
+  };
   }
 
   & ::-webkit-scrollbar {
@@ -1321,37 +1626,34 @@ table {
   }
 }
 
-.scrollable {
-  overflow-y: hidden;
-  overflow-x: auto;
-  padding-${props.rtl ? "right" : "left"}: 1em;
-  margin-${props.rtl ? "right" : "left"}: -1em;
-  border-${props.rtl ? "right" : "left"}: 1px solid transparent;
-  border-${props.rtl ? "left" : "right"}: 1px solid transparent;
-  transition: border 250ms ease-in-out 0s;
-}
-
-.scrollable-shadow {
+.${EditorStyleHelper.tableShadowLeft}::before,
+.${EditorStyleHelper.tableShadowRight}::after {
+  content: "";
   position: absolute;
-  top: 0;
+  top: 1px;
   bottom: 0;
   ${props.rtl ? "right" : "left"}: -1em;
-  width: 16px;
+  width: 32px;
+  z-index: 20;
   transition: box-shadow 250ms ease-in-out;
   border: 0px solid transparent;
-  border-${props.rtl ? "right" : "left"}-width: 1em;
   pointer-events: none;
+}
 
-  &.left {
-    box-shadow: 16px 0 16px -16px inset rgba(0, 0, 0, 0.25);
-    border-left: 1em solid ${props.theme.background};
-  }
+.${EditorStyleHelper.tableShadowLeft}::before {
+  left: -${EditorStyleHelper.padding}px;
+  right: auto;
+  box-shadow: 16px 0 16px -16px inset rgba(0, 0, 0, ${props.theme.isDark ? 1 : 0.25
+  });
+  border-left: ${EditorStyleHelper.padding}px solid ${props.theme.background};
+}
 
-  &.right {
-    right: 0;
-    left: auto;
-    box-shadow: -16px 0 16px -16px inset rgba(0, 0, 0, 0.25);
-  }
+.${EditorStyleHelper.tableShadowRight}::after {
+  right: -${EditorStyleHelper.padding}px;
+  left: auto;
+  box-shadow: -16px 0 16px -16px inset rgba(0, 0, 0, ${props.theme.isDark ? 1 : 0.25
+  });
+  border-right: ${EditorStyleHelper.padding}px solid ${props.theme.background};
 }
 
 .block-menu-trigger {
@@ -1404,8 +1706,10 @@ table {
   animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
 }
 
-.folded-content {
+.folded-content,
+.folded-content + .mermaid-diagram-wrapper {
   display: none;
+  user-select: none;
 }
 
 @keyframes ProseMirror-cursor-blink {
@@ -1453,6 +1757,15 @@ del[data-operation-index] {
     display: none;
   }
 
+  .image {
+    page-break-inside: avoid;
+  }
+
+  .comment-marker {
+    border: 0;
+    background: none;
+  }
+
   .page-break {
     opacity: 0;
   }
@@ -1470,8 +1783,12 @@ del[data-operation-index] {
 `;
 
 const EditorContainer = styled.div<Props>`
-  ${style};
-  ${mathStyle};
+  ${style}
+  ${mathStyle}
+  ${codeMarkCursor}
+  ${codeBlockStyle}
+  ${findAndReplaceStyle}
+  ${emailStyle}
 `;
 
 export default EditorContainer;

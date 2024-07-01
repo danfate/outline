@@ -1,6 +1,4 @@
-import path from "path";
-import { glob } from "glob";
-import Logger from "@server/logging/Logger";
+import { Hook, PluginManager } from "@server/utils/PluginManager";
 import { requireDirectory } from "@server/utils/fs";
 import BaseProcessor from "./BaseProcessor";
 
@@ -15,14 +13,8 @@ requireDirectory<{ default: BaseProcessor }>(__dirname).forEach(
   }
 );
 
-glob
-  .sync("build/plugins/*/server/processors/!(*.test).js")
-  .forEach((filePath: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const processor = require(path.join(process.cwd(), filePath)).default;
-    const name = path.basename(filePath, ".js");
-    processors[name] = processor;
-    Logger.debug("processor", `Registered processor ${name}`);
-  });
+PluginManager.getHooks(Hook.Processor).forEach((hook) => {
+  processors[hook.value.name] = hook.value;
+});
 
 export default processors;

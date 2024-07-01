@@ -1,6 +1,7 @@
 import * as React from "react";
+import { UserRole } from "@shared/types";
 import env from "@server/env";
-import BaseEmail from "./BaseEmail";
+import BaseEmail, { EmailProps } from "./BaseEmail";
 import Body from "./components/Body";
 import Button from "./components/Button";
 import EmailTemplate from "./components/EmailLayout";
@@ -9,18 +10,27 @@ import Footer from "./components/Footer";
 import Header from "./components/Header";
 import Heading from "./components/Heading";
 
-type Props = {
-  to: string;
+type Props = EmailProps & {
+  role: UserRole;
   teamUrl: string;
 };
+
+type BeforeSend = Record<string, never>;
 
 /**
  * Email sent to a user when their account has just been created, or they signed
  * in for the first time from an invite.
  */
-export default class WelcomeEmail extends BaseEmail<Props> {
+export default class WelcomeEmail extends BaseEmail<Props, BeforeSend> {
   protected subject() {
     return `Welcome to ${env.APP_NAME}`;
+  }
+
+  protected async beforeSend(props: Props) {
+    if (props.role === UserRole.Guest) {
+      return false;
+    }
+    return {};
   }
 
   protected preview() {
@@ -33,17 +43,20 @@ Welcome to ${env.APP_NAME}!
 
 ${env.APP_NAME} is a place for your team to build and share knowledge.
 
-To get started, head to the home screen and try creating a collection to help document your processes, create playbooks, or plan your teams work.
+To get started, head to the home screen and try creating a collection to help document your processes, create playbooks, or plan your team's work.
 
-You can also import existing Markdown documents by dragging and dropping them to your collections.
+Or, learn more about everything Outline can do in the guide:
+https://docs.getoutline.com/s/guide
 
 ${teamUrl}/home
 `;
   }
 
   protected render({ teamUrl }: Props) {
+    const welcomeLink = `${teamUrl}/home?ref=welcome-email`;
+
     return (
-      <EmailTemplate>
+      <EmailTemplate previewText={this.preview()}>
         <Header />
 
         <Body>
@@ -58,14 +71,12 @@ ${teamUrl}/home
             plan your teams work.
           </p>
           <p>
-            You can also import existing Markdown documents by dragging and
-            dropping them to your collections.
+            Or, learn more about everything Outline can do in{" "}
+            <a href="https://docs.getoutline.com/s/guide">the guide</a>.
           </p>
           <EmptySpace height={10} />
           <p>
-            <Button href={`${teamUrl}/home?ref=welcome-email`}>
-              Open {env.APP_NAME}
-            </Button>
+            <Button href={welcomeLink}>Open {env.APP_NAME}</Button>
           </p>
         </Body>
 

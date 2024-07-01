@@ -1,4 +1,9 @@
-import { Op, WhereOptions } from "sequelize";
+import {
+  InferAttributes,
+  InferCreationAttributes,
+  Op,
+  WhereOptions,
+} from "sequelize";
 import {
   ForeignKey,
   DefaultScope,
@@ -9,16 +14,22 @@ import {
   DataType,
 } from "sequelize-typescript";
 import {
+  CollectionPermission,
   FileOperationFormat,
   FileOperationState,
   FileOperationType,
 } from "@shared/types";
-import { deleteFromS3, getFileByKey } from "@server/utils/s3";
+import FileStorage from "@server/storage/files";
 import Collection from "./Collection";
 import Team from "./Team";
 import User from "./User";
-import IdModel from "./base/IdModel";
+import ParanoidModel from "./base/ParanoidModel";
 import Fix from "./decorators/Fix";
+
+export type FileOperationOptions = {
+  includeAttachments?: boolean;
+  permission?: CollectionPermission | null;
+};
 
 @DefaultScope(() => ({
   include: [
@@ -36,7 +47,10 @@ import Fix from "./decorators/Fix";
 }))
 @Table({ tableName: "file_operations", modelName: "file_operation" })
 @Fix
-class FileOperation extends IdModel {
+class FileOperation extends ParanoidModel<
+  InferAttributes<FileOperation>,
+  Partial<InferCreationAttributes<FileOperation>>
+> {
   @Column(DataType.ENUM(...Object.values(FileOperationType)))
   type: FileOperationType;
 
@@ -50,7 +64,7 @@ class FileOperation extends IdModel {
   key: string;
 
   @Column
-  url: string;
+  url?: string | null;
 
   @Column
   error: string | null;
@@ -59,32 +73,45 @@ class FileOperation extends IdModel {
   size: number;
 
   /**
+   * Additional configuration options for the file operation.
+   */
+  @Column(DataType.JSON)
+  options: FileOperationOptions | null;
+
+  /**
    * Mark the current file operation as expired and remove the file from storage.
    */
   expire = async function () {
-    this.state = "expired";
+    this.state = FileOperationState.Expired;
     try {
-      await deleteFromS3(this.key);
+      await FileStorage.deleteFile(this.key);
     } catch (err) {
       if (err.retryable) {
         throw err;
       }
     }
-    await this.save();
+    return this.save();
   };
 
   /**
    * The file operation contents as a readable stream.
    */
   get stream() {
-    return getFileByKey(this.key);
+    return FileStorage.getFileStream(this.key);
+  }
+
+  /**
+   * The file operation contents as a handle which contains a path and cleanup function.
+   */
+  get handle() {
+    return FileStorage.getFileHandle(this.key);
   }
 
   // hooks
 
   @BeforeDestroy
   static async deleteFileFromS3(model: FileOperation) {
-    await deleteFromS3(model.key);
+    await FileStorage.deleteFile(model.key);
   }
 
   // associations
@@ -108,7 +135,7 @@ class FileOperation extends IdModel {
 
   @ForeignKey(() => Collection)
   @Column(DataType.UUID)
-  collectionId: string;
+  collectionId?: string | null;
 
   /**
    * Count the number of export file operations for a given team after a point

@@ -1,6 +1,6 @@
-import fetch from "fetch-with-proxy";
-import { useAgent } from "request-filtering-agent";
+import { FetchError } from "node-fetch";
 import { Op } from "sequelize";
+import { colorPalette } from "@shared/utils/collections";
 import WebhookDisabledEmail from "@server/emails/templates/WebhookDisabledEmail";
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
@@ -19,9 +19,10 @@ import {
   Revision,
   View,
   Share,
-  CollectionUser,
-  CollectionGroup,
+  UserMembership,
+  GroupPermission,
   GroupUser,
+  Comment,
 } from "@server/models";
 import {
   presentCollection,
@@ -39,13 +40,16 @@ import {
   presentMembership,
   presentGroupMembership,
   presentCollectionGroupMembership,
+  presentComment,
 } from "@server/presenters";
 import BaseTask from "@server/queues/tasks/BaseTask";
 import {
   CollectionEvent,
   CollectionGroupEvent,
   CollectionUserEvent,
+  CommentEvent,
   DocumentEvent,
+  DocumentUserEvent,
   Event,
   FileOperationEvent,
   GroupEvent,
@@ -58,8 +62,10 @@ import {
   TeamEvent,
   UserEvent,
   ViewEvent,
+  WebhookDeliveryStatus,
   WebhookSubscriptionEvent,
 } from "@server/types";
+import fetch from "@server/utils/fetch";
 import presentWebhook, { WebhookPayload } from "../presenters/webhook";
 import presentWebhookSubscription from "../presenters/webhookSubscription";
 
@@ -99,6 +105,8 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       case "subscriptions.create":
       case "subscriptions.delete":
       case "authenticationProviders.update":
+      case "notifications.create":
+      case "notifications.update":
         // Ignored
         return;
       case "users.create":
@@ -125,6 +133,10 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       case "documents.update":
       case "documents.title_change":
         await this.handleDocumentEvent(subscription, event);
+        return;
+      case "documents.add_user":
+      case "documents.remove_user":
+        await this.handleDocumentUserEvent(subscription, event);
         return;
       case "documents.update.delayed":
       case "documents.update.debounced":
@@ -153,6 +165,11 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       case "collections.remove_group":
         await this.handleCollectionGroupEvent(subscription, event);
         return;
+      case "comments.create":
+      case "comments.update":
+      case "comments.delete":
+        await this.handleCommentEvent(subscription, event);
+        return;
       case "groups.create":
       case "groups.update":
       case "groups.delete":
@@ -164,9 +181,12 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
         return;
       case "integrations.create":
       case "integrations.update":
+      case "integrations.delete":
         await this.handleIntegrationEvent(subscription, event);
         return;
       case "teams.create":
+      case "teams.delete":
+      case "teams.destroy":
         // Ignored
         return;
       case "teams.update":
@@ -194,6 +214,9 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
         return;
       case "views.create":
         await this.handleViewEvent(subscription, event);
+        return;
+      case "userMemberships.update":
+        // Ignored
         return;
       default:
         assertUnreachable(event);
@@ -276,6 +299,23 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       payload: {
         id: event.modelId,
         model: model && presentShare(model),
+      },
+    });
+  }
+
+  private async handleCommentEvent(
+    subscription: WebhookSubscription,
+    event: CommentEvent
+  ): Promise<void> {
+    const model = await Comment.findByPk(event.modelId, {
+      paranoid: false,
+    });
+    await this.sendWebhook({
+      event,
+      subscription,
+      payload: {
+        id: event.modelId,
+        model: model && presentComment(model),
       },
     });
   }
@@ -384,12 +424,18 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       paranoid: false,
     });
 
+    const collection = model && (await presentCollection(undefined, model));
+    if (collection) {
+      // For backward compatibility, set a default color.
+      collection.color = collection.color ?? colorPalette[0];
+    }
+
     await this.sendWebhook({
       event,
       subscription,
       payload: {
         id: event.collectionId,
-        model: model && presentCollection(model),
+        model: collection,
       },
     });
   }
@@ -398,7 +444,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
     subscription: WebhookSubscription,
     event: CollectionUserEvent
   ): Promise<void> {
-    const model = await CollectionUser.scope([
+    const model = await UserMembership.scope([
       "withUser",
       "withCollection",
     ]).findOne({
@@ -409,13 +455,20 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       paranoid: false,
     });
 
+    const collection =
+      model && (await presentCollection(undefined, model.collection!));
+    if (collection) {
+      // For backward compatibility, set a default color.
+      collection.color = collection.color ?? colorPalette[0];
+    }
+
     await this.sendWebhook({
       event,
       subscription,
       payload: {
-        id: `${event.userId}-${event.collectionId}`,
+        id: event.modelId,
         model: model && presentMembership(model),
-        collection: model && presentCollection(model.collection),
+        collection,
         user: model && presentUser(model.user),
       },
     });
@@ -425,7 +478,7 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
     subscription: WebhookSubscription,
     event: CollectionGroupEvent
   ): Promise<void> {
-    const model = await CollectionGroup.scope([
+    const model = await GroupPermission.scope([
       "withGroup",
       "withCollection",
     ]).findOne({
@@ -436,13 +489,20 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       paranoid: false,
     });
 
+    const collection =
+      model && (await presentCollection(undefined, model.collection!));
+    if (collection) {
+      // For backward compatibility, set a default color.
+      collection.color = collection.color ?? colorPalette[0];
+    }
+
     await this.sendWebhook({
       event,
       subscription,
       payload: {
-        id: `${event.modelId}-${event.collectionId}`,
+        id: event.modelId,
         model: model && presentCollectionGroupMembership(model),
-        collection: model && presentCollection(model.collection),
+        collection,
         group: model && presentGroup(model.group),
       },
     });
@@ -479,16 +539,28 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       subscription,
       payload: {
         id: event.documentId,
-        model: model && (await presentDocument(model)),
+        model:
+          model &&
+          (await presentDocument(undefined, model, {
+            includeData: true,
+            includeText: true,
+          })),
       },
     });
   }
 
-  private async handleRevisionEvent(
+  private async handleDocumentUserEvent(
     subscription: WebhookSubscription,
-    event: RevisionEvent
+    event: DocumentUserEvent
   ): Promise<void> {
-    const model = await Revision.findByPk(event.modelId, {
+    const model = await UserMembership.scope([
+      "withUser",
+      "withDocument",
+    ]).findOne({
+      where: {
+        documentId: event.documentId,
+        userId: event.userId,
+      },
       paranoid: false,
     });
 
@@ -497,7 +569,42 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       subscription,
       payload: {
         id: event.modelId,
-        model: model && (await presentRevision(model)),
+        model: model && presentMembership(model),
+        document:
+          model &&
+          (await presentDocument(undefined, model.document!, {
+            includeData: true,
+            includeText: true,
+          })),
+        user: model && presentUser(model.user),
+      },
+    });
+  }
+
+  private async handleRevisionEvent(
+    subscription: WebhookSubscription,
+    event: RevisionEvent
+  ): Promise<void> {
+    const [model, document] = await Promise.all([
+      Revision.findByPk(event.modelId, {
+        paranoid: false,
+      }),
+      Document.findByPk(event.documentId, {
+        paranoid: false,
+      }),
+    ]);
+
+    const data = {
+      ...(model ? await presentRevision(model) : {}),
+      collectionId: document ? document.collectionId : undefined,
+    };
+
+    await this.sendWebhook({
+      event,
+      subscription,
+      payload: {
+        id: event.modelId,
+        model: data,
       },
     });
   }
@@ -534,7 +641,8 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       status: "pending",
     });
 
-    let response, requestBody, requestHeaders, status;
+    let response, requestBody, requestHeaders;
+    let status: WebhookDeliveryStatus;
     try {
       requestBody = presentWebhook({
         event,
@@ -559,14 +667,20 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
         body: JSON.stringify(requestBody),
         redirect: "error",
         timeout: 5000,
-        agent: useAgent(subscription.url),
       });
       status = response.ok ? "success" : "failed";
     } catch (err) {
-      Logger.error("Failed to send webhook", err, {
-        event,
-        deliveryId: delivery.id,
-      });
+      if (err instanceof FetchError && env.isCloudHosted) {
+        Logger.warn(`Failed to send webhook: ${err.message}`, {
+          event,
+          deliveryId: delivery.id,
+        });
+      } else {
+        Logger.error("Failed to send webhook", err, {
+          event,
+          deliveryId: delivery.id,
+        });
+      }
       status = "failed";
     }
 
@@ -622,11 +736,11 @@ export default class DeliverWebhookTask extends BaseTask<Props> {
       ]);
 
       if (createdBy && team) {
-        await WebhookDisabledEmail.schedule({
+        await new WebhookDisabledEmail({
           to: createdBy.email,
           teamUrl: team.url,
           webhookName: subscription.name,
-        });
+        }).schedule();
       }
     }
   }

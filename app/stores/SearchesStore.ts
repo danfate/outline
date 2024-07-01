@@ -1,13 +1,11 @@
-import { uniqBy } from "lodash";
+import uniqBy from "lodash/uniqBy";
 import { computed } from "mobx";
 import SearchQuery from "~/models/SearchQuery";
-import BaseStore, { RPCAction } from "./BaseStore";
 import RootStore from "./RootStore";
+import Store, { RPCAction } from "./base/Store";
 
-export default class SearchesStore extends BaseStore<SearchQuery> {
+export default class SearchesStore extends Store<SearchQuery> {
   actions = [RPCAction.List, RPCAction.Delete];
-
-  apiEndpoint = "searches";
 
   constructor(rootStore: RootStore) {
     super(rootStore, SearchQuery);
@@ -15,6 +13,8 @@ export default class SearchesStore extends BaseStore<SearchQuery> {
 
   @computed
   get recent(): SearchQuery[] {
-    return uniqBy(this.orderedData, "query").slice(0, 8);
+    return uniqBy(this.orderedData, "query")
+      .filter((search) => search.source === "app")
+      .slice(0, 8);
   }
 }

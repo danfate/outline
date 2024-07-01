@@ -1,7 +1,47 @@
 import Revision from "@server/models/Revision";
-import DocumentHelper from "./DocumentHelper";
+import { buildDocument } from "@server/test/factories";
+import { DocumentHelper } from "./DocumentHelper";
 
 describe("DocumentHelper", () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(Date.parse("2021-01-01T00:00:00.000Z"));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  describe("parseMentions", () => {
+    it("should not parse normal links as mentions", async () => {
+      const document = await buildDocument({
+        text: `# Header
+    
+[link not mention](http://google.com)`,
+      });
+      const result = DocumentHelper.parseMentions(document);
+      expect(result.length).toBe(0);
+    });
+
+    it("should return an array of mentions", async () => {
+      const document = await buildDocument({
+        text: `# Header
+    
+@[Alan Kay](mention://2767ba0e-ac5c-4533-b9cf-4f5fc456600e/user/34095ac1-c808-45c0-8c6e-6c554497de64) :wink:
+
+More text
+
+@[Bret Victor](mention://34095ac1-c808-45c0-8c6e-6c554497de64/user/2767ba0e-ac5c-4533-b9cf-4f5fc456600e) :fire:`,
+      });
+      const result = DocumentHelper.parseMentions(document);
+      expect(result.length).toBe(2);
+      expect(result[0].id).toBe("2767ba0e-ac5c-4533-b9cf-4f5fc456600e");
+      expect(result[1].id).toBe("34095ac1-c808-45c0-8c6e-6c554497de64");
+      expect(result[0].modelId).toBe("34095ac1-c808-45c0-8c6e-6c554497de64");
+      expect(result[1].modelId).toBe("2767ba0e-ac5c-4533-b9cf-4f5fc456600e");
+    });
+  });
+
   describe("toEmailDiff", () => {
     it("should render a compact diff", async () => {
       const before = new Revision({
@@ -82,6 +122,25 @@ same on both sides`,
       expect(html).not.toContain("this is a highlight");
     });
 
+    it("should return undefined if no diff is renderable", async () => {
+      const before = new Revision({
+        title: "Title",
+        text: `
+This is a test paragraph`,
+      });
+
+      const after = new Revision({
+        title: "Title",
+        text: `
+This is a [test paragraph](https://example.net)`,
+      });
+
+      // Note: This test may fail in the future when support for diffing marks
+      // is improved.
+      const html = await DocumentHelper.toEmailDiff(before, after);
+      expect(html).toBeUndefined();
+    });
+
     it("should trim table rows to show minimal diff including header", async () => {
       const before = new Revision({
         title: "Title",
@@ -143,7 +202,7 @@ This is a new paragraph.
 |    |    |    |`,
       });
 
-      const text = await DocumentHelper.toPlainText(revision);
+      const text = DocumentHelper.toPlainText(revision);
 
       // Strip all formatting
       expect(text).toEqual(`This is a test paragraph

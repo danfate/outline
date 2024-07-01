@@ -1,18 +1,20 @@
 import { Node as ProsemirrorNode } from "prosemirror-model";
-import { EditorState, Transaction } from "prosemirror-state";
+import { EditorState } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import * as React from "react";
 import { DefaultTheme } from "styled-components";
+import { Primitive } from "utility-types";
 
 export type PlainTextSerializer = (node: ProsemirrorNode) => string;
 
 export enum EventType {
-  blockMenuOpen = "blockMenuOpen",
-  blockMenuClose = "blockMenuClose",
-  emojiMenuOpen = "emojiMenuOpen",
-  emojiMenuClose = "emojiMenuClose",
-  linkMenuOpen = "linkMenuOpen",
-  linkMenuClose = "linkMenuClose",
+  SuggestionsMenuOpen = "suggestionMenuOpen",
+  SuggestionsMenuClose = "suggestionMenuClose",
+  LinkToolbarOpen = "linkMenuOpen",
+}
+
+export enum TableLayout {
+  fullWidth = "full-width",
 }
 
 export type MenuItem = {
@@ -22,10 +24,16 @@ export type MenuItem = {
   shortcut?: string;
   keywords?: string;
   tooltip?: string;
+  label?: string;
+  dangerous?: boolean;
+  children?: MenuItem[];
   defaultHidden?: boolean;
-  attrs?: Record<string, any>;
+  attrs?:
+    | Record<string, Primitive>
+    | ((state: EditorState) => Record<string, Primitive>);
   visible?: boolean;
   active?: (state: EditorState) => boolean;
+  appendSpace?: boolean;
 };
 
 export type ComponentProps = {
@@ -36,5 +44,3 @@ export type ComponentProps = {
   isEditable: boolean;
   getPos: () => number;
 };
-
-export type Dispatch = (tr: Transaction) => void;

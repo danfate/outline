@@ -3,23 +3,30 @@ import {
   EditIcon,
   PadlockIcon,
   PlusIcon,
+  SearchIcon,
+  ShapesIcon,
   StarredIcon,
+  TrashIcon,
   UnstarredIcon,
 } from "outline-icons";
 import * as React from "react";
 import stores from "~/stores";
 import Collection from "~/models/Collection";
-import CollectionEdit from "~/scenes/CollectionEdit";
-import CollectionNew from "~/scenes/CollectionNew";
-import CollectionPermissions from "~/scenes/CollectionPermissions";
+import { CollectionEdit } from "~/components/Collection/CollectionEdit";
+import { CollectionNew } from "~/components/Collection/CollectionNew";
+import CollectionDeleteDialog from "~/components/CollectionDeleteDialog";
 import DynamicCollectionIcon from "~/components/Icons/CollectionIcon";
+import SharePopover from "~/components/Sharing/Collection/SharePopover";
+import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
 import { createAction } from "~/actions";
 import { CollectionSection } from "~/actions/sections";
+import { setPersistedState } from "~/hooks/usePersistedState";
 import history from "~/utils/history";
+import { newTemplatePath, searchPath } from "~/utils/routeHelpers";
 
-const ColorCollectionIcon = ({ collection }: { collection: Collection }) => {
-  return <DynamicCollectionIcon collection={collection} />;
-};
+const ColorCollectionIcon = ({ collection }: { collection: Collection }) => (
+  <DynamicCollectionIcon collection={collection} />
+);
 
 export const openCollection = createAction({
   name: ({ t }) => t("Open collection"),
@@ -32,11 +39,11 @@ export const openCollection = createAction({
     return collections.map((collection) => ({
       // Note: using url which includes the slug rather than id here to bust
       // cache if the collection is renamed
-      id: collection.url,
+      id: collection.path,
       name: collection.name,
       icon: <ColorCollectionIcon collection={collection} />,
       section: CollectionSection,
-      perform: () => history.push(collection.url),
+      perform: () => history.push(collection.path),
     }));
   },
 });
@@ -94,15 +101,38 @@ export const editCollectionPermissions = createAction({
   visible: ({ stores, activeCollectionId }) =>
     !!activeCollectionId &&
     stores.policies.abilities(activeCollectionId).update,
-  perform: ({ t, activeCollectionId }) => {
+  perform: ({ t, stores, activeCollectionId }) => {
     if (!activeCollectionId) {
+      return;
+    }
+    const collection = stores.collections.get(activeCollectionId);
+    if (!collection) {
       return;
     }
 
     stores.dialogs.openModal({
-      title: t("Collection permissions"),
-      content: <CollectionPermissions collectionId={activeCollectionId} />,
+      title: t("Share this collection"),
+      content: (
+        <SharePopover
+          collection={collection}
+          onRequestClose={stores.dialogs.closeAllModals}
+          visible
+        />
+      ),
     });
+  },
+});
+
+export const searchInCollection = createAction({
+  name: ({ t }) => t("Search in collection"),
+  analyticsName: "Search collection",
+  section: CollectionSection,
+  icon: <SearchIcon />,
+  visible: ({ activeCollectionId }) =>
+    !!activeCollectionId &&
+    stores.policies.abilities(activeCollectionId).readDocument,
+  perform: ({ activeCollectionId }) => {
+    history.push(searchPath(undefined, { collectionId: activeCollectionId }));
   },
 });
 
@@ -122,13 +152,14 @@ export const starCollection = createAction({
       stores.policies.abilities(activeCollectionId).star
     );
   },
-  perform: ({ activeCollectionId, stores }) => {
+  perform: async ({ activeCollectionId, stores }) => {
     if (!activeCollectionId) {
       return;
     }
 
     const collection = stores.collections.get(activeCollectionId);
-    collection?.star();
+    await collection?.star();
+    setPersistedState(getHeaderExpandedKey("starred"), true);
   },
 });
 
@@ -148,13 +179,68 @@ export const unstarCollection = createAction({
       stores.policies.abilities(activeCollectionId).unstar
     );
   },
-  perform: ({ activeCollectionId, stores }) => {
+  perform: async ({ activeCollectionId, stores }) => {
     if (!activeCollectionId) {
       return;
     }
 
     const collection = stores.collections.get(activeCollectionId);
-    collection?.unstar();
+    await collection?.unstar();
+  },
+});
+
+export const deleteCollection = createAction({
+  name: ({ t }) => `${t("Delete")}…`,
+  analyticsName: "Delete collection",
+  section: CollectionSection,
+  dangerous: true,
+  icon: <TrashIcon />,
+  visible: ({ activeCollectionId, stores }) => {
+    if (!activeCollectionId) {
+      return false;
+    }
+    return stores.policies.abilities(activeCollectionId).delete;
+  },
+  perform: ({ activeCollectionId, stores, t }) => {
+    if (!activeCollectionId) {
+      return;
+    }
+
+    const collection = stores.collections.get(activeCollectionId);
+    if (!collection) {
+      return;
+    }
+
+    stores.dialogs.openModal({
+      title: t("Delete collection"),
+      content: (
+        <CollectionDeleteDialog
+          collection={collection}
+          onSubmit={stores.dialogs.closeAllModals}
+        />
+      ),
+    });
+  },
+});
+
+export const createTemplate = createAction({
+  name: ({ t }) => t("New template"),
+  analyticsName: "New template",
+  section: CollectionSection,
+  icon: <ShapesIcon />,
+  keywords: "new create template",
+  visible: ({ activeCollectionId, stores }) =>
+    !!(
+      !!activeCollectionId &&
+      stores.policies.abilities(activeCollectionId).createDocument
+    ),
+  perform: ({ activeCollectionId, event }) => {
+    if (!activeCollectionId) {
+      return;
+    }
+    event?.preventDefault();
+    event?.stopPropagation();
+    history.push(newTemplatePath(activeCollectionId));
   },
 });
 
@@ -163,4 +249,5 @@ export const rootCollectionActions = [
   createCollection,
   starCollection,
   unstarCollection,
+  deleteCollection,
 ];

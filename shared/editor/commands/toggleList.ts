@@ -1,14 +1,16 @@
 import { NodeType } from "prosemirror-model";
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
-import { EditorState } from "prosemirror-state";
-import { findParentNode } from "prosemirror-utils";
-import chainTransactions from "../lib/chainTransactions";
-import isList from "../queries/isList";
-import { Dispatch } from "../types";
+import { Command } from "prosemirror-state";
+import { chainTransactions } from "../lib/chainTransactions";
+import { findParentNode } from "../queries/findParentNode";
+import { isList } from "../queries/isList";
 import clearNodes from "./clearNodes";
 
-export default function toggleList(listType: NodeType, itemType: NodeType) {
-  return (state: EditorState, dispatch?: Dispatch) => {
+export default function toggleList(
+  listType: NodeType,
+  itemType: NodeType
+): Command {
+  return (state, dispatch) => {
     const { schema, selection } = state;
     const { $from, $to } = selection;
     const range = $from.blockRange($to);
@@ -33,10 +35,7 @@ export default function toggleList(listType: NodeType, itemType: NodeType) {
       ) {
         tr.setNodeMarkup(parentList.pos, listType);
 
-        if (dispatch) {
-          dispatch(tr);
-        }
-
+        dispatch?.(tr);
         return false;
       }
     }

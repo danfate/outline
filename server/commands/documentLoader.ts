@@ -1,12 +1,13 @@
 import invariant from "invariant";
 import { Op, WhereOptions } from "sequelize";
 import isUUID from "validator/lib/isUUID";
-import { SHARE_URL_SLUG_REGEX } from "@shared/utils/urlHelpers";
+import { UrlHelper } from "@shared/utils/UrlHelper";
 import {
   NotFoundError,
   InvalidRequestError,
   AuthorizationError,
   AuthenticationError,
+  PaymentRequiredError,
 } from "@server/errors";
 import { Collection, Document, Share, User, Team } from "@server/models";
 import { authorize, can } from "@server/policies";
@@ -41,7 +42,7 @@ export default async function loadDocument({
   }
 
   const shareUrlId =
-    shareId && !isUUID(shareId) && SHARE_URL_SLUG_REGEX.test(shareId)
+    shareId && !isUUID(shareId) && UrlHelper.SHARE_URL_SLUG_REGEX.test(shareId)
       ? shareId
       : undefined;
 
@@ -119,6 +120,10 @@ export default async function loadDocument({
       throw NotFoundError("Document could not be found for shareId");
     }
 
+    if (document.isTrialImport) {
+      throw PaymentRequiredError();
+    }
+
     // If the user has access to read the document, we can just update
     // the last access date and return the document without additional checks.
     const canReadDocument = user && can(user, "read", document);
@@ -126,9 +131,12 @@ export default async function loadDocument({
     if (canReadDocument) {
       // Cannot use document.collection here as it does not include the
       // documentStructure by default through the relationship.
-      collection = await Collection.findByPk(document.collectionId);
-      if (!collection) {
-        throw NotFoundError("Collection could not be found for document");
+      if (document.collectionId) {
+        collection = await Collection.findByPk(document.collectionId);
+
+        if (!collection) {
+          throw NotFoundError("Collection could not be found for document");
+        }
       }
 
       return {
@@ -146,7 +154,9 @@ export default async function loadDocument({
     }
 
     // It is possible to disable sharing at the collection so we must check
-    collection = await Collection.findByPk(document.collectionId);
+    if (document.collectionId) {
+      collection = await Collection.findByPk(document.collectionId);
+    }
     invariant(collection, "collection not found");
 
     if (!collection.sharing) {
@@ -162,7 +172,7 @@ export default async function loadDocument({
       }
 
       const childDocumentIds =
-        (await share.document?.getChildDocumentIds({
+        (await share.document?.findAllChildDocumentIds({
           archivedAt: {
             [Op.is]: null,
           },
@@ -176,6 +186,9 @@ export default async function loadDocument({
     // It is possible to disable sharing at the team level so we must check
     const team = await Team.findByPk(document.teamId, { rejectOnEmpty: true });
 
+    if (team.suspendedAt) {
+      throw NotFoundError();
+    }
     if (!team.sharing) {
       throw AuthorizationError();
     }
@@ -195,6 +208,10 @@ export default async function loadDocument({
       user && authorize(user, "restore", document);
     } else {
       user && authorize(user, "read", document);
+    }
+
+    if (document.isTrialImport) {
+      throw PaymentRequiredError();
     }
 
     collection = document.collection;

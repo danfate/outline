@@ -1,4 +1,4 @@
-import { trim } from "lodash";
+import trim from "lodash/trim";
 import env from "../env";
 
 type Domain = {
@@ -65,10 +65,10 @@ export function parseDomain(url: string): Domain {
   };
 }
 
-export function getCookieDomain(domain: string) {
+export function getCookieDomain(domain: string, isCloudHosted: boolean) {
   // always use the base URL for cookies when in hosted mode
   // and the domain is not custom
-  if (env.SUBDOMAINS_ENABLED) {
+  if (isCloudHosted) {
     const parsed = parseDomain(domain);
 
     if (!parsed.custom) {

@@ -1,5 +1,6 @@
 import { setBlockType } from "prosemirror-commands";
 import { NodeSpec, NodeType, Node as ProsemirrorNode } from "prosemirror-model";
+import deleteEmptyFirstParagraph from "../commands/deleteEmptyFirstParagraph";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import Node from "./Node";
 
@@ -13,13 +14,14 @@ export default class Paragraph extends Node {
       content: "inline*",
       group: "block",
       parseDOM: [{ tag: "p" }],
-      toDOM: () => ["p", 0],
+      toDOM: () => ["p", { dir: "auto" }, 0],
     };
   }
 
   keys({ type }: { type: NodeType }) {
     return {
       "Shift-Ctrl-0": setBlockType(type),
+      Backspace: deleteEmptyFirstParagraph,
     };
   }
 

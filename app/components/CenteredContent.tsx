@@ -3,6 +3,8 @@ import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 
 type Props = {
+  children?: React.ReactNode;
+  maxWidth?: string;
   withStickyHeader?: boolean;
 };
 
@@ -17,21 +19,25 @@ const Container = styled.div<Props>`
   `};
 `;
 
-const Content = styled.div`
-  max-width: 46em;
+type ContentProps = { $maxWidth?: string };
+
+const Content = styled.div<ContentProps>`
+  max-width: ${(props) => props.$maxWidth ?? "46em"};
   margin: 0 auto;
 
   ${breakpoint("desktopLarge")`
-    max-width: 52em;
+    max-width: ${(props: ContentProps) => props.$maxWidth ?? "52em"};
   `};
 `;
 
-const CenteredContent: React.FC<Props> = ({ children, ...rest }) => {
-  return (
-    <Container {...rest}>
-      <Content>{children}</Content>
-    </Container>
-  );
-};
+const CenteredContent: React.FC<Props> = ({
+  children,
+  maxWidth,
+  ...rest
+}: Props) => (
+  <Container {...rest}>
+    <Content $maxWidth={maxWidth}>{children}</Content>
+  </Container>
+);
 
 export default CenteredContent;

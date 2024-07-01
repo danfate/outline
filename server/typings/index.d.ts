@@ -1,5 +1,3 @@
-declare module "slate-md-serializer";
-
 declare module "sequelize-encrypted";
 
 declare module "styled-components-breakpoint";
@@ -7,8 +5,6 @@ declare module "styled-components-breakpoint";
 declare module "formidable/lib/file";
 
 declare module "oy-vey";
-
-declare module "fetch-test-server";
 
 declare module "email-providers" {
   const list: string[];

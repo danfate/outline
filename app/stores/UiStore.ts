@@ -3,6 +3,7 @@ import { light as defaultTheme } from "@shared/styles/theme";
 import Storage from "@shared/utils/Storage";
 import Document from "~/models/Document";
 import type { ConnectionStatus } from "~/scenes/Document/components/MultiplayerEditor";
+import type RootStore from "./RootStore";
 
 const UI_STORE = "UI_STORE";
 
@@ -19,6 +20,16 @@ export enum SystemTheme {
   Light = "light",
   Dark = "dark",
 }
+
+type PersistedData = {
+  languagePromptDismissed: boolean | undefined;
+  theme: Theme;
+  sidebarCollapsed: boolean;
+  sidebarWidth: number;
+  sidebarRightWidth: number;
+  tocVisible: boolean;
+  commentsExpanded: string[];
+};
 
 class UiStore {
   // has the user seen the prompt to change the UI language and actioned it
@@ -37,13 +48,10 @@ class UiStore {
   activeDocumentId: string | undefined;
 
   @observable
-  activeCollectionId: string | undefined;
+  activeCollectionId?: string | null;
 
   @observable
   observingUserId: string | undefined;
-
-  @observable
-  commandBarOpenedFromSidebar = false;
 
   @observable
   progressBarVisible = false;
@@ -58,7 +66,13 @@ class UiStore {
   sidebarWidth: number;
 
   @observable
+  sidebarRightWidth: number;
+
+  @observable
   sidebarCollapsed = false;
+
+  @observable
+  commentsExpanded: string[] = [];
 
   @observable
   sidebarIsResizing = false;
@@ -66,9 +80,24 @@ class UiStore {
   @observable
   multiplayerStatus: ConnectionStatus;
 
-  constructor() {
+  @observable
+  multiplayerErrorCode?: number;
+
+  rootStore: RootStore;
+
+  constructor(rootStore: RootStore) {
+    this.rootStore = rootStore;
+
     // Rehydrate
-    const data: Partial<UiStore> = Storage.get(UI_STORE) || {};
+    const data: PersistedData = Storage.get(UI_STORE) || {};
+    this.languagePromptDismissed = data.languagePromptDismissed;
+    this.sidebarCollapsed = !!data.sidebarCollapsed;
+    this.sidebarWidth = data.sidebarWidth || defaultTheme.sidebarWidth;
+    this.sidebarRightWidth =
+      data.sidebarRightWidth || defaultTheme.sidebarRightWidth;
+    this.tocVisible = !!data.tocVisible;
+    this.commentsExpanded = data.commentsExpanded || [];
+    this.theme = data.theme || Theme.System;
 
     // system theme listeners
     if (window.matchMedia) {
@@ -87,12 +116,22 @@ class UiStore {
       }
     }
 
-    // persisted keys
-    this.languagePromptDismissed = data.languagePromptDismissed;
-    this.sidebarCollapsed = !!data.sidebarCollapsed;
-    this.sidebarWidth = data.sidebarWidth || defaultTheme.sidebarWidth;
-    this.tocVisible = !!data.tocVisible;
-    this.theme = data.theme || Theme.System;
+    window.addEventListener("storage", (event) => {
+      if (event.key === UI_STORE && event.newValue) {
+        const newData: PersistedData | null = JSON.parse(event.newValue);
+
+        // data may be null if key is deleted in localStorage
+        if (!newData) {
+          return;
+        }
+
+        // Note: we do not sync all properties here, sidebar widths cause fighting between windows
+        this.theme = newData.theme;
+        this.languagePromptDismissed = newData.languagePromptDismissed;
+        this.sidebarCollapsed = !!newData.sidebarCollapsed;
+        this.tocVisible = !!newData.tocVisible;
+      }
+    });
 
     autorun(() => {
       Storage.set(UI_STORE, this.asJson);
@@ -127,8 +166,12 @@ class UiStore {
   };
 
   @action
-  setMultiplayerStatus = (status: ConnectionStatus): void => {
+  setMultiplayerStatus = (
+    status: ConnectionStatus,
+    errorCode?: number
+  ): void => {
     this.multiplayerStatus = status;
+    this.multiplayerErrorCode = errorCode;
   };
 
   @action
@@ -153,8 +196,13 @@ class UiStore {
   };
 
   @action
-  setSidebarWidth = (sidebarWidth: number): void => {
-    this.sidebarWidth = sidebarWidth;
+  setSidebarWidth = (width: number): void => {
+    this.sidebarWidth = width;
+  };
+
+  @action
+  setRightSidebarWidth = (width: number): void => {
+    this.sidebarRightWidth = width;
   };
 
   @action
@@ -166,6 +214,29 @@ class UiStore {
   expandSidebar = () => {
     sidebarHidden = false;
     this.sidebarCollapsed = false;
+  };
+
+  @action
+  collapseComments = (documentId: string) => {
+    this.commentsExpanded = this.commentsExpanded.filter(
+      (id) => id !== documentId
+    );
+  };
+
+  @action
+  expandComments = (documentId: string) => {
+    if (!this.commentsExpanded.includes(documentId)) {
+      this.commentsExpanded.push(documentId);
+    }
+  };
+
+  @action
+  toggleComments = (documentId: string) => {
+    if (this.commentsExpanded.includes(documentId)) {
+      this.collapseComments(documentId);
+    } else {
+      this.expandComments(documentId);
+    }
   };
 
   @action
@@ -200,19 +271,17 @@ class UiStore {
   };
 
   @action
-  commandBarOpened = () => {
-    this.commandBarOpenedFromSidebar = true;
-  };
-
-  @action
-  commandBarClosed = () => {
-    this.commandBarOpenedFromSidebar = false;
-  };
-
-  @action
   hideMobileSidebar = () => {
     this.mobileSidebarVisible = false;
   };
+
+  @computed
+  get readyToShow() {
+    return (
+      !this.rootStore.auth.user ||
+      (this.rootStore.collections.isLoaded && this.rootStore.documents.isLoaded)
+    );
+  }
 
   /**
    * Returns the current state of the sidebar taking into account user preference
@@ -234,12 +303,14 @@ class UiStore {
   }
 
   @computed
-  get asJson() {
+  get asJson(): PersistedData {
     return {
       tocVisible: this.tocVisible,
       sidebarCollapsed: this.sidebarCollapsed,
       sidebarWidth: this.sidebarWidth,
+      sidebarRightWidth: this.sidebarRightWidth,
       languagePromptDismissed: this.languagePromptDismissed,
+      commentsExpanded: this.commentsExpanded,
       theme: this.theme,
     };
   }

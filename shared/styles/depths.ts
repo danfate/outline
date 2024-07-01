@@ -1,8 +1,9 @@
 const depths = {
+  toc: 100,
   header: 800,
   sidebar: 900,
-  editorHeadingActions: 920,
   editorToolbar: 925,
+  mobileSidebar: 930,
   hoverPreview: 950,
   // Note: editor lightbox is z-index 999
   modalOverlay: 2000,

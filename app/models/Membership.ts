@@ -1,20 +1,27 @@
-import { computed } from "mobx";
+import { observable } from "mobx";
 import { CollectionPermission } from "@shared/types";
-import BaseModel from "./BaseModel";
+import Collection from "./Collection";
+import User from "./User";
+import Model from "./base/Model";
+import Relation from "./decorators/Relation";
 
-class Membership extends BaseModel {
+class Membership extends Model {
+  static modelName = "Membership";
+
   id: string;
 
   userId: string;
 
+  @Relation(() => User, { onDelete: "cascade" })
+  user: User;
+
   collectionId: string;
 
-  permission: CollectionPermission;
+  @Relation(() => Collection, { onDelete: "cascade" })
+  collection: Collection;
 
-  @computed
-  get isEditor(): boolean {
-    return this.permission === CollectionPermission.ReadWrite;
-  }
+  @observable
+  permission: CollectionPermission;
 }
 
 export default Membership;

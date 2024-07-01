@@ -5,6 +5,7 @@ import {
   sinkListItem,
   liftListItem,
 } from "prosemirror-schema-list";
+import toggleCheckboxItem from "../commands/toggleCheckboxItem";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import checkboxRule from "../rules/checkboxes";
 import Node from "./Node";
@@ -87,10 +88,20 @@ export default class CheckboxItem extends Node {
     }
   };
 
+  commands({ type }: { type: NodeType }) {
+    return {
+      indentCheckboxList: () => sinkListItem(type),
+      outdentCheckboxList: () => liftListItem(type),
+    };
+  }
+
   keys({ type }: { type: NodeType }) {
     return {
-      Enter: splitListItem(type),
+      Enter: splitListItem(type, {
+        checked: false,
+      }),
       Tab: sinkListItem(type),
+      "Mod-Enter": toggleCheckboxItem(),
       "Shift-Tab": liftListItem(type),
       "Mod-]": sinkListItem(type),
       "Mod-[": liftListItem(type),

@@ -1,4 +1,4 @@
-import { UserPreferences } from "@shared/types";
+import { NotificationSettings, UserPreferences, UserRole } from "@shared/types";
 import env from "@server/env";
 import { User } from "@server/models";
 
@@ -14,12 +14,12 @@ type UserPresentation = {
   updatedAt: Date;
   lastActiveAt: Date | null;
   color: string;
-  isAdmin: boolean;
+  role: UserRole;
   isSuspended: boolean;
-  isViewer: boolean;
   email?: string | null;
   language?: string;
   preferences?: UserPreferences | null;
+  notificationSettings?: NotificationSettings;
 };
 
 export default function presentUser(
@@ -31,9 +31,8 @@ export default function presentUser(
     name: user.name,
     avatarUrl: user.avatarUrl,
     color: user.color,
-    isAdmin: user.isAdmin,
+    role: user.role,
     isSuspended: user.isSuspended,
-    isViewer: user.isViewer,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
     lastActiveAt: user.lastActiveAt,
@@ -43,6 +42,7 @@ export default function presentUser(
     userData.email = user.email;
     userData.language = user.language || env.DEFAULT_LANGUAGE;
     userData.preferences = user.preferences;
+    userData.notificationSettings = user.notificationSettings;
   }
 
   return userData;

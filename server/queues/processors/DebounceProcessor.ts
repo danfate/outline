@@ -13,12 +13,12 @@ export default class DebounceProcessor extends BaseProcessor {
   async perform(event: Event) {
     switch (event.name) {
       case "documents.update": {
-        globalEventQueue.add(
+        await globalEventQueue.add(
           { ...event, name: "documents.update.delayed" },
           {
             // speed up revision creation in development, we don't have all the
             // time in the world.
-            delay: (env.ENVIRONMENT === "development" ? 0.5 : 5) * 60 * 1000,
+            delay: (env.isProduction ? 5 : 0.5) * 60 * 1000,
           }
         );
         break;
@@ -41,7 +41,10 @@ export default class DebounceProcessor extends BaseProcessor {
           return;
         }
 
-        globalEventQueue.add({ ...event, name: "documents.update.debounced" });
+        await globalEventQueue.add({
+          ...event,
+          name: "documents.update.debounced",
+        });
         break;
       }
 

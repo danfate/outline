@@ -1,8 +1,9 @@
-const fields = new Map();
+import type Model from "../base/Model";
 
-export const getFieldsForModel = (target: any) => {
-  return fields.get(target.constructor.name);
-};
+const fields = new Map<string, (string | number | symbol)[]>();
+
+export const getFieldsForModel = <T extends Model>(target: T) =>
+  fields.get(target.constructor.name) ?? [];
 
 /**
  * A decorator that records this key as a serializable field on the model.

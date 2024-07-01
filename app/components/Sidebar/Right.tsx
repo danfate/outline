@@ -3,22 +3,24 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import styled, { useTheme } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import { depths, s } from "@shared/styles";
+import ErrorBoundary from "~/components/ErrorBoundary";
 import Flex from "~/components/Flex";
 import ResizeBorder from "~/components/Sidebar/components/ResizeBorder";
-import usePersistedState from "~/hooks/usePersistedState";
+import useMobile from "~/hooks/useMobile";
+import useStores from "~/hooks/useStores";
+import { sidebarAppearDuration } from "~/styles/animations";
 
-type Props = React.HTMLAttributes<HTMLDivElement> & {
+interface Props extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   border?: boolean;
-};
+}
 
 function Right({ children, border, className }: Props) {
   const theme = useTheme();
-  const [width, setWidth] = usePersistedState(
-    "rightSidebarWidth",
-    theme.sidebarWidth
-  );
+  const { ui } = useStores();
   const [isResizing, setResizing] = React.useState(false);
+  const isMobile = useMobile();
   const maxWidth = theme.sidebarMaxWidth;
   const minWidth = theme.sidebarMinWidth + 16; // padding
 
@@ -30,14 +32,14 @@ function Right({ children, border, className }: Props) {
         Math.min(window.innerWidth - event.pageX, maxWidth),
         minWidth
       );
-      setWidth(width);
+      ui.setRightSidebarWidth(width);
     },
-    [minWidth, maxWidth, setWidth]
+    [minWidth, maxWidth, ui]
   );
 
   const handleReset = React.useCallback(() => {
-    setWidth(theme.sidebarWidth);
-  }, [setWidth, theme.sidebarWidth]);
+    ui.setRightSidebarWidth(theme.sidebarRightWidth);
+  }, [ui, theme.sidebarRightWidth]);
 
   const handleStopDrag = React.useCallback(() => {
     setResizing(false);
@@ -66,39 +68,44 @@ function Right({ children, border, className }: Props) {
 
   const style = React.useMemo(
     () => ({
-      width: `${width}px`,
+      width: `${ui.sidebarRightWidth}px`,
     }),
-    [width]
+    [ui.sidebarRightWidth]
   );
 
+  const animationProps = {
+    initial: {
+      width: 0,
+      opacity: 0.9,
+    },
+    animate: {
+      transition: isResizing
+        ? { duration: 0 }
+        : {
+            type: "spring",
+            bounce: 0.2,
+            duration: sidebarAppearDuration / 1000,
+          },
+      width: ui.sidebarRightWidth,
+      opacity: 1,
+    },
+    exit: {
+      width: 0,
+      opacity: 0,
+    },
+  };
+
   return (
-    <Sidebar
-      initial={{
-        width: 0,
-      }}
-      animate={{
-        transition: isResizing
-          ? { duration: 0 }
-          : {
-              type: "spring",
-              bounce: 0.2,
-              duration: 0.6,
-            },
-        width,
-      }}
-      exit={{
-        width: 0,
-      }}
-      $border={border}
-      className={className}
-    >
+    <Sidebar {...animationProps} $border={border} className={className}>
       <Position style={style} column>
-        {children}
-        <ResizeBorder
-          onMouseDown={handleMouseDown}
-          onDoubleClick={handleReset}
-          dir="right"
-        />
+        <ErrorBoundary>{children}</ErrorBoundary>
+        {!isMobile && (
+          <ResizeBorder
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleReset}
+            dir="right"
+          />
+        )}
       </Position>
     </Sidebar>
   );
@@ -108,21 +115,32 @@ const Position = styled(Flex)`
   position: fixed;
   top: 0;
   bottom: 0;
+  max-width: 80%;
 `;
 
-const Sidebar = styled(m.div)<{ $border?: boolean }>`
-  display: none;
-  position: relative;
+const Sidebar = styled(m.div)<{
+  $border?: boolean;
+}>`
+  display: block;
   flex-shrink: 0;
-  background: ${(props) => props.theme.background};
-  width: ${(props) => props.theme.sidebarWidth}px;
-  border-left: 1px solid ${(props) => props.theme.divider};
+  background: ${s("background")};
+  max-width: 80%;
+  border-left: 1px solid ${s("divider")};
   transition: border-left 100ms ease-in-out;
   z-index: 1;
 
-  ${breakpoint("tablet")`
+  ${breakpoint("mobile", "tablet")`
     display: flex;
-  `};
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: ${depths.mobileSidebar};
+  `}
+
+  ${breakpoint("tablet")`
+    position: relative;
+  `}
 `;
 
 export default observer(Right);

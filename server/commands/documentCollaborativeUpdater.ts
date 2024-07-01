@@ -1,11 +1,13 @@
 import { yDocToProsemirrorJSON } from "@getoutline/y-prosemirror";
-import { uniq } from "lodash";
+import isEqual from "fast-deep-equal";
+import uniq from "lodash/uniq";
 import { Node } from "prosemirror-model";
 import * as Y from "yjs";
-import { sequelize } from "@server/database/sequelize";
+import { ProsemirrorData } from "@shared/types";
 import { schema, serializer } from "@server/editor";
 import Logger from "@server/logging/Logger";
 import { Document, Event } from "@server/models";
+import { sequelize } from "@server/storage/database";
 
 type Props = {
   /** The document ID to update */
@@ -14,12 +16,15 @@ type Props = {
   ydoc: Y.Doc;
   /** The user ID that is performing the update, if known */
   userId?: string;
+  /** Whether the last connection to the document left */
+  isLastConnection: boolean;
 };
 
 export default async function documentCollaborativeUpdater({
   documentId,
   ydoc,
   userId,
+  isLastConnection,
 }: Props) {
   return sequelize.transaction(async (transaction) => {
     const document = await Document.unscoped()
@@ -38,9 +43,10 @@ export default async function documentCollaborativeUpdater({
       });
 
     const state = Y.encodeStateAsUpdate(ydoc);
-    const node = Node.fromJSON(schema, yDocToProsemirrorJSON(ydoc, "default"));
+    const content = yDocToProsemirrorJSON(ydoc, "default") as ProsemirrorData;
+    const node = Node.fromJSON(schema, content);
     const text = serializer.serialize(node, undefined);
-    const isUnchanged = document.text === text;
+    const isUnchanged = isEqual(document.content, content);
     const lastModifiedById = userId ?? document.lastModifiedById;
 
     if (isUnchanged) {
@@ -60,6 +66,7 @@ export default async function documentCollaborativeUpdater({
     await document.update(
       {
         text,
+        content,
         state: Buffer.from(state),
         lastModifiedById,
         collaboratorIds,
@@ -79,6 +86,7 @@ export default async function documentCollaborativeUpdater({
       data: {
         multiplayer: true,
         title: document.title,
+        done: isLastConnection,
       },
     });
   });

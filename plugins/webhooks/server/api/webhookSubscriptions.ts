@@ -1,19 +1,21 @@
 import Router from "koa-router";
-import { compact, isEmpty } from "lodash";
-import { ValidationError } from "@server/errors";
+import compact from "lodash/compact";
+import isEmpty from "lodash/isEmpty";
+import { UserRole } from "@shared/types";
 import auth from "@server/middlewares/authentication";
+import validate from "@server/middlewares/validate";
 import { WebhookSubscription, Event } from "@server/models";
 import { authorize } from "@server/policies";
 import pagination from "@server/routes/api/middlewares/pagination";
 import { WebhookSubscriptionEvent, APIContext } from "@server/types";
-import { assertArray, assertPresent, assertUuid } from "@server/validation";
 import presentWebhookSubscription from "../presenters/webhookSubscription";
+import * as T from "./schema";
 
 const router = new Router();
 
 router.post(
   "webhookSubscriptions.list",
-  auth({ admin: true }),
+  auth({ role: UserRole.Admin }),
   pagination(),
   async (ctx: APIContext) => {
     const { user } = ctx.state.auth;
@@ -36,19 +38,14 @@ router.post(
 
 router.post(
   "webhookSubscriptions.create",
-  auth({ admin: true }),
-  async (ctx: APIContext) => {
+  auth({ role: UserRole.Admin }),
+  validate(T.WebhookSubscriptionsCreateSchema),
+  async (ctx: APIContext<T.WebhookSubscriptionsCreateReq>) => {
     const { user } = ctx.state.auth;
     authorize(user, "createWebhookSubscription", user.team);
 
-    const { name, url, secret } = ctx.request.body;
-    const events: string[] = compact(ctx.request.body.events);
-    assertPresent(name, "name is required");
-    assertPresent(url, "url is required");
-    assertArray(events, "events is required");
-    if (events.length === 0) {
-      throw ValidationError("events are required");
-    }
+    const { name, url, secret } = ctx.input.body;
+    const events: string[] = compact(ctx.input.body.events);
 
     const webhookSubscription = await WebhookSubscription.create({
       name,
@@ -82,10 +79,10 @@ router.post(
 
 router.post(
   "webhookSubscriptions.delete",
-  auth({ admin: true }),
-  async (ctx: APIContext) => {
-    const { id } = ctx.request.body;
-    assertUuid(id, "id is required");
+  auth({ role: UserRole.Admin }),
+  validate(T.WebhookSubscriptionsDeleteSchema),
+  async (ctx: APIContext<T.WebhookSubscriptionsDeleteReq>) => {
+    const { id } = ctx.input.body;
     const { user } = ctx.state.auth;
     const webhookSubscription = await WebhookSubscription.findByPk(id);
 
@@ -106,27 +103,24 @@ router.post(
       ip: ctx.request.ip,
     };
     await Event.create(event);
+
+    ctx.body = {
+      success: true,
+    };
   }
 );
 
 router.post(
   "webhookSubscriptions.update",
-  auth({ admin: true }),
-  async (ctx: APIContext) => {
-    const { id } = ctx.request.body;
-    assertUuid(id, "id is required");
+  auth({ role: UserRole.Admin }),
+  validate(T.WebhookSubscriptionsUpdateSchema),
+  async (ctx: APIContext<T.WebhookSubscriptionsUpdateReq>) => {
+    const { id, name, url, secret } = ctx.input.body;
     const { user } = ctx.state.auth;
-
-    const { name, url, secret } = ctx.request.body;
-    const events: string[] = compact(ctx.request.body.events);
-    assertPresent(name, "name is required");
-    assertPresent(url, "url is required");
-    assertArray(events, "events is required");
-    if (events.length === 0) {
-      throw ValidationError("events are required");
-    }
-
-    const webhookSubscription = await WebhookSubscription.findByPk(id);
+    const events: string[] = compact(ctx.input.body.events);
+    const webhookSubscription = await WebhookSubscription.findByPk(id, {
+      rejectOnEmpty: true,
+    });
 
     authorize(user, "update", webhookSubscription);
 

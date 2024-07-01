@@ -1,5 +1,10 @@
 import FuzzySearch from "fuzzy-search";
-import { includes, difference, concat, filter, map, fill } from "lodash";
+import concat from "lodash/concat";
+import difference from "lodash/difference";
+import fill from "lodash/fill";
+import filter from "lodash/filter";
+import includes from "lodash/includes";
+import map from "lodash/map";
 import { observer } from "mobx-react";
 import { StarredIcon, DocumentIcon } from "outline-icons";
 import * as React from "react";
@@ -10,12 +15,11 @@ import scrollIntoView from "smooth-scroll-into-view-if-needed";
 import styled, { useTheme } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import { NavigationNode } from "@shared/types";
-import parseTitle from "@shared/utils/parseTitle";
 import DocumentExplorerNode from "~/components/DocumentExplorerNode";
 import DocumentExplorerSearchResult from "~/components/DocumentExplorerSearchResult";
 import Flex from "~/components/Flex";
+import Icon from "~/components/Icon";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
-import EmojiIcon from "~/components/Icons/EmojiIcon";
 import { Outline } from "~/components/Input";
 import InputSearch from "~/components/InputSearch";
 import Text from "~/components/Text";
@@ -45,10 +49,8 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
   const [selectedNode, selectNode] = React.useState<NavigationNode | null>(
     null
   );
-  const [initialScrollOffset, setInitialScrollOffset] = React.useState<number>(
-    0
-  );
-  const [nodes, setNodes] = React.useState<NavigationNode[]>([]);
+  const [initialScrollOffset, setInitialScrollOffset] =
+    React.useState<number>(0);
   const [activeNode, setActiveNode] = React.useState<number>(0);
   const [expandedNodes, setExpandedNodes] = React.useState<string[]>([]);
   const [itemRefs, setItemRefs] = React.useState<
@@ -63,11 +65,13 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
   const VERTICAL_PADDING = 6;
   const HORIZONTAL_PADDING = 24;
 
-  const searchIndex = React.useMemo(() => {
-    return new FuzzySearch(items, ["title"], {
-      caseSensitive: false,
-    });
-  }, [items]);
+  const searchIndex = React.useMemo(
+    () =>
+      new FuzzySearch(items, ["title"], {
+        caseSensitive: false,
+      }),
+    [items]
+  );
 
   React.useEffect(() => {
     if (searchTerm) {
@@ -76,19 +80,6 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     }
     setActiveNode(0);
   }, [searchTerm]);
-
-  React.useEffect(() => {
-    let results;
-
-    if (searchTerm) {
-      results = searchIndex.search(searchTerm);
-    } else {
-      results = items.filter((item) => item.type === "collection");
-    }
-
-    setInitialScrollOffset(0);
-    setNodes(results);
-  }, [searchTerm, items, searchIndex]);
 
   React.useEffect(() => {
     setItemRefs((itemRefs) =>
@@ -102,6 +93,22 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
   React.useEffect(() => {
     onSelect(selectedNode);
   }, [selectedNode, onSelect]);
+
+  function getNodes() {
+    function includeDescendants(item: NavigationNode): NavigationNode[] {
+      return expandedNodes.includes(item.id)
+        ? [item, ...descendants(item, 1).flatMap(includeDescendants)]
+        : [item];
+    }
+
+    return searchTerm
+      ? searchIndex.search(searchTerm)
+      : items
+          .filter((item) => item.type === "collection")
+          .flatMap(includeDescendants);
+  }
+
+  const nodes = getNodes();
 
   const scrollNodeIntoView = React.useCallback(
     (node: number) => {
@@ -119,9 +126,7 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     setSearchTerm(ev.target.value);
   };
 
-  const isExpanded = (node: number) => {
-    return includes(expandedNodes, nodes[node].id);
-  };
+  const isExpanded = (node: number) => includes(expandedNodes, nodes[node].id);
 
   const calculateInitialScrollOffset = (itemCount: number) => {
     if (listRef.current) {
@@ -130,7 +135,7 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
         scrollOffset: number;
       };
       const itemsHeight = itemCount * itemSize;
-      return itemsHeight < height ? 0 : scrollOffset;
+      return itemsHeight < Number(height) ? 0 : scrollOffset;
     }
     return 0;
   };
@@ -145,7 +150,6 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     const newNodes = filter(nodes, (node) => !includes(descendantIds, node.id));
     const scrollOffset = calculateInitialScrollOffset(newNodes.length);
     setInitialScrollOffset(scrollOffset);
-    setNodes(newNodes);
   };
 
   const expand = (node: number) => {
@@ -156,8 +160,17 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     newNodes.splice(node + 1, 0, ...descendants(nodes[node], 1));
     const scrollOffset = calculateInitialScrollOffset(newNodes.length);
     setInitialScrollOffset(scrollOffset);
-    setNodes(newNodes);
   };
+
+  React.useEffect(() => {
+    collections.orderedData
+      .filter(
+        (collection) => expandedNodes.includes(collection.id) || searchTerm
+      )
+      .forEach((collection) => {
+        void collection.fetchDocuments();
+      });
+  }, [collections, expandedNodes, searchTerm]);
 
   const isSelected = (node: number) => {
     if (!selectedNode) {
@@ -169,9 +182,8 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     return selectedNodeId === nodeId;
   };
 
-  const hasChildren = (node: number) => {
-    return nodes[node].children.length > 0;
-  };
+  const hasChildren = (node: number) =>
+    nodes[node].children.length > 0 || nodes[node].type === "collection";
 
   const toggleCollapse = (node: number) => {
     if (!hasChildren(node)) {
@@ -192,107 +204,112 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
     }
   };
 
-  const ListItem = ({
-    index,
-    data,
-    style,
-  }: {
-    index: number;
-    data: NavigationNode[];
-    style: React.CSSProperties;
-  }) => {
-    const node = data[index];
-    const isCollection = node.type === "collection";
-    let icon, title, path;
+  const ListItem = observer(
+    ({
+      index,
+      data,
+      style,
+    }: {
+      index: number;
+      data: NavigationNode[];
+      style: React.CSSProperties;
+    }) => {
+      const node = data[index];
+      const isCollection = node.type === "collection";
+      let renderedIcon,
+        title: string,
+        icon: string | undefined,
+        color: string | undefined,
+        path;
 
-    if (isCollection) {
-      const col = collections.get(node.collectionId as string);
-      icon = col && (
-        <CollectionIcon collection={col} expanded={isExpanded(index)} />
-      );
-      title = node.title;
-    } else {
-      const doc = documents.get(node.id);
-      const { strippedTitle, emoji } = parseTitle(node.title);
-      title = strippedTitle;
-
-      if (emoji) {
-        icon = <EmojiIcon emoji={emoji} />;
-      } else if (doc?.isStarred) {
-        icon = <StarredIcon color={theme.yellow} />;
+      if (isCollection) {
+        const col = collections.get(node.collectionId as string);
+        renderedIcon = col && (
+          <CollectionIcon collection={col} expanded={isExpanded(index)} />
+        );
+        title = node.title;
       } else {
-        icon = <DocumentIcon />;
+        const doc = documents.get(node.id);
+        icon = doc?.icon ?? node.icon;
+        color = doc?.color ?? node.color;
+        title = doc?.title ?? node.title;
+
+        if (icon) {
+          renderedIcon = <Icon value={icon} color={color} />;
+        } else if (doc?.isStarred) {
+          renderedIcon = <StarredIcon color={theme.yellow} />;
+        } else {
+          renderedIcon = <DocumentIcon color={theme.textSecondary} />;
+        }
+
+        path = ancestors(node)
+          .map((a) => a.title)
+          .join(" / ");
       }
 
-      path = ancestors(node)
-        .map((a) => parseTitle(a.title).strippedTitle)
-        .join(" / ");
+      return searchTerm ? (
+        <DocumentExplorerSearchResult
+          selected={isSelected(index)}
+          active={activeNode === index}
+          style={{
+            ...style,
+            top: (style.top as number) + VERTICAL_PADDING,
+            left: (style.left as number) + HORIZONTAL_PADDING,
+            width: `calc(${style.width} - ${HORIZONTAL_PADDING * 2}px)`,
+          }}
+          onPointerMove={() => setActiveNode(index)}
+          onClick={() => toggleSelect(index)}
+          icon={renderedIcon}
+          title={title}
+          path={path}
+        />
+      ) : (
+        <DocumentExplorerNode
+          style={{
+            ...style,
+            top: (style.top as number) + VERTICAL_PADDING,
+            left: (style.left as number) + HORIZONTAL_PADDING,
+            width: `calc(${style.width} - ${HORIZONTAL_PADDING * 2}px)`,
+          }}
+          onPointerMove={() => setActiveNode(index)}
+          onClick={() => toggleSelect(index)}
+          onDisclosureClick={(ev) => {
+            ev.stopPropagation();
+            toggleCollapse(index);
+          }}
+          selected={isSelected(index)}
+          active={activeNode === index}
+          expanded={isExpanded(index)}
+          icon={renderedIcon}
+          title={title}
+          depth={node.depth as number}
+          hasChildren={hasChildren(index)}
+          ref={itemRefs[index]}
+        />
+      );
     }
-
-    return searchTerm ? (
-      <DocumentExplorerSearchResult
-        selected={isSelected(index)}
-        active={activeNode === index}
-        style={{
-          ...style,
-          top: (style.top as number) + VERTICAL_PADDING,
-          left: (style.left as number) + HORIZONTAL_PADDING,
-          width: `calc(${style.width} - ${HORIZONTAL_PADDING * 2}px)`,
-        }}
-        onPointerMove={() => setActiveNode(index)}
-        onClick={() => toggleSelect(index)}
-        icon={icon}
-        title={title}
-        path={path}
-      />
-    ) : (
-      <DocumentExplorerNode
-        style={{
-          ...style,
-          top: (style.top as number) + VERTICAL_PADDING,
-          left: (style.left as number) + HORIZONTAL_PADDING,
-          width: `calc(${style.width} - ${HORIZONTAL_PADDING * 2}px)`,
-        }}
-        onPointerMove={() => setActiveNode(index)}
-        onClick={() => toggleSelect(index)}
-        onDisclosureClick={(ev) => {
-          ev.stopPropagation();
-          toggleCollapse(index);
-        }}
-        selected={isSelected(index)}
-        active={activeNode === index}
-        expanded={isExpanded(index)}
-        icon={icon}
-        title={title}
-        depth={node.depth as number}
-        hasChildren={hasChildren(index)}
-        ref={itemRefs[index]}
-      />
-    );
-  };
+  );
 
   const focusSearchInput = () => {
     inputSearchRef.current?.focus();
   };
 
-  const next = () => {
-    return Math.min(activeNode + 1, nodes.length - 1);
-  };
+  const next = () => Math.min(activeNode + 1, nodes.length - 1);
 
-  const prev = () => {
-    return Math.max(activeNode - 1, 0);
-  };
+  const prev = () => Math.max(activeNode - 1, 0);
 
   const handleKeyDown = (ev: React.KeyboardEvent<HTMLDivElement>) => {
     switch (ev.key) {
       case "ArrowDown": {
         ev.preventDefault();
+        ev.stopPropagation();
         setActiveNode(next());
         scrollNodeIntoView(next());
         break;
       }
       case "ArrowUp": {
         ev.preventDefault();
+        ev.stopPropagation();
         if (activeNode === 0) {
           focusSearchInput();
         } else {
@@ -311,7 +328,7 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
         if (!searchTerm) {
           toggleCollapse(activeNode);
           // let the nodes re-render first and then scroll
-          setImmediate(() => scrollNodeIntoView(activeNode));
+          setTimeout(() => scrollNodeIntoView(activeNode), 0);
         }
         break;
       }
@@ -329,16 +346,21 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
   const innerElementType = React.forwardRef<
     HTMLDivElement,
     React.HTMLAttributes<HTMLDivElement>
-  >(({ style, ...rest }, ref) => (
-    <div
-      ref={ref}
-      style={{
-        ...style,
-        height: `${parseFloat(style?.height + "") + VERTICAL_PADDING * 2}px`,
-      }}
-      {...rest}
-    />
-  ));
+  >(function innerElementType(
+    { style, ...rest }: React.HTMLAttributes<HTMLDivElement>,
+    ref
+  ) {
+    return (
+      <div
+        ref={ref}
+        style={{
+          ...style,
+          height: `${parseFloat(style?.height + "") + VERTICAL_PADDING * 2}px`,
+        }}
+        {...rest}
+      />
+    );
+  });
 
   return (
     <Container tabIndex={-1} onKeyDown={handleKeyDown}>
@@ -372,7 +394,9 @@ function DocumentExplorer({ onSubmit, onSelect, items }: Props) {
           </AutoSizer>
         ) : (
           <FlexContainer>
-            <Text type="secondary">{t("No results found")}.</Text>
+            <Text as="p" type="secondary">
+              {t("No results found")}.
+            </Text>
           </FlexContainer>
         )}
       </ListContainer>

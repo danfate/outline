@@ -3,13 +3,7 @@
   "description": "Open source wiki and knowledge base for growing teams",
   "website": "https://www.getoutline.com/",
   "repository": "https://github.com/outline/outline",
-  "keywords": [
-    "wiki",
-    "team",
-    "node",
-    "markdown",
-    "slack"
-  ],
+  "keywords": ["wiki", "team", "node", "markdown", "slack"],
   "success_url": "/",
   "formation": {
     "web": {
@@ -35,6 +29,11 @@
       "required": true
     },
     "SECRET_KEY": {
+      "description": "A 32-character secret key, generate with openssl rand -hex 32",
+      "generator": "secret",
+      "required": true
+    },
+    "UTILS_SECRET": {
       "description": "A 32-character secret key, generate with openssl rand -hex 32",
       "generator": "secret",
       "required": true
@@ -87,6 +86,14 @@
       "description": "",
       "required": false
     },
+    "OIDC_DISABLE_REDIRECT": {
+      "description": "Prevent the app from automatically redirecting to the OIDC login page",
+      "required": false
+    },
+    "OIDC_LOGOUT_URI": {
+      "description": "",
+      "required": false
+    },
     "OIDC_USERNAME_CLAIM": {
       "description": "Specify which claims to derive user information from. Supports any valid JSON path with the JWT payload",
       "value": "preferred_username",
@@ -94,7 +101,7 @@
     },
     "OIDC_DISPLAY_NAME": {
       "description": "Display name for OIDC authentication",
-      "value": "OpenID",
+      "value": "OpenID Connect",
       "required": false
     },
     "OIDC_SCOPES": {
@@ -134,11 +141,6 @@
       "description": "Live web link to your bucket. For CNAMEs, https://yourbucket.example.com",
       "required": false
     },
-    "AWS_S3_UPLOAD_MAX_SIZE": {
-      "description": "Maximum file upload size in bytes",
-      "value": "26214400",
-      "required": false
-    },
     "AWS_S3_FORCE_PATH_STYLE": {
       "description": "Use path-style URL's for connecting to S3 instead of subdomain. This is useful for S3-compatible storage.",
       "value": "true",
@@ -152,6 +154,11 @@
     "AWS_S3_ACL": {
       "value": "private",
       "description": "S3 canned ACL for document attachments",
+      "required": false
+    },
+    "FILE_STORAGE_UPLOAD_MAX_SIZE": {
+      "description": "Maximum file upload size in bytes",
+      "value": "26214400",
       "required": false
     },
     "SMTP_HOST": {
@@ -188,7 +195,7 @@
       "required": false
     },
     "GOOGLE_ANALYTICS_ID": {
-      "description": "UA-xxxx (optional)",
+      "description": "G-xxxx (optional)",
       "required": false
     },
     "SENTRY_DSN": {

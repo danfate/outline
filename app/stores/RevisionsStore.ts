@@ -1,13 +1,13 @@
 import invariant from "invariant";
-import { filter } from "lodash";
+import filter from "lodash/filter";
 import { action, runInAction } from "mobx";
-import BaseStore, { RPCAction } from "~/stores/BaseStore";
 import RootStore from "~/stores/RootStore";
+import Store, { RPCAction } from "~/stores/base/Store";
 import Revision from "~/models/Revision";
 import { PaginationParams } from "~/types";
 import { client } from "~/utils/ApiClient";
 
-export default class RevisionsStore extends BaseStore<Revision> {
+export default class RevisionsStore extends Store<Revision> {
   actions = [RPCAction.List, RPCAction.Info];
 
   constructor(rootStore: RootStore) {
@@ -35,7 +35,6 @@ export default class RevisionsStore extends BaseStore<Revision> {
             id: "latest",
             documentId: document.id,
             title: document.title,
-            text: document.text,
             createdAt: document.updatedAt,
             createdBy: document.createdBy,
           },
@@ -46,6 +45,16 @@ export default class RevisionsStore extends BaseStore<Revision> {
 
     return revisions;
   }
+
+  /**
+   * Fetches the latest revision for the given document.
+   *
+   * @returns A promise that resolves to the latest revision for the given document
+   */
+  fetchLatest = async (documentId: string) => {
+    const res = await client.post(`/revisions.info`, { documentId });
+    return this.add(res.data);
+  };
 
   @action
   fetchPage = async (

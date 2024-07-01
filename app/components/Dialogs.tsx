@@ -1,4 +1,4 @@
-import { observer } from "mobx-react-lite";
+import { observer } from "mobx-react";
 import * as React from "react";
 import Guide from "~/components/Guide";
 import Modal from "~/components/Modal";
@@ -22,7 +22,7 @@ function Dialogs() {
         <Modal
           key={id}
           isOpen={modal.isOpen}
-          isCentered={modal.isCentered}
+          fullscreen={modal.fullscreen ?? false}
           onRequestClose={() => dialogs.closeModal(id)}
           title={modal.title}
         >

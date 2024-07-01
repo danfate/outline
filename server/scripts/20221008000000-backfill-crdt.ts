@@ -27,7 +27,6 @@ export default async function main(exit = false) {
       offset: page * limit,
       where: {
         ...(teamId ? { teamId } : {}),
-        state: null,
       },
       order: [["createdAt", "ASC"]],
       paranoid: false,
@@ -81,5 +80,5 @@ export default async function main(exit = false) {
 }
 
 if (process.env.NODE_ENV !== "test") {
-  main(true);
+  void main(true);
 }

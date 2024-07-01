@@ -1,11 +1,8 @@
 import { Revision } from "@server/models";
 import { buildDocument } from "@server/test/factories";
-import { setupTestDatabase } from "@server/test/support";
 import RevisionsProcessor from "./RevisionsProcessor";
 
 const ip = "127.0.0.1";
-
-setupTestDatabase();
 
 describe("documents.update.debounced", () => {
   test("should create a revision", async () => {
@@ -15,7 +12,7 @@ describe("documents.update.debounced", () => {
     await processor.perform({
       name: "documents.update.debounced",
       documentId: document.id,
-      collectionId: document.collectionId,
+      collectionId: document.collectionId!,
       teamId: document.teamId,
       actorId: document.createdById,
       createdAt: new Date().toISOString(),
@@ -38,7 +35,7 @@ describe("documents.update.debounced", () => {
     await processor.perform({
       name: "documents.update.debounced",
       documentId: document.id,
-      collectionId: document.collectionId,
+      collectionId: document.collectionId!,
       teamId: document.teamId,
       actorId: document.createdById,
       createdAt: new Date().toISOString(),

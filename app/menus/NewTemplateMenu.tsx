@@ -3,7 +3,6 @@ import { PlusIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { MenuButton, useMenuState } from "reakit/Menu";
-import styled from "styled-components";
 import Button from "~/components/Button";
 import ContextMenu from "~/components/ContextMenu";
 import Header from "~/components/ContextMenu/Header";
@@ -13,7 +12,7 @@ import useCurrentTeam from "~/hooks/useCurrentTeam";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import { MenuItem } from "~/types";
-import { newDocumentPath } from "~/utils/routeHelpers";
+import { newTemplatePath } from "~/utils/routeHelpers";
 
 function NewTemplateMenu() {
   const menu = useMenuState({
@@ -23,19 +22,22 @@ function NewTemplateMenu() {
   const team = useCurrentTeam();
   const { collections, policies } = useStores();
   const can = usePolicy(team);
+  React.useEffect(() => {
+    void collections.fetchPage({
+      limit: 100,
+    });
+  }, [collections]);
 
   const items = React.useMemo(
     () =>
       collections.orderedData.reduce<MenuItem[]>((filtered, collection) => {
         const can = policies.abilities(collection.id);
 
-        if (can.update) {
+        if (can.createDocument) {
           filtered.push({
             type: "route",
-            to: newDocumentPath(collection.id, {
-              template: true,
-            }),
-            title: <CollectionName>{collection.name}</CollectionName>,
+            to: newTemplatePath(collection.id),
+            title: collection.name,
             icon: <CollectionIcon collection={collection} />,
           });
         }
@@ -65,11 +67,5 @@ function NewTemplateMenu() {
     </>
   );
 }
-
-const CollectionName = styled.div`
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-`;
 
 export default observer(NewTemplateMenu);

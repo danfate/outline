@@ -1,14 +1,16 @@
 import Token from "markdown-it/lib/token";
 import { NodeSpec } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
-import {
-  isTableSelected,
-  isRowSelected,
-  getCellsInColumn,
-  selectRow,
-  selectTable,
-} from "prosemirror-utils";
 import { DecorationSet, Decoration } from "prosemirror-view";
+import { addRowBefore, selectRow, selectTable } from "../commands/table";
+import { getCellAttrs, setCellAttrs } from "../lib/table";
+import {
+  getCellsInColumn,
+  isRowSelected,
+  isTableSelected,
+} from "../queries/table";
+import { EditorStyleHelper } from "../styles/EditorStyleHelper";
+import { cn } from "../styles/utils";
 import Node from "./Node";
 
 export default class TableCell extends Node {
@@ -18,23 +20,18 @@ export default class TableCell extends Node {
 
   get schema(): NodeSpec {
     return {
-      content: "paragraph+",
+      content: "block+",
       tableRole: "cell",
       isolating: true,
-      parseDOM: [{ tag: "td" }],
+      parseDOM: [{ tag: "td", getAttrs: getCellAttrs }],
       toDOM(node) {
-        return [
-          "td",
-          node.attrs.alignment
-            ? { style: `text-align: ${node.attrs.alignment}` }
-            : {},
-          0,
-        ];
+        return ["td", setCellAttrs(node), 0];
       },
       attrs: {
         colspan: { default: 1 },
         rowspan: { default: 1 },
         alignment: { default: null },
+        colwidth: { default: null },
       },
     };
   }
@@ -51,64 +48,129 @@ export default class TableCell extends Node {
   }
 
   get plugins() {
+    function buildAddRowDecoration(pos: number, index: number) {
+      const className = cn(EditorStyleHelper.tableAddRow, {
+        first: index === 0,
+      });
+
+      return Decoration.widget(
+        pos + 1,
+        () => {
+          const plus = document.createElement("a");
+          plus.role = "button";
+          plus.className = className;
+          plus.dataset.index = index.toString();
+          return plus;
+        },
+        {
+          key: cn(className, index),
+        }
+      );
+    }
+
     return [
       new Plugin({
         props: {
-          decorations: (state) => {
-            const { doc, selection } = state;
-            const decorations: Decoration[] = [];
-            const cells = getCellsInColumn(0)(selection);
+          handleDOMEvents: {
+            mousedown: (view, event) => {
+              if (!(event.target instanceof HTMLElement)) {
+                return false;
+              }
 
-            if (cells) {
-              cells.forEach(({ pos }, index) => {
+              const targetAddRow = event.target.closest(
+                `.${EditorStyleHelper.tableAddRow}`
+              );
+              if (targetAddRow) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                const index = Number(targetAddRow.getAttribute("data-index"));
+
+                addRowBefore({ index })(view.state, view.dispatch);
+                return true;
+              }
+
+              const targetGrip = event.target.closest(
+                `.${EditorStyleHelper.tableGrip}`
+              );
+              if (targetGrip) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                selectTable()(view.state, view.dispatch);
+                return true;
+              }
+
+              const targetGripRow = event.target.closest(
+                `.${EditorStyleHelper.tableGripRow}`
+              );
+              if (targetGripRow) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+
+                selectRow(
+                  Number(targetGripRow.getAttribute("data-index")),
+                  event.metaKey || event.shiftKey
+                )(view.state, view.dispatch);
+                return true;
+              }
+
+              return false;
+            },
+          },
+          decorations: (state) => {
+            const { doc } = state;
+            const decorations: Decoration[] = [];
+            const rows = getCellsInColumn(0)(state);
+
+            if (rows) {
+              rows.forEach((pos, index) => {
                 if (index === 0) {
+                  const className = cn(EditorStyleHelper.tableGrip, {
+                    selected: isTableSelected(state),
+                  });
+
                   decorations.push(
-                    Decoration.widget(pos + 1, () => {
-                      let className = "grip-table";
-                      const selected = isTableSelected(selection);
-                      if (selected) {
-                        className += " selected";
+                    Decoration.widget(
+                      pos + 1,
+                      () => {
+                        const grip = document.createElement("a");
+                        grip.role = "button";
+                        grip.className = className;
+                        return grip;
+                      },
+                      {
+                        key: className,
                       }
-                      const grip = document.createElement("a");
-                      grip.className = className;
-                      grip.addEventListener("mousedown", (event) => {
-                        event.preventDefault();
-                        event.stopImmediatePropagation();
-                        this.editor.view.dispatch(selectTable(state.tr));
-                      });
-                      return grip;
-                    })
+                    )
                   );
                 }
-                decorations.push(
-                  Decoration.widget(pos + 1, () => {
-                    const rowSelected = isRowSelected(index)(selection);
 
-                    let className = "grip-row";
-                    if (rowSelected) {
-                      className += " selected";
+                const className = cn(EditorStyleHelper.tableGripRow, {
+                  selected: isRowSelected(index)(state),
+                  first: index === 0,
+                  last: index === rows.length - 1,
+                });
+
+                decorations.push(
+                  Decoration.widget(
+                    pos + 1,
+                    () => {
+                      const grip = document.createElement("a");
+                      grip.role = "button";
+                      grip.className = className;
+                      grip.dataset.index = index.toString();
+                      return grip;
+                    },
+                    {
+                      key: cn(className, index),
                     }
-                    if (index === 0) {
-                      className += " first";
-                    }
-                    if (index === cells.length - 1) {
-                      className += " last";
-                    }
-                    const grip = document.createElement("a");
-                    grip.className = className;
-                    grip.addEventListener("mousedown", (event) => {
-                      event.preventDefault();
-                      event.stopImmediatePropagation();
-                      this.editor.view.dispatch(
-                        selectRow(
-                          index,
-                          event.metaKey || event.shiftKey
-                        )(state.tr)
-                      );
-                    });
-                    return grip;
-                  })
+                  )
                 );
+
+                if (index === 0) {
+                  decorations.push(buildAddRowDecoration(pos, index));
+                }
+
+                decorations.push(buildAddRowDecoration(pos, index + 1));
               });
             }
 

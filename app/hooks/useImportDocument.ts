@@ -2,20 +2,20 @@ import invariant from "invariant";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
+import { toast } from "sonner";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
+import { documentPath } from "~/utils/routeHelpers";
 
 let importingLock = false;
 
 export default function useImportDocument(
-  collectionId?: string,
+  collectionId?: string | null,
   documentId?: string
 ): {
   handleFiles: (files: File[]) => Promise<void>;
   isImporting: boolean;
 } {
   const { documents } = useStores();
-  const { showToast } = useToasts();
   const [isImporting, setImporting] = React.useState(false);
   const { t } = useTranslation();
   const history = useHistory();
@@ -50,19 +50,17 @@ export default function useImportDocument(
           });
 
           if (redirect) {
-            history.push(doc.url);
+            history.push(documentPath(doc));
           }
         }
       } catch (err) {
-        showToast(`${t("Could not import file")}. ${err.message}`, {
-          type: "error",
-        });
+        toast.error(`${t("Could not import file")}. ${err.message}`);
       } finally {
         setImporting(false);
         importingLock = false;
       }
     },
-    [t, documents, history, showToast, collectionId, documentId]
+    [t, documents, history, collectionId, documentId]
   );
 
   return {

@@ -1,19 +1,33 @@
-import path from "path";
 import invariant from "invariant";
-import { find, orderBy, filter, compact, omitBy } from "lodash";
+import compact from "lodash/compact";
+import filter from "lodash/filter";
+import find from "lodash/find";
+import omitBy from "lodash/omitBy";
+import orderBy from "lodash/orderBy";
 import { observable, action, computed, runInAction } from "mobx";
-import { DateFilter, NavigationNode } from "@shared/types";
+import type {
+  DateFilter,
+  JSONObject,
+  NavigationNode,
+  PublicTeam,
+  StatusFilter,
+} from "@shared/types";
 import { subtractDate } from "@shared/utils/date";
 import { bytesToHumanReadable } from "@shared/utils/files";
 import naturalSort from "@shared/utils/naturalSort";
-import { DocumentValidation } from "@shared/validations";
-import BaseStore from "~/stores/BaseStore";
 import RootStore from "~/stores/RootStore";
+import Store from "~/stores/base/Store";
 import Document from "~/models/Document";
-import Team from "~/models/Team";
 import env from "~/env";
-import { FetchOptions, PaginationParams, SearchResult } from "~/types";
+import type {
+  FetchOptions,
+  PaginationParams,
+  PartialWithId,
+  Properties,
+  SearchResult,
+} from "~/types";
 import { client } from "~/utils/ApiClient";
+import { extname } from "~/utils/files";
 
 type FetchPageParams = PaginationParams & {
   template?: boolean;
@@ -24,8 +38,7 @@ export type SearchParams = {
   offset?: number;
   limit?: number;
   dateFilter?: DateFilter;
-  includeArchived?: boolean;
-  includeDrafts?: boolean;
+  statusFilter?: StatusFilter[];
   collectionId?: string;
   userId?: string;
   shareId?: string;
@@ -35,14 +48,11 @@ type ImportOptions = {
   publish?: boolean;
 };
 
-export default class DocumentsStore extends BaseStore<Document> {
+export default class DocumentsStore extends Store<Document> {
   sharedCache: Map<
     string,
-    { sharedTree: NavigationNode; team: Team } | undefined
+    { sharedTree: NavigationNode; team: PublicTeam } | undefined
   > = new Map();
-
-  @observable
-  searchCache: Map<string, SearchResult[] | undefined> = new Map();
 
   @observable
   backlinks: Map<string, string[]> = new Map();
@@ -100,7 +110,7 @@ export default class DocumentsStore extends BaseStore<Document> {
 
   createdByUser(userId: string): Document[] {
     return orderBy(
-      filter(this.all, (d) => d.createdBy.id === userId),
+      filter(this.all, (d) => d.createdBy?.id === userId),
       "updatedAt",
       "desc"
     );
@@ -139,7 +149,7 @@ export default class DocumentsStore extends BaseStore<Document> {
   rootInCollection(collectionId: string): Document[] {
     const collection = this.rootStore.collections.get(collectionId);
 
-    if (!collection) {
+    if (!collection || !collection.sortedDocuments) {
       return [];
     }
 
@@ -171,8 +181,11 @@ export default class DocumentsStore extends BaseStore<Document> {
     return naturalSort(this.inCollection(collectionId), "title");
   }
 
-  searchResults(query: string): SearchResult[] | undefined {
-    return this.searchCache.get(query);
+  get(id: string): Document | undefined {
+    return (
+      this.data.get(id) ??
+      this.orderedData.find((doc) => id.endsWith(doc.urlId))
+    );
   }
 
   @computed
@@ -303,84 +316,72 @@ export default class DocumentsStore extends BaseStore<Document> {
   };
 
   @action
-  fetchArchived = async (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("archived", options);
-  };
+  fetchArchived = async (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("archived", options);
 
   @action
-  fetchDeleted = async (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("deleted", options);
-  };
+  fetchDeleted = async (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("deleted", options);
 
   @action
   fetchRecentlyUpdated = async (
     options?: PaginationParams
-  ): Promise<Document[]> => {
-    return this.fetchNamedPage("list", options);
-  };
+  ): Promise<Document[]> => this.fetchNamedPage("list", options);
 
   @action
-  fetchTemplates = async (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("list", { ...options, template: true });
-  };
+  fetchTemplates = async (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("list", { ...options, template: true });
 
   @action
-  fetchAlphabetical = async (
-    options?: PaginationParams
-  ): Promise<Document[]> => {
-    return this.fetchNamedPage("list", {
+  fetchAlphabetical = async (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("list", {
       sort: "title",
       direction: "ASC",
       ...options,
     });
-  };
 
   @action
   fetchLeastRecentlyUpdated = async (
     options?: PaginationParams
-  ): Promise<Document[]> => {
-    return this.fetchNamedPage("list", {
+  ): Promise<Document[]> =>
+    this.fetchNamedPage("list", {
       sort: "updatedAt",
       direction: "ASC",
       ...options,
     });
-  };
 
   @action
   fetchRecentlyPublished = async (
     options?: PaginationParams
-  ): Promise<Document[]> => {
-    return this.fetchNamedPage("list", {
+  ): Promise<Document[]> =>
+    this.fetchNamedPage("list", {
       sort: "publishedAt",
       direction: "DESC",
       ...options,
     });
-  };
 
   @action
   fetchRecentlyViewed = async (
     options?: PaginationParams
-  ): Promise<Document[]> => {
-    return this.fetchNamedPage("viewed", options);
-  };
+  ): Promise<Document[]> => this.fetchNamedPage("viewed", options);
 
   @action
-  fetchStarred = (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("starred", options);
-  };
+  fetchStarred = (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("starred", options);
 
   @action
-  fetchDrafts = (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("drafts", options);
-  };
+  fetchDrafts = (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("drafts", options);
 
   @action
-  fetchOwned = (options?: PaginationParams): Promise<Document[]> => {
-    return this.fetchNamedPage("list", options);
-  };
+  fetchOwned = (options?: PaginationParams): Promise<Document[]> =>
+    this.fetchNamedPage("list", options);
 
   @action
-  searchTitles = async (query: string, options?: SearchParams) => {
+  searchTitles = async (
+    query: string,
+    options?: SearchParams
+  ): Promise<SearchResult[]> => {
     const compactedOptions = omitBy(options, (o) => !o);
     const res = await client.post("/documents.search_titles", {
       ...compactedOptions,
@@ -401,15 +402,12 @@ export default class DocumentsStore extends BaseStore<Document> {
           return null;
         }
         return {
+          id: document.id,
           document,
         };
       })
     );
-    const existing = this.searchCache.get(query) || [];
-    // splice modifies any existing results, taking into account pagination
-    existing.splice(0, existing.length, ...results);
-    this.searchCache.set(query, existing);
-    return res.data;
+    return results;
   };
 
   @action
@@ -444,11 +442,7 @@ export default class DocumentsStore extends BaseStore<Document> {
         };
       })
     );
-    const existing = this.searchCache.get(query) || [];
-    // splice modifies any existing results, taking into account pagination
-    existing.splice(options.offset || 0, options.limit || 0, ...results);
-    this.searchCache.set(query, existing);
-    return res.data;
+    return results;
   };
 
   @action
@@ -480,13 +474,21 @@ export default class DocumentsStore extends BaseStore<Document> {
     return this.data.get(res.data.id);
   };
 
+  override fetch = (id: string, options: FetchOptions = {}) =>
+    super.fetch(
+      id,
+      options,
+      (res: { data: { document: PartialWithId<Document> } }) =>
+        res.data.document
+    );
+
   @action
   fetchWithSharedTree = async (
     id: string,
     options: FetchOptions = {}
   ): Promise<{
     document: Document;
-    team?: Team;
+    team?: PublicTeam;
     sharedTree?: NavigationNode;
   }> => {
     if (!options.prefetch) {
@@ -514,7 +516,6 @@ export default class DocumentsStore extends BaseStore<Document> {
       const res = await client.post("/documents.info", {
         id,
         shareId: options.shareId,
-        apiVersion: 2,
       });
 
       invariant(res?.data, "Document not available");
@@ -570,26 +571,22 @@ export default class DocumentsStore extends BaseStore<Document> {
   };
 
   @action
-  duplicate = async (document: Document): Promise<Document> => {
-    const append = " (duplicate)";
-    const res = await client.post("/documents.create", {
-      publish: document.isTemplate,
-      parentDocumentId: null,
-      collectionId: document.isTemplate ? document.collectionId : null,
-      template: document.isTemplate,
-      title: `${document.title.slice(
-        0,
-        DocumentValidation.maxTitleLength - append.length
-      )}${append}`,
-      text: document.text,
+  duplicate = async (
+    document: Document,
+    options?: {
+      title?: string;
+      publish?: boolean;
+      recursive?: boolean;
+    }
+  ): Promise<Document[]> => {
+    const res = await client.post("/documents.duplicate", {
+      id: document.id,
+      ...options,
     });
     invariant(res?.data, "Data should be available");
-    const collection = this.getCollectionForDocument(document);
-    if (collection) {
-      collection.refresh();
-    }
+
     this.addPolicies(res.policies);
-    return this.add(res.data);
+    return res.data.documents.map(this.add);
   };
 
   @action
@@ -603,15 +600,15 @@ export default class DocumentsStore extends BaseStore<Document> {
     if (
       file.type &&
       !this.importFileTypes.includes(file.type) &&
-      !this.importFileTypes.includes(path.extname(file.name))
+      !this.importFileTypes.includes(extname(file.name))
     ) {
       throw new Error(`The selected file type is not supported (${file.type})`);
     }
 
-    if (file.size > env.MAXIMUM_IMPORT_SIZE) {
+    if (file.size > env.FILE_STORAGE_IMPORT_MAX_SIZE) {
       throw new Error(
         `The selected file was larger than the ${bytesToHumanReadable(
-          env.MAXIMUM_IMPORT_SIZE
+          env.FILE_STORAGE_IMPORT_MAX_SIZE
         )} maximum size`
       );
     }
@@ -652,7 +649,9 @@ export default class DocumentsStore extends BaseStore<Document> {
         formData.append(info.key, info.value);
       }
     });
-    const res = await client.post("/documents.import", formData);
+    const res = await client.post("/documents.import", formData, {
+      retry: false,
+    });
     invariant(res?.data, "Data should be available");
     this.addPolicies(res.policies);
     return this.add(res.data);
@@ -660,45 +659,13 @@ export default class DocumentsStore extends BaseStore<Document> {
 
   @action
   removeCollectionDocuments(collectionId: string) {
-    const documents = this.inCollection(collectionId);
+    // drafts are to be detached from collection rather than deleted, hence excluded here
+    const documents = filter(
+      this.inCollection(collectionId),
+      (d) => !!d.publishedAt
+    );
     const documentIds = documents.map((doc) => doc.id);
     documentIds.forEach((id) => this.remove(id));
-  }
-
-  @action
-  async update(
-    params: {
-      id: string;
-      title: string;
-      text?: string;
-      fullWidth?: boolean;
-      templateId?: string;
-    },
-    options?: {
-      publish?: boolean;
-      done?: boolean;
-      autosave?: boolean;
-      lastRevision: number;
-    }
-  ) {
-    this.isSaving = true;
-
-    try {
-      const res = await client.post(`/${this.apiEndpoint}.update`, {
-        ...params,
-        ...options,
-        apiVersion: 2,
-      });
-
-      invariant(res?.data, "Data should be available");
-      this.addPolicies(res.policies);
-      const document = this.add(res.data.document);
-      const collection = this.getCollectionForDocument(document);
-      collection?.updateFromJson(res.data.collection);
-      return document;
-    } finally {
-      this.isSaving = false;
-    }
   }
 
   @action
@@ -719,7 +686,7 @@ export default class DocumentsStore extends BaseStore<Document> {
 
     const collection = this.getCollectionForDocument(document);
     if (collection) {
-      collection.refresh();
+      await collection.refresh();
     }
   }
 
@@ -730,12 +697,12 @@ export default class DocumentsStore extends BaseStore<Document> {
     });
     runInAction("Document#archive", () => {
       invariant(res?.data, "Data should be available");
-      document.updateFromJson(res.data);
+      document.updateData(res.data);
       this.addPolicies(res.policies);
     });
     const collection = this.getCollectionForDocument(document);
     if (collection) {
-      collection.refresh();
+      await collection.refresh();
     }
   };
 
@@ -754,36 +721,71 @@ export default class DocumentsStore extends BaseStore<Document> {
     });
     runInAction("Document#restore", () => {
       invariant(res?.data, "Data should be available");
-      document.updateFromJson(res.data);
+      document.updateData(res.data);
       this.addPolicies(res.policies);
     });
     const collection = this.getCollectionForDocument(document);
     if (collection) {
-      collection.refresh();
+      await collection.refresh();
     }
   };
+
+  @action
+  async update(
+    params: Properties<Document>,
+    options?: JSONObject
+  ): Promise<Document> {
+    this.isSaving = true;
+
+    try {
+      const res = await client.post(`/${this.apiEndpoint}.update`, {
+        ...params,
+        ...options,
+      });
+
+      invariant(res?.data, "Data should be available");
+
+      const collection = this.getCollectionForDocument(res.data);
+      await collection?.fetchDocuments({ force: true });
+
+      return runInAction("Document#update", () => {
+        const document = this.add(res.data);
+        this.addPolicies(res.policies);
+        return document;
+      });
+    } finally {
+      this.isSaving = false;
+    }
+  }
 
   @action
   unpublish = async (document: Document) => {
     const res = await client.post("/documents.unpublish", {
       id: document.id,
-      apiVersion: 2,
     });
 
     runInAction("Document#unpublish", () => {
       invariant(res?.data, "Data should be available");
-      document.updateFromJson(res.data.document);
-      const collection = this.getCollectionForDocument(document);
-      collection?.updateFromJson(res.data.collection);
+      document.updateData(res.data);
       this.addPolicies(res.policies);
+      const collection = this.getCollectionForDocument(document);
+      void collection?.fetchDocuments({ force: true });
     });
   };
 
-  star = (document: Document) => {
-    return this.rootStore.stars.create({
-      documentId: document.id,
-    });
+  @action
+  emptyTrash = async () => {
+    await client.post("/documents.empty_trash");
+
+    const documentIdsSet = new Set(this.deleted.map((doc) => doc.id));
+    this.removeAll((doc: Document) => documentIdsSet.has(doc.id));
   };
+
+  star = (document: Document, index?: string) =>
+    this.rootStore.stars.create({
+      documentId: document.id,
+      index,
+    });
 
   unstar = (document: Document) => {
     const star = this.rootStore.stars.orderedData.find(
@@ -792,12 +794,11 @@ export default class DocumentsStore extends BaseStore<Document> {
     return star?.delete();
   };
 
-  subscribe = (document: Document) => {
-    return this.rootStore.subscriptions.create({
+  subscribe = (document: Document) =>
+    this.rootStore.subscriptions.create({
       documentId: document.id,
       event: "documents.update",
     });
-  };
 
   unsubscribe = (userId: string, document: Document) => {
     const subscription = this.rootStore.subscriptions.orderedData.find(
@@ -809,11 +810,12 @@ export default class DocumentsStore extends BaseStore<Document> {
     return subscription?.delete();
   };
 
-  getByUrl = (url = ""): Document | undefined => {
-    return find(this.orderedData, (doc) => url.endsWith(doc.urlId));
-  };
+  getByUrl = (url = ""): Document | undefined =>
+    find(this.orderedData, (doc) => url.endsWith(doc.urlId));
 
   getCollectionForDocument(document: Document) {
-    return this.rootStore.collections.data.get(document.collectionId);
+    return document.collectionId
+      ? this.rootStore.collections.get(document.collectionId)
+      : undefined;
   }
 }

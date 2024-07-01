@@ -1,18 +1,25 @@
 import invariant from "invariant";
-import { find } from "lodash";
+import find from "lodash/find";
 import { action, observable } from "mobx";
 import { observer } from "mobx-react";
 import * as React from "react";
+import { withTranslation, WithTranslation } from "react-i18next";
 import { io, Socket } from "socket.io-client";
+import { toast } from "sonner";
+import { FileOperationState, FileOperationType } from "@shared/types";
 import RootStore from "~/stores/RootStore";
 import Collection from "~/models/Collection";
+import Comment from "~/models/Comment";
 import Document from "~/models/Document";
 import FileOperation from "~/models/FileOperation";
 import Group from "~/models/Group";
+import Notification from "~/models/Notification";
 import Pin from "~/models/Pin";
 import Star from "~/models/Star";
 import Subscription from "~/models/Subscription";
 import Team from "~/models/Team";
+import User from "~/models/User";
+import UserMembership from "~/models/UserMembership";
 import withStores from "~/components/withStores";
 import {
   PartialWithId,
@@ -28,11 +35,10 @@ type SocketWithAuthentication = Socket & {
   authenticated?: boolean;
 };
 
-export const WebsocketContext = React.createContext<SocketWithAuthentication | null>(
-  null
-);
+export const WebsocketContext =
+  React.createContext<SocketWithAuthentication | null>(null);
 
-type Props = RootStore;
+type Props = WithTranslation & RootStore;
 
 @observer
 class WebsocketProvider extends React.Component<Props> {
@@ -69,43 +75,27 @@ class WebsocketProvider extends React.Component<Props> {
       transports: ["websocket"],
       reconnectionDelay: 1000,
       reconnectionDelayMax: 30000,
+      withCredentials: true,
     });
     invariant(this.socket, "Socket should be defined");
 
     this.socket.authenticated = false;
     const {
       auth,
-      toasts,
       documents,
       collections,
       groups,
       pins,
       stars,
       memberships,
+      users,
+      userMemberships,
       policies,
-      presence,
-      views,
+      comments,
       subscriptions,
       fileOperations,
+      notifications,
     } = this.props;
-    if (!auth.token) {
-      return;
-    }
-
-    this.socket.on("connect", () => {
-      // immediately send current users token to the websocket backend where it
-      // is verified, if all goes well an 'authenticated' message will be
-      // received in response
-      this.socket?.emit("authentication", {
-        token: auth.token,
-      });
-    });
-
-    this.socket.on("disconnect", () => {
-      // when the socket is disconnected we need to clear all presence state as
-      // it's no longer reliable.
-      presence.clear();
-    });
 
     // on reconnection, reset the transports option, as the Websocket
     // connection may have failed (caused by proxy, firewall, browser, ...)
@@ -127,9 +117,7 @@ class WebsocketProvider extends React.Component<Props> {
       if (this.socket) {
         this.socket.authenticated = false;
       }
-      toasts.showToast(err.message, {
-        type: "error",
-      });
+      toast.error(err.message);
       throw err;
     });
 
@@ -173,7 +161,7 @@ class WebsocketProvider extends React.Component<Props> {
                 id: document.collectionId,
               });
 
-              if (!existing) {
+              if (!existing && document.collectionId) {
                 event.collectionIds.push({
                   id: document.collectionId,
                 });
@@ -194,7 +182,7 @@ class WebsocketProvider extends React.Component<Props> {
             }
 
             try {
-              await collections.fetch(collectionId, {
+              await collection?.fetchDocuments({
                 force: true,
               });
             } catch (err) {
@@ -203,9 +191,8 @@ class WebsocketProvider extends React.Component<Props> {
                 err instanceof NotFoundError
               ) {
                 documents.removeCollectionDocuments(collectionId);
-                memberships.removeCollectionMemberships(collectionId);
+                memberships.removeAll({ collectionId });
                 collections.remove(collectionId);
-                policies.remove(collectionId);
                 return;
               }
             }
@@ -251,6 +238,10 @@ class WebsocketProvider extends React.Component<Props> {
           const collection = collections.get(event.collectionId);
           collection?.removeDocument(event.id);
         }
+
+        userMemberships.orderedData
+          .filter((m) => m.documentId === event.id)
+          .forEach((m) => userMemberships.remove(m.id));
       })
     );
 
@@ -260,6 +251,56 @@ class WebsocketProvider extends React.Component<Props> {
         documents.remove(event.modelId);
       }
     );
+
+    // received when a user is given access to a document
+    this.socket.on(
+      "documents.add_user",
+      (event: PartialWithId<UserMembership>) => {
+        userMemberships.add(event);
+      }
+    );
+
+    this.socket.on(
+      "documents.remove_user",
+      (event: PartialWithId<UserMembership>) => {
+        if (event.userId) {
+          const userMembership = userMemberships.get(event.id);
+
+          // TODO: Possibly replace this with a one-to-many relation decorator.
+          if (userMembership) {
+            userMemberships
+              .filter({
+                userId: event.userId,
+                sourceId: userMembership.id,
+              })
+              .forEach((m) => {
+                m.documentId && documents.remove(m.documentId);
+              });
+          }
+
+          userMemberships.removeAll({
+            userId: event.userId,
+            documentId: event.documentId,
+          });
+        }
+
+        if (event.documentId && event.userId === auth.user?.id) {
+          documents.remove(event.documentId);
+        }
+      }
+    );
+
+    this.socket.on("comments.create", (event: PartialWithId<Comment>) => {
+      comments.add(event);
+    });
+
+    this.socket.on("comments.update", (event: PartialWithId<Comment>) => {
+      comments.add(event);
+    });
+
+    this.socket.on("comments.delete", (event: WebsocketEntityDeletedEvent) => {
+      comments.remove(event.modelId);
+    });
 
     this.socket.on("groups.create", (event: PartialWithId<Group>) => {
       groups.add(event);
@@ -277,27 +318,63 @@ class WebsocketProvider extends React.Component<Props> {
       collections.add(event);
     });
 
+    this.socket.on("collections.update", (event: PartialWithId<Collection>) => {
+      if (
+        "sharing" in event &&
+        event.sharing !== collections.get(event.id)?.sharing
+      ) {
+        documents.all.forEach((document) => {
+          policies.remove(document.id);
+        });
+      }
+
+      collections.add(event);
+    });
+
     this.socket.on(
       "collections.delete",
       action((event: WebsocketEntityDeletedEvent) => {
         const collectionId = event.modelId;
         const deletedAt = new Date().toISOString();
-
         const deletedDocuments = documents.inCollection(collectionId);
         deletedDocuments.forEach((doc) => {
-          doc.deletedAt = deletedAt;
+          if (!doc.publishedAt) {
+            // draft is to be detached from collection, not deleted
+            doc.collectionId = null;
+          } else {
+            doc.deletedAt = deletedAt;
+          }
           policies.remove(doc.id);
         });
         documents.removeCollectionDocuments(collectionId);
-        memberships.removeCollectionMemberships(collectionId);
+        memberships.removeAll({ collectionId });
         collections.remove(collectionId);
-        policies.remove(collectionId);
       })
     );
 
     this.socket.on("teams.update", (event: PartialWithId<Team>) => {
-      auth.team?.updateFromJson(event);
+      if ("sharing" in event && event.sharing !== auth.team?.sharing) {
+        documents.all.forEach((document) => {
+          policies.remove(document.id);
+        });
+      }
+
+      auth.team?.updateData(event);
     });
+
+    this.socket.on(
+      "notifications.create",
+      (event: PartialWithId<Notification>) => {
+        notifications.add(event);
+      }
+    );
+
+    this.socket.on(
+      "notifications.update",
+      (event: PartialWithId<Notification>) => {
+        notifications.add(event);
+      }
+    );
 
     this.socket.on("pins.create", (event: PartialWithId<Pin>) => {
       pins.add(event);
@@ -323,22 +400,29 @@ class WebsocketProvider extends React.Component<Props> {
       stars.remove(event.modelId);
     });
 
+    this.socket.on(
+      "user.typing",
+      (event: { userId: string; documentId: string; commentId: string }) => {
+        comments.setTyping(event);
+      }
+    );
+
     // received when a user is given access to a collection
     // if the user is us then we go ahead and load the collection from API.
     this.socket.on(
       "collections.add_user",
-      action((event: WebsocketCollectionUserEvent) => {
-        if (auth.user && event.userId === auth.user.id) {
-          collections.fetch(event.collectionId, {
+      async (event: WebsocketCollectionUserEvent) => {
+        if (event.userId === auth.user?.id) {
+          await collections.fetch(event.collectionId, {
             force: true,
           });
-        }
 
-        // Document policies might need updating as the permission changes
-        documents.inCollection(event.collectionId).forEach((document) => {
-          policies.remove(document.id);
-        });
-      })
+          // Document policies might need updating as the permission changes
+          documents.inCollection(event.collectionId).forEach((document) => {
+            policies.remove(document.id);
+          });
+        }
+      }
     );
 
     // received when a user is removed from having access to a collection
@@ -346,15 +430,35 @@ class WebsocketProvider extends React.Component<Props> {
     // or otherwise just remove any membership state we have for that user.
     this.socket.on(
       "collections.remove_user",
-      action((event: WebsocketCollectionUserEvent) => {
-        if (auth.user && event.userId === auth.user.id) {
-          collections.remove(event.collectionId);
-          memberships.removeCollectionMemberships(event.collectionId);
+      async (event: WebsocketCollectionUserEvent) => {
+        if (event.userId === auth.user?.id) {
+          // check if we still have access to the collection
+          try {
+            await collections.fetch(event.collectionId, {
+              force: true,
+            });
+          } catch (err) {
+            if (
+              err instanceof AuthorizationError ||
+              err instanceof NotFoundError
+            ) {
+              collections.remove(event.collectionId);
+              memberships.removeAll({
+                userId: event.userId,
+                collectionId: event.collectionId,
+              });
+              return;
+            }
+          }
+
           documents.removeCollectionDocuments(event.collectionId);
         } else {
-          memberships.remove(`${event.userId}-${event.collectionId}`);
+          memberships.removeAll({
+            userId: event.userId,
+            collectionId: event.collectionId,
+          });
         }
-      })
+      }
     );
 
     this.socket.on(
@@ -379,6 +483,16 @@ class WebsocketProvider extends React.Component<Props> {
       "fileOperations.update",
       (event: PartialWithId<FileOperation>) => {
         fileOperations.add(event);
+
+        if (
+          event.state === FileOperationState.Complete &&
+          event.type === FileOperationType.Import &&
+          event.user?.id === auth.user?.id
+        ) {
+          toast.success(event.name, {
+            description: this.props.t("Your import completed"),
+          });
+        }
       }
     );
 
@@ -396,43 +510,34 @@ class WebsocketProvider extends React.Component<Props> {
       }
     );
 
+    this.socket.on("users.update", (event: PartialWithId<User>) => {
+      users.add(event);
+    });
+
+    this.socket.on("users.demote", async (event: PartialWithId<User>) => {
+      if (event.id === auth.user?.id) {
+        documents.all.forEach((document) => policies.remove(document.id));
+        await collections.fetchAll();
+      }
+    });
+
+    this.socket.on(
+      "userMemberships.update",
+      async (event: PartialWithId<UserMembership>) => {
+        userMemberships.add(event);
+      }
+    );
+
     // received a message from the API server that we should request
     // to join a specific room. Forward that to the ws server.
-    this.socket.on("join", (event: any) => {
+    this.socket.on("join", (event) => {
       this.socket?.emit("join", event);
     });
 
     // received a message from the API server that we should request
     // to leave a specific room. Forward that to the ws server.
-    this.socket.on("leave", (event: any) => {
+    this.socket.on("leave", (event) => {
       this.socket?.emit("leave", event);
-    });
-
-    // received whenever we join a document room, the payload includes
-    // userIds that are present/viewing and those that are editing.
-    this.socket.on("document.presence", (event: any) => {
-      presence.init(event.documentId, event.userIds, event.editingIds);
-    });
-
-    // received whenever a new user joins a document room, aka they
-    // navigate to / start viewing a document
-    this.socket.on("user.join", (event: any) => {
-      presence.touch(event.documentId, event.userId, event.isEditing);
-      views.touch(event.documentId, event.userId);
-    });
-
-    // received whenever a new user leaves a document room, aka they
-    // navigate away / stop viewing a document
-    this.socket.on("user.leave", (event: any) => {
-      presence.leave(event.documentId, event.userId);
-      views.touch(event.documentId, event.userId);
-    });
-
-    // received when another client in a document room wants to change
-    // or update it's presence. Currently the only property is whether
-    // the client is in editing state or not.
-    this.socket.on("user.presence", (event: any) => {
-      presence.touch(event.documentId, event.userId, event.isEditing);
     });
   };
 
@@ -445,4 +550,4 @@ class WebsocketProvider extends React.Component<Props> {
   }
 }
 
-export default withStores(WebsocketProvider);
+export default withTranslation()(withStores(WebsocketProvider));

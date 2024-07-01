@@ -3,12 +3,12 @@ import { action, runInAction, computed } from "mobx";
 import Pin from "~/models/Pin";
 import { PaginationParams } from "~/types";
 import { client } from "~/utils/ApiClient";
-import BaseStore from "./BaseStore";
 import RootStore from "./RootStore";
+import Store from "./base/Store";
 
 type FetchParams = PaginationParams & { collectionId?: string };
 
-export default class PinsStore extends BaseStore<Pin> {
+export default class PinsStore extends Store<Pin> {
   constructor(rootStore: RootStore) {
     super(rootStore, Pin);
   }
@@ -35,11 +35,10 @@ export default class PinsStore extends BaseStore<Pin> {
     }
   };
 
-  inCollection = (collectionId: string) => {
-    return computed(() => this.orderedData)
+  inCollection = (collectionId: string) =>
+    computed(() => this.orderedData)
       .get()
       .filter((pin) => pin.collectionId === collectionId);
-  };
 
   @computed
   get home() {

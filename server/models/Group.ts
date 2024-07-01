@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { InferAttributes, InferCreationAttributes, Op } from "sequelize";
 import {
   AfterDestroy,
   BelongsTo,
@@ -9,8 +9,9 @@ import {
   BelongsToMany,
   DefaultScope,
   DataType,
+  Scopes,
 } from "sequelize-typescript";
-import CollectionGroup from "./CollectionGroup";
+import GroupPermission from "./GroupPermission";
 import GroupUser from "./GroupUser";
 import Team from "./Team";
 import User from "./User";
@@ -26,6 +27,23 @@ import NotContainsUrl from "./validators/NotContainsUrl";
       required: false,
     },
   ],
+}))
+@Scopes(() => ({
+  withMember: (memberId: string) => ({
+    include: [
+      {
+        association: "groupMemberships",
+        required: true,
+      },
+      {
+        association: "members",
+        required: true,
+        where: {
+          userId: memberId,
+        },
+      },
+    ],
+  }),
 }))
 @Table({
   tableName: "groups",
@@ -51,7 +69,10 @@ import NotContainsUrl from "./validators/NotContainsUrl";
   },
 })
 @Fix
-class Group extends ParanoidModel {
+class Group extends ParanoidModel<
+  InferAttributes<Group>,
+  Partial<InferCreationAttributes<Group>>
+> {
   @Length({ min: 0, max: 255, msg: "name must be be 255 characters or less" })
   @NotContainsUrl
   @Column
@@ -69,20 +90,27 @@ class Group extends ParanoidModel {
         groupId: model.id,
       },
     });
-    await CollectionGroup.destroy({
+    await GroupPermission.destroy({
       where: {
         groupId: model.id,
       },
     });
   }
 
+  static filterByMember(memberId: string | undefined) {
+    return memberId
+      ? this.scope({ method: ["withMember", memberId] })
+      : this.scope("defaultScope");
+  }
+
   // associations
 
   @HasMany(() => GroupUser, "groupId")
+  @HasMany(() => GroupUser, { as: "members", foreignKey: "groupId" })
   groupMemberships: GroupUser[];
 
-  @HasMany(() => CollectionGroup, "groupId")
-  collectionGroupMemberships: CollectionGroup[];
+  @HasMany(() => GroupPermission, "groupId")
+  collectionGroupMemberships: GroupPermission[];
 
   @BelongsTo(() => Team, "teamId")
   team: Team;

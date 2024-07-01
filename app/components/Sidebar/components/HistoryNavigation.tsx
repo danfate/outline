@@ -2,12 +2,13 @@ import { ArrowIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
+import { s } from "@shared/styles";
+import { isMac } from "@shared/utils/browser";
 import Flex from "~/components/Flex";
 import NudeButton from "~/components/NudeButton";
 import Tooltip from "~/components/Tooltip";
 import useKeyDown from "~/hooks/useKeyDown";
 import Desktop from "~/utils/Desktop";
-import { isMac } from "~/utils/browser";
 
 function HistoryNavigation(props: React.ComponentProps<typeof Flex>) {
   const { t } = useTranslation();
@@ -42,14 +43,14 @@ function HistoryNavigation(props: React.ComponentProps<typeof Flex>) {
 
   return (
     <Navigation gap={4} {...props}>
-      <Tooltip tooltip={t("Go back")} delay={500}>
+      <Tooltip content={t("Go back")} delay={500}>
         <NudeButton onClick={() => Desktop.bridge.goBack()}>
-          <Back color="currentColor" $active={back} />
+          <Back $active={back} />
         </NudeButton>
       </Tooltip>
-      <Tooltip tooltip={t("Go forward")} delay={500}>
+      <Tooltip content={t("Go forward")} delay={500}>
         <NudeButton onClick={() => Desktop.bridge.goForward()}>
-          <Forward color="currentColor" $active={forward} />
+          <Forward $active={forward} />
         </NudeButton>
       </Tooltip>
     </Navigation>
@@ -63,7 +64,7 @@ const Navigation = styled(Flex)`
 `;
 
 const Forward = styled(ArrowIcon)<{ $active: boolean }>`
-  color: ${(props) => props.theme.textTertiary};
+  color: ${s("textTertiary")};
   opacity: ${(props) => (props.$active ? 1 : 0.5)};
   transition: color 100ms ease-in-out;
 

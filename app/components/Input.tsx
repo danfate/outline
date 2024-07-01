@@ -1,49 +1,60 @@
 import * as React from "react";
+import { mergeRefs } from "react-merge-refs";
 import { VisuallyHidden } from "reakit/VisuallyHidden";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import { s, ellipsis } from "@shared/styles";
 import Flex from "~/components/Flex";
 import Text from "~/components/Text";
 import { undraggableOnDesktop } from "~/styles";
 
-const RealTextarea = styled.textarea<{ hasIcon?: boolean }>`
+export const NativeTextarea = styled.textarea<{
+  hasIcon?: boolean;
+  hasPrefix?: boolean;
+}>`
   border: 0;
   flex: 1;
-  padding: 8px 12px 8px ${(props) => (props.hasIcon ? "8px" : "12px")};
+  padding: 8px 12px 8px
+    ${(props) => (props.hasPrefix ? 0 : props.hasIcon ? "8px" : "12px")};
   outline: none;
   background: none;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
 
   &:disabled,
   &::placeholder {
-    color: ${(props) => props.theme.placeholder};
+    color: ${s("placeholder")};
+    opacity: 1;
   }
 `;
 
-const RealInput = styled.input<{ hasIcon?: boolean }>`
+export const NativeInput = styled.input<{
+  hasIcon?: boolean;
+  hasPrefix?: boolean;
+}>`
   border: 0;
   flex: 1;
-  padding: 8px 12px 8px ${(props) => (props.hasIcon ? "8px" : "12px")};
+  padding: 8px 12px 8px
+    ${(props) => (props.hasPrefix ? 0 : props.hasIcon ? "8px" : "12px")};
   outline: none;
   background: none;
-  color: ${(props) => props.theme.text};
+  color: ${s("text")};
   height: 30px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 15px;
+
+  ${ellipsis()}
   ${undraggableOnDesktop()}
 
   &:disabled,
   &::placeholder {
-    color: ${(props) => props.theme.placeholder};
+    color: ${s("placeholder")};
+    opacity: 1;
   }
 
   &:-webkit-autofill,
   &:-webkit-autofill:hover,
   &:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0px 1000px ${(props) => props.theme.background}
-      inset;
+    -webkit-box-shadow: 0 0 0px 1000px ${s("background")} inset;
   }
 
   &::-webkit-search-cancel-button {
@@ -55,7 +66,7 @@ const RealInput = styled.input<{ hasIcon?: boolean }>`
   `};
 `;
 
-const Wrapper = styled.div<{
+export const Wrapper = styled.div<{
   flex?: boolean;
   short?: boolean;
   minHeight?: number;
@@ -98,7 +109,7 @@ export const Outline = styled(Flex)<{
   font-weight: normal;
   align-items: center;
   overflow: hidden;
-  background: ${(props) => props.theme.background};
+  background: ${s("background")};
 
   /* Prevents an issue where input placeholder appears in a selected style when double clicking title bar */
   user-select: none;
@@ -110,9 +121,11 @@ export const LabelText = styled.div`
   display: inline-block;
 `;
 
-export type Props = React.InputHTMLAttributes<
-  HTMLInputElement | HTMLTextAreaElement
-> & {
+export interface Props
+  extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement | HTMLTextAreaElement>,
+    "prefix"
+  > {
   type?: "text" | "email" | "checkbox" | "search" | "textarea";
   labelHidden?: boolean;
   label?: string;
@@ -120,15 +133,25 @@ export type Props = React.InputHTMLAttributes<
   short?: boolean;
   margin?: string | number;
   error?: string;
+  /** Optional component that appears inside the input before the textarea and any icon */
+  prefix?: React.ReactNode;
+  /** Optional icon that appears inside the input before the textarea */
   icon?: React.ReactNode;
+  /** Like autoFocus, but also select any text in the input */
+  autoSelect?: boolean;
+  /** Callback is triggered with the CMD+Enter keyboard combo */
+  onRequestSubmit?: (
+    ev: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => unknown;
   onFocus?: (ev: React.SyntheticEvent) => unknown;
   onBlur?: (ev: React.SyntheticEvent) => unknown;
-};
+}
 
 function Input(
   props: Props,
   ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>
 ) {
+  const internalRef = React.useRef<HTMLInputElement | HTMLTextAreaElement>();
   const [focused, setFocused] = React.useState(false);
 
   const handleBlur = (ev: React.SyntheticEvent) => {
@@ -147,6 +170,26 @@ function Input(
     }
   };
 
+  const handleKeyDown = (
+    ev: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    if (ev.key === "Enter" && ev.metaKey) {
+      if (props.onRequestSubmit) {
+        props.onRequestSubmit(ev);
+      }
+    }
+
+    if (props.onKeyDown) {
+      props.onKeyDown(ev);
+    }
+  };
+
+  React.useEffect(() => {
+    if (props.autoSelect && internalRef.current) {
+      internalRef.current.select();
+    }
+  }, [props.autoSelect, internalRef]);
+
   const {
     type = "text",
     icon,
@@ -156,9 +199,12 @@ function Input(
     className,
     short,
     flex,
+    prefix,
     labelHidden,
     onFocus,
     onBlur,
+    onRequestSubmit,
+    children,
     ...rest
   } = props;
 
@@ -174,32 +220,44 @@ function Input(
             wrappedLabel
           ))}
         <Outline focused={focused} margin={margin}>
+          {prefix}
           {icon && <IconWrapper>{icon}</IconWrapper>}
           {type === "textarea" ? (
-            <RealTextarea
-              ref={ref as React.RefObject<HTMLTextAreaElement>}
+            <NativeTextarea
+              ref={mergeRefs([
+                internalRef,
+                ref as React.RefObject<HTMLTextAreaElement>,
+              ])}
               onBlur={handleBlur}
               onFocus={handleFocus}
+              onKeyDown={handleKeyDown}
               hasIcon={!!icon}
+              hasPrefix={!!prefix}
               {...rest}
             />
           ) : (
-            <RealInput
-              ref={ref as React.RefObject<HTMLInputElement>}
+            <NativeInput
+              ref={mergeRefs([
+                internalRef,
+                ref as React.RefObject<HTMLInputElement>,
+              ])}
               onBlur={handleBlur}
               onFocus={handleFocus}
+              onKeyDown={handleKeyDown}
               hasIcon={!!icon}
+              hasPrefix={!!prefix}
               type={type}
               {...rest}
             />
           )}
+          {children}
         </Outline>
       </label>
       {error && (
         <TextWrapper>
-          <StyledText type="danger" size="xsmall">
+          <Text type="danger" size="xsmall">
             {error}
-          </StyledText>
+          </Text>
         </TextWrapper>
       )}
     </Wrapper>
@@ -210,10 +268,6 @@ export const TextWrapper = styled.span`
   min-height: 16px;
   display: block;
   margin-top: -16px;
-`;
-
-export const StyledText = styled(Text)`
-  margin-bottom: 0;
 `;
 
 export default React.forwardRef(Input);

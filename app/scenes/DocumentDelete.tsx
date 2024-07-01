@@ -2,13 +2,13 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { useHistory } from "react-router-dom";
+import { toast } from "sonner";
 import Document from "~/models/Document";
 import Button from "~/components/Button";
 import Flex from "~/components/Flex";
 import Text from "~/components/Text";
 import useStores from "~/hooks/useStores";
-import useToasts from "~/hooks/useToasts";
-import { collectionUrl, documentUrl } from "~/utils/routeHelpers";
+import { collectionPath, documentPath } from "~/utils/routeHelpers";
 
 type Props = {
   document: Document;
@@ -21,9 +21,10 @@ function DocumentDelete({ document, onSubmit }: Props) {
   const history = useHistory();
   const [isDeleting, setDeleting] = React.useState(false);
   const [isArchiving, setArchiving] = React.useState(false);
-  const { showToast } = useToasts();
   const canArchive = !document.isDraft && !document.isArchived;
-  const collection = collections.get(document.collectionId);
+  const collection = document.collectionId
+    ? collections.get(document.collectionId)
+    : undefined;
   const nestedDocumentsCount = collection
     ? collection.getDocumentChildren(document.id).length
     : 0;
@@ -43,26 +44,24 @@ function DocumentDelete({ document, onSubmit }: Props) {
             const parent = documents.get(document.parentDocumentId);
 
             if (parent) {
-              history.push(documentUrl(parent));
+              history.push(documentPath(parent));
               onSubmit();
               return;
             }
           }
 
           // otherwise, redirect to the collection home
-          history.push(collectionUrl(collection?.url || "/"));
+          history.push(collectionPath(collection?.path || "/"));
         }
 
         onSubmit();
       } catch (err) {
-        showToast(err.message, {
-          type: "error",
-        });
+        toast.error(err.message);
       } finally {
         setDeleting(false);
       }
     },
-    [showToast, onSubmit, ui, document, documents, history, collection]
+    [onSubmit, ui, document, documents, history, collection]
   );
 
   const handleArchive = React.useCallback(
@@ -74,76 +73,74 @@ function DocumentDelete({ document, onSubmit }: Props) {
         await document.archive();
         onSubmit();
       } catch (err) {
-        showToast(err.message, {
-          type: "error",
-        });
+        toast.error(err.message);
       } finally {
         setArchiving(false);
       }
     },
-    [showToast, onSubmit, document]
+    [onSubmit, document]
   );
 
   return (
-    <Flex column>
-      <form onSubmit={handleSubmit}>
-        <Text type="secondary">
-          {document.isTemplate ? (
-            <Trans
-              defaults="Are you sure you want to delete the <em>{{ documentTitle }}</em> template?"
-              values={{
-                documentTitle: document.titleWithDefault,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          ) : nestedDocumentsCount < 1 ? (
-            <Trans
-              defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history</em>."
-              values={{
-                documentTitle: document.titleWithDefault,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          ) : (
-            <Trans
-              count={nestedDocumentsCount}
-              defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history and <em>{{ any }} nested document</em>."
-              values={{
-                documentTitle: document.titleWithDefault,
-                any: nestedDocumentsCount,
-              }}
-              components={{
-                em: <strong />,
-              }}
-            />
-          )}
-        </Text>
-        {canArchive && (
-          <Text type="secondary">
-            <Trans>
-              If you’d like the option of referencing or restoring the{" "}
-              {{
-                noun: document.noun,
-              }}{" "}
-              in the future, consider archiving it instead.
-            </Trans>
-          </Text>
+    <form onSubmit={handleSubmit}>
+      <Text as="p" type="secondary">
+        {document.isTemplate ? (
+          <Trans
+            defaults="Are you sure you want to delete the <em>{{ documentTitle }}</em> template?"
+            values={{
+              documentTitle: document.titleWithDefault,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
+        ) : nestedDocumentsCount < 1 ? (
+          <Trans
+            defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history</em>."
+            values={{
+              documentTitle: document.titleWithDefault,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
+        ) : (
+          <Trans
+            count={nestedDocumentsCount}
+            defaults="Are you sure about that? Deleting the <em>{{ documentTitle }}</em> document will delete all of its history and <em>{{ any }} nested document</em>."
+            values={{
+              documentTitle: document.titleWithDefault,
+              any: nestedDocumentsCount,
+            }}
+            components={{
+              em: <strong />,
+            }}
+          />
         )}
-        <Button type="submit" danger>
-          {isDeleting ? `${t("Deleting")}…` : t("I’m sure – Delete")}
-        </Button>
-        &nbsp;&nbsp;
+      </Text>
+      {canArchive && (
+        <Text as="p" type="secondary">
+          <Trans>
+            If you’d like the option of referencing or restoring the{" "}
+            {{
+              noun: document.noun,
+            }}{" "}
+            in the future, consider archiving it instead.
+          </Trans>
+        </Text>
+      )}
+
+      <Flex justify="flex-end" gap={8}>
         {canArchive && (
           <Button type="button" onClick={handleArchive} neutral>
             {isArchiving ? `${t("Archiving")}…` : t("Archive")}
           </Button>
         )}
-      </form>
-    </Flex>
+        <Button type="submit" danger>
+          {isDeleting ? `${t("Deleting")}…` : t("I’m sure – Delete")}
+        </Button>
+      </Flex>
+    </form>
   );
 }
 
