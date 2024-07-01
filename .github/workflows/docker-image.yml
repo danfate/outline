@@ -2,8 +2,8 @@ name: Docker Image CI
 
 on:
   push:
-    paths:
-      - 'build_cjk.sh'
+    tags:
+      - "cjk-**"
       
 jobs:
   build:
@@ -26,6 +26,9 @@ jobs:
       run: cd $GITHUB_WORKSPACE
 
     - name: Execute build script
+      env: 
+        RELEASE_VERSION: ${{ github.ref_name }}
       run: |
+        echo "Tag name is "$RELEASE_VERSION
         chmod +x ./build_cjk.sh
         ./build_cjk.sh
