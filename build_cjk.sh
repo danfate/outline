@@ -1,4 +1,5 @@
 #!/bin/sh
+
 # version="0.70.2"
 version=$RELEASE_VERSION
 docker build --pull --rm -f "Dockerfile.base" -t sldaniel/outline-base:latest "." && \
