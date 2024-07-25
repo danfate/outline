@@ -36,7 +36,6 @@ import DocumentPublish from "~/scenes/DocumentPublish";
 import Branding from "~/components/Branding";
 import ConnectionStatus from "~/components/ConnectionStatus";
 import ErrorBoundary from "~/components/ErrorBoundary";
-import Flex from "~/components/Flex";
 import LoadingIndicator from "~/components/LoadingIndicator";
 import PageTitle from "~/components/PageTitle";
 import PlaceholderDocument from "~/components/PlaceholderDocument";
@@ -423,7 +422,7 @@ class DocumentScene extends React.Component<Props> {
 
     const hasHeadings = this.headings.length > 0;
     const showContents =
-      ui.tocVisible && ((readOnly && hasHeadings) || !readOnly);
+      ui.tocVisible === true || (isShare && ui.tocVisible !== false);
     const tocPos =
       tocPosition ??
       ((team?.getPreference(TeamPreference.TocPosition) as TOCPosition) ||
@@ -504,9 +503,6 @@ class DocumentScene extends React.Component<Props> {
               onSave={this.onSave}
               headings={this.headings}
             />
-            <Flex justify="center">
-              <Notices document={document} readOnly={readOnly} />
-            </Flex>
             <MeasuredContainer
               as={Main}
               name="document"
@@ -547,6 +543,8 @@ class DocumentScene extends React.Component<Props> {
                       showContents={showContents}
                       tocPosition={tocPos}
                     >
+                      <Notices document={document} readOnly={readOnly} />
+
                       <Editor
                         id={document.id}
                         key={embedsDisabled ? "disabled" : "enabled"}
