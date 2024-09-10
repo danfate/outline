@@ -1,10 +1,8 @@
-import emojiRegex from "emoji-regex";
 import isUndefined from "lodash/isUndefined";
 import { z } from "zod";
 import { CollectionPermission, FileOperationFormat } from "@shared/types";
-import { IconLibrary } from "@shared/utils/IconLibrary";
 import { Collection } from "@server/models";
-import { zodEnumFromObjectKeys } from "@server/utils/zod";
+import { zodIconType } from "@server/utils/zod";
 import { ValidateColor, ValidateIndex } from "@server/validation";
 import { BaseSchema, ProsemirrorSchema } from "../schema";
 
@@ -27,12 +25,7 @@ export const CollectionsCreateSchema = BaseSchema.extend({
       .nullish()
       .transform((val) => (isUndefined(val) ? null : val)),
     sharing: z.boolean().default(true),
-    icon: z
-      .union([
-        z.string().regex(emojiRegex()),
-        zodEnumFromObjectKeys(IconLibrary.mapping),
-      ])
-      .optional(),
+    icon: zodIconType().optional(),
     sort: z
       .object({
         field: z.union([z.literal("title"), z.literal("index")]),
@@ -101,17 +94,6 @@ export type CollectionsRemoveGroupReq = z.infer<
   typeof CollectionsRemoveGroupSchema
 >;
 
-export const CollectionsGroupMembershipsSchema = BaseSchema.extend({
-  body: BaseIdSchema.extend({
-    query: z.string().optional(),
-    permission: z.nativeEnum(CollectionPermission).optional(),
-  }),
-});
-
-export type CollectionsGroupMembershipsReq = z.infer<
-  typeof CollectionsGroupMembershipsSchema
->;
-
 export const CollectionsAddUserSchema = BaseSchema.extend({
   body: BaseIdSchema.extend({
     userId: z.string().uuid(),
@@ -171,12 +153,7 @@ export const CollectionsUpdateSchema = BaseSchema.extend({
     name: z.string().optional(),
     description: z.string().nullish(),
     data: ProsemirrorSchema.nullish(),
-    icon: z
-      .union([
-        z.string().regex(emojiRegex()),
-        zodEnumFromObjectKeys(IconLibrary.mapping),
-      ])
-      .nullish(),
+    icon: zodIconType().nullish(),
     permission: z.nativeEnum(CollectionPermission).nullish(),
     color: z
       .string()

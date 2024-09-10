@@ -177,7 +177,7 @@ const IconPicker = ({
             {iconType && icon ? (
               <Icon value={icon} color={color} size={size} initial={initial} />
             ) : (
-              <StyledSmileyIcon color={theme.textTertiary} size={size} />
+              <StyledSmileyIcon color={theme.placeholder} size={size} />
             )}
           </PopoverButton>
         )}
@@ -309,4 +309,4 @@ const StyledTabPanel = styled(TabPanel)`
   overflow-y: auto;
 `;
 
-export default IconPicker;
+export default React.memo(IconPicker);

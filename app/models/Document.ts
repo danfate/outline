@@ -116,7 +116,7 @@ export default class Document extends ParanoidModel {
   collectionId?: string | null;
 
   /**
-   * The comment that this comment is a reply to.
+   * The collection that this document belongs to.
    */
   @Relation(() => Collection, { onDelete: "cascade" })
   collection?: Collection;
@@ -174,6 +174,9 @@ export default class Document extends ParanoidModel {
   @Field
   @observable
   parentDocumentId: string | undefined;
+
+  @Relation(() => Document)
+  parentDocument?: Document;
 
   @observable
   collaboratorIds: string[];
@@ -376,9 +379,31 @@ export default class Document extends ParanoidModel {
     return floor((this.tasks.completed / this.tasks.total) * 100);
   }
 
+  /**
+   * Returns the path to the document, using the collection structure if available.
+   * otherwise if we're viewing a shared document we can iterate up the parentDocument tree.
+   *
+   * @returns path to the document
+   */
   @computed
   get pathTo() {
-    return this.collection?.pathToDocument(this.id) ?? [];
+    if (this.collection?.documents) {
+      return this.collection.pathToDocument(this.id);
+    }
+
+    // find root parent document we have access to
+    const path: Document[] = [this];
+
+    while (path[0]?.parentDocument) {
+      path.unshift(path[0].parentDocument);
+    }
+
+    return path.map((item) => item.asNavigationNode);
+  }
+
+  @computed
+  get isWorkspaceTemplate() {
+    return this.template && !this.collectionId;
   }
 
   get titleWithDefault(): string {
@@ -490,7 +515,13 @@ export default class Document extends ParanoidModel {
   };
 
   @action
-  templatize = () => this.store.templatize(this.id);
+  templatize = ({
+    collectionId,
+    publish,
+  }: {
+    collectionId: string | null;
+    publish: boolean;
+  }) => this.store.templatize({ id: this.id, collectionId, publish });
 
   @action
   save = async (
@@ -517,8 +548,10 @@ export default class Document extends ParanoidModel {
     }
   };
 
-  move = (collectionId: string, parentDocumentId?: string | undefined) =>
-    this.store.move(this.id, collectionId, parentDocumentId);
+  move = (options: {
+    collectionId?: string | null;
+    parentDocumentId?: string;
+  }) => this.store.move({ documentId: this.id, ...options });
 
   duplicate = (options?: {
     title?: string;
@@ -569,6 +602,8 @@ export default class Document extends ParanoidModel {
     return {
       id: this.id,
       title: this.title,
+      color: this.color ?? undefined,
+      icon: this.icon ?? undefined,
       children: this.childDocuments.map((doc) => doc.asNavigationNode),
       url: this.url,
       isDraft: this.isDraft,

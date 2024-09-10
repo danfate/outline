@@ -1,13 +1,11 @@
-import emojiRegex from "emoji-regex";
 import formidable from "formidable";
 import isEmpty from "lodash/isEmpty";
 import isUUID from "validator/lib/isUUID";
 import { z } from "zod";
 import { DocumentPermission, StatusFilter } from "@shared/types";
-import { IconLibrary } from "@shared/utils/IconLibrary";
 import { UrlHelper } from "@shared/utils/UrlHelper";
 import { BaseSchema } from "@server/routes/api/schema";
-import { zodEnumFromObjectKeys } from "@server/utils/zod";
+import { zodIconType } from "@server/utils/zod";
 import { ValidateColor } from "@server/validation";
 
 const DocumentsSortParamsSchema = z.object({
@@ -196,7 +194,12 @@ export const DocumentsDuplicateSchema = BaseSchema.extend({
 export type DocumentsDuplicateReq = z.infer<typeof DocumentsDuplicateSchema>;
 
 export const DocumentsTemplatizeSchema = BaseSchema.extend({
-  body: BaseIdSchema,
+  body: BaseIdSchema.extend({
+    /** Id of the collection inside which the template should be created */
+    collectionId: z.string().nullish(),
+    /** Whether the new template should be published */
+    publish: z.boolean(),
+  }),
 });
 
 export type DocumentsTemplatizeReq = z.infer<typeof DocumentsTemplatizeSchema>;
@@ -209,16 +212,8 @@ export const DocumentsUpdateSchema = BaseSchema.extend({
     /** Doc text to be updated */
     text: z.string().optional(),
 
-    /** Emoji displayed alongside doc title */
-    emoji: z.string().regex(emojiRegex()).nullish(),
-
     /** Icon displayed alongside doc title */
-    icon: z
-      .union([
-        z.string().regex(emojiRegex()),
-        zodEnumFromObjectKeys(IconLibrary.mapping),
-      ])
-      .nullish(),
+    icon: zodIconType().nullish(),
 
     /** Icon color */
     color: z
@@ -259,7 +254,7 @@ export type DocumentsUpdateReq = z.infer<typeof DocumentsUpdateSchema>;
 export const DocumentsMoveSchema = BaseSchema.extend({
   body: BaseIdSchema.extend({
     /** Id of collection to which the doc is supposed to be moved */
-    collectionId: z.string().uuid(),
+    collectionId: z.string().uuid().nullish(),
 
     /** Parent Id, in case if the doc is moved to a new parent */
     parentDocumentId: z.string().uuid().nullish(),
@@ -321,16 +316,8 @@ export const DocumentsCreateSchema = BaseSchema.extend({
     /** Document text */
     text: z.string().default(""),
 
-    /** Emoji displayed alongside doc title */
-    emoji: z.string().regex(emojiRegex()).nullish(),
-
     /** Icon displayed alongside doc title */
-    icon: z
-      .union([
-        z.string().regex(emojiRegex()),
-        zodEnumFromObjectKeys(IconLibrary.mapping),
-      ])
-      .optional(),
+    icon: zodIconType().optional(),
 
     /** Icon color */
     color: z
@@ -364,21 +351,13 @@ export const DocumentsCreateSchema = BaseSchema.extend({
     /** Whether this should be considered a template */
     template: z.boolean().optional(),
   }),
-})
-  .refine((req) => !(req.body.template && !req.body.collectionId), {
-    message: "collectionId is required to create a template document",
-  })
-  .refine(
-    (req) =>
-      !(
-        req.body.publish &&
-        !req.body.parentDocumentId &&
-        !req.body.collectionId
-      ),
-    {
-      message: "collectionId or parentDocumentId is required to publish",
-    }
-  );
+}).refine(
+  (req) =>
+    !(req.body.publish && !req.body.parentDocumentId && !req.body.collectionId),
+  {
+    message: "collectionId or parentDocumentId is required to publish",
+  }
+);
 
 export type DocumentsCreateReq = z.infer<typeof DocumentsCreateSchema>;
 
@@ -415,6 +394,27 @@ export const DocumentsRemoveUserSchema = BaseSchema.extend({
 
 export type DocumentsRemoveUserReq = z.infer<typeof DocumentsRemoveUserSchema>;
 
+export const DocumentsAddGroupSchema = BaseSchema.extend({
+  body: BaseIdSchema.extend({
+    groupId: z.string().uuid(),
+    permission: z
+      .nativeEnum(DocumentPermission)
+      .default(DocumentPermission.ReadWrite),
+  }),
+});
+
+export type DocumentsAddGroupsReq = z.infer<typeof DocumentsAddGroupSchema>;
+
+export const DocumentsRemoveGroupSchema = BaseSchema.extend({
+  body: BaseIdSchema.extend({
+    groupId: z.string().uuid(),
+  }),
+});
+
+export type DocumentsRemoveGroupReq = z.infer<
+  typeof DocumentsRemoveGroupSchema
+>;
+
 export const DocumentsSharedWithUserSchema = BaseSchema.extend({
   body: DocumentsSortParamsSchema,
 });
@@ -424,8 +424,7 @@ export type DocumentsSharedWithUserReq = z.infer<
 >;
 
 export const DocumentsMembershipsSchema = BaseSchema.extend({
-  body: z.object({
-    id: z.string().uuid(),
+  body: BaseIdSchema.extend({
     query: z.string().optional(),
     permission: z.nativeEnum(DocumentPermission).optional(),
   }),
