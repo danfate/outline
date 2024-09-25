@@ -34,8 +34,16 @@ export function useLastVisitedPath(): [string, (path: string) => void] {
  * @param path The path to set as the post login path.
  */
 export function setPostLoginPath(path: string) {
+  const key = "postLoginRedirectPath";
+
   if (isValidPostLoginRedirect(path)) {
-    setCookie("postLoginRedirectPath", path, { expires: 1 });
+    setCookie(key, path, { expires: 1 });
+
+    try {
+      sessionStorage.setItem(key, path);
+    } catch (e) {
+      // If the session storage is full or inaccessible, we can't do anything about it.
+    }
   }
 }
 
@@ -49,7 +57,12 @@ export function usePostLoginPath() {
   const key = "postLoginRedirectPath";
 
   const getter = React.useCallback(() => {
-    const path = getCookie(key);
+    let path;
+    try {
+      path = sessionStorage.getItem(key) || getCookie(key);
+    } catch (e) {
+      // If the session storage is inaccessible, we can't do anything about it.
+    }
 
     if (path) {
       Logger.info("lifecycle", "Spending post login path", { path });

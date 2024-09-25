@@ -24,9 +24,9 @@ import {
   UnpublishIcon,
   PublishIcon,
   CommentIcon,
-  GlobeIcon,
   CopyIcon,
   EyeIcon,
+  PadlockIcon,
 } from "outline-icons";
 import * as React from "react";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
 import DocumentPublish from "~/scenes/DocumentPublish";
 import DeleteDocumentsInTrash from "~/scenes/Trash/components/DeleteDocumentsInTrash";
+import ConfirmationDialog from "~/components/ConfirmationDialog";
 import DuplicateDialog from "~/components/DuplicateDialog";
 import SharePopover from "~/components/Sharing/Document";
 import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
@@ -334,7 +335,7 @@ export const shareDocument = createAction({
   name: ({ t }) => `${t("Permissions")}…`,
   analyticsName: "Share document",
   section: DocumentSection,
-  icon: <GlobeIcon />,
+  icon: <PadlockIcon />,
   visible: ({ stores, activeDocumentId }) => {
     const can = stores.policies.abilities(activeDocumentId!);
     return can.manageUsers || can.share;
@@ -851,7 +852,7 @@ export const moveTemplate = createAction({
 });
 
 export const archiveDocument = createAction({
-  name: ({ t }) => t("Archive"),
+  name: ({ t }) => `${t("Archive")}…`,
   analyticsName: "Archive document",
   section: DocumentSection,
   icon: <ArchiveIcon />,
@@ -862,14 +863,30 @@ export const archiveDocument = createAction({
     return !!stores.policies.abilities(activeDocumentId).archive;
   },
   perform: async ({ activeDocumentId, stores, t }) => {
+    const { dialogs, documents } = stores;
+
     if (activeDocumentId) {
-      const document = stores.documents.get(activeDocumentId);
+      const document = documents.get(activeDocumentId);
       if (!document) {
         return;
       }
 
-      await document.archive();
-      toast.success(t("Document archived"));
+      dialogs.openModal({
+        title: t("Are you sure you want to archive this document?"),
+        content: (
+          <ConfirmationDialog
+            onSubmit={async () => {
+              await document.archive();
+              toast.success(t("Document archived"));
+            }}
+            savingText={`${t("Archiving")}…`}
+          >
+            {t(
+              "Archiving this document will remove it from the collection and search results."
+            )}
+          </ConfirmationDialog>
+        ),
+      });
     }
   },
 });

@@ -82,7 +82,10 @@ export const DocumentsListSchema = BaseSchema.extend({
 export type DocumentsListReq = z.infer<typeof DocumentsListSchema>;
 
 export const DocumentsArchivedSchema = BaseSchema.extend({
-  body: DocumentsSortParamsSchema.extend({}),
+  body: DocumentsSortParamsSchema.extend({
+    /** Id of the collection to which archived documents should belong */
+    collectionId: z.string().uuid().optional(),
+  }),
 });
 
 export type DocumentsArchivedReq = z.infer<typeof DocumentsArchivedSchema>;
@@ -254,7 +257,7 @@ export type DocumentsUpdateReq = z.infer<typeof DocumentsUpdateSchema>;
 export const DocumentsMoveSchema = BaseSchema.extend({
   body: BaseIdSchema.extend({
     /** Id of collection to which the doc is supposed to be moved */
-    collectionId: z.string().uuid().nullish(),
+    collectionId: z.string().uuid().optional().nullish(),
 
     /** Parent Id, in case if the doc is moved to a new parent */
     parentDocumentId: z.string().uuid().nullish(),
@@ -365,6 +368,8 @@ export const DocumentsUsersSchema = BaseSchema.extend({
   body: BaseIdSchema.extend({
     /** Query term to search users by name */
     query: z.string().optional(),
+    /** Id of the user to search within document access */
+    userId: z.string().uuid().optional(),
   }),
 });
 
@@ -374,9 +379,9 @@ export const DocumentsAddUserSchema = BaseSchema.extend({
   body: z.object({
     /** Id of the document to which the user is supposed to be added */
     id: z.string().uuid(),
-    /** Id of the user who is to be added*/
+    /** Id of the user who is to be added */
     userId: z.string().uuid(),
-    /** Permission to be granted to the added user  */
+    /** Permission to be granted to the added user */
     permission: z.nativeEnum(DocumentPermission).optional(),
   }),
 });

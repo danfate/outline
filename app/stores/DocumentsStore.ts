@@ -367,8 +367,8 @@ export default class DocumentsStore extends Store<Document> {
     this.fetchNamedPage("starred", options);
 
   @action
-  fetchDrafts = (options?: PaginationParams): Promise<Document[]> =>
-    this.fetchNamedPage("drafts", options);
+  fetchDrafts = (options: PaginationParams = {}): Promise<Document[]> =>
+    this.fetchNamedPage("drafts", { limit: 100, ...options });
 
   @action
   fetchOwned = (options?: PaginationParams): Promise<Document[]> =>
@@ -584,7 +584,6 @@ export default class DocumentsStore extends Store<Document> {
       });
       invariant(res?.data, "Data not available");
       res.data.documents.forEach(this.add);
-      res.data.collections.forEach(this.rootStore.collections.add);
       this.addPolicies(res.policies);
     } finally {
       this.movingDocumentId = undefined;

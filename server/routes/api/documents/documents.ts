@@ -54,7 +54,6 @@ import SearchHelper from "@server/models/helpers/SearchHelper";
 import { TextHelper } from "@server/models/helpers/TextHelper";
 import { authorize, can, cannot } from "@server/policies";
 import {
-  presentCollection,
   presentDocument,
   presentPolicies,
   presentMembership,
@@ -248,21 +247,65 @@ router.post(
   pagination(),
   validate(T.DocumentsArchivedSchema),
   async (ctx: APIContext<T.DocumentsArchivedReq>) => {
-    const { sort, direction } = ctx.input.body;
+    const { sort, direction, collectionId } = ctx.input.body;
+
     const { user } = ctx.state.auth;
-    const collectionIds = await user.collectionIds();
-    const documents = await Document.defaultScopeWithUser(user.id).findAll({
-      where: {
-        teamId: user.teamId,
-        collectionId: collectionIds,
-        archivedAt: {
-          [Op.ne]: null,
-        },
+
+    let where: WhereOptions<Document> = {
+      teamId: user.teamId,
+      archivedAt: {
+        [Op.ne]: null,
       },
-      order: [[sort, direction]],
+    };
+
+    let documentIds: string[] = [];
+
+    // if a specific collection is passed then we need to check auth to view it
+    if (collectionId) {
+      where = { ...where, collectionId };
+      const collection = await Collection.scope({
+        method: ["withMembership", user.id],
+      }).findByPk(collectionId);
+      authorize(user, "readDocument", collection);
+
+      // index sort is special because it uses the order of the documents in the
+      // collection.documentStructure rather than a database column
+      if (sort === "index") {
+        documentIds = (collection?.documentStructure || [])
+          .map((node) => node.id)
+          .slice(ctx.state.pagination.offset, ctx.state.pagination.limit);
+        where = { ...where, id: documentIds };
+      } // otherwise, filter by all collections the user has access to
+    } else {
+      const collectionIds = await user.collectionIds();
+      where = {
+        ...where,
+        collectionId: collectionIds,
+      };
+    }
+
+    const documents = await Document.defaultScopeWithUser(user.id).findAll({
+      where,
+      order: [
+        [
+          // this needs to be done otherwise findAll will throw citing
+          // that the column "document"."index" doesn't exist – value of sort
+          // is required to be a column name
+          sort === "index" ? "updatedAt" : sort,
+          direction,
+        ],
+      ],
       offset: ctx.state.pagination.offset,
       limit: ctx.state.pagination.limit,
     });
+
+    if (sort === "index") {
+      // sort again so as to retain the order of documents as in collection.documentStructure
+      documents.sort(
+        (a, b) => documentIds.indexOf(a.id) - documentIds.indexOf(b.id)
+      );
+    }
+
     const data = await Promise.all(
       documents.map((document) => presentDocument(ctx, document))
     );
@@ -505,7 +548,7 @@ router.post(
   pagination(),
   validate(T.DocumentsUsersSchema),
   async (ctx: APIContext<T.DocumentsUsersReq>) => {
-    const { id, query } = ctx.input.body;
+    const { id, userId, query } = ctx.input.body;
     const actor = ctx.state.auth.user;
     const { offset, limit } = ctx.state.pagination;
     const document = await Document.findByPk(id, {
@@ -513,8 +556,6 @@ router.post(
     });
     authorize(actor, "read", document);
 
-    let users: User[] = [];
-    let total = 0;
     let where: WhereOptions<User> = {
       teamId: document.teamId,
       suspendedAt: {
@@ -551,15 +592,30 @@ router.post(
     if (query) {
       where = {
         ...where,
-        name: {
-          [Op.iLike]: `%${query}%`,
-        },
+        [Op.and]: [
+          Sequelize.literal(
+            `unaccent(LOWER(name)) like unaccent(LOWER(:query))`
+          ),
+        ],
       };
     }
 
-    [users, total] = await Promise.all([
-      User.findAll({ where, offset, limit }),
-      User.count({ where }),
+    if (userId) {
+      where = {
+        ...where,
+        id: userId,
+      };
+    }
+
+    const replacements = { query: `%${query}%` };
+
+    const [users, total] = await Promise.all([
+      User.findAll({ where, replacements, offset, limit }),
+      User.count({
+        where,
+        // @ts-expect-error Types are incorrect for count
+        replacements,
+      }),
     ]);
 
     ctx.body = {
@@ -1170,7 +1226,8 @@ router.post(
   transaction(),
   async (ctx: APIContext<T.DocumentsMoveReq>) => {
     const { transaction } = ctx.state;
-    const { id, collectionId, parentDocumentId, index } = ctx.input.body;
+    const { id, parentDocumentId, index } = ctx.input.body;
+    let collectionId = ctx.input.body.collectionId;
     const { user } = ctx.state.auth;
     const document = await Document.findByPk(id, {
       userId: user.id,
@@ -1185,7 +1242,7 @@ router.post(
       authorize(user, "updateDocument", collection);
     } else if (document.template) {
       authorize(user, "updateTemplate", user.team);
-    } else {
+    } else if (!parentDocumentId) {
       throw InvalidRequestError("collectionId is required to move a document");
     }
 
@@ -1195,13 +1252,14 @@ router.post(
         transaction,
       });
       authorize(user, "update", parent);
+      collectionId = parent.collectionId;
 
       if (!parent.publishedAt) {
         throw InvalidRequestError("Cannot move document inside a draft");
       }
     }
 
-    const { documents, collections, collectionChanged } = await documentMover({
+    const { documents, collectionChanged } = await documentMover({
       user,
       document,
       collectionId: collectionId ?? null,
@@ -1214,11 +1272,10 @@ router.post(
     ctx.body = {
       data: {
         documents: await Promise.all(
-          documents.map((document) => presentDocument(ctx, document))
+          documents.map((doc) => presentDocument(ctx, doc))
         ),
-        collections: await Promise.all(
-          collections.map((collection) => presentCollection(ctx, collection))
-        ),
+        // Included for backwards compatibility
+        collections: [],
       },
       policies: collectionChanged ? presentPolicies(user, documents) : [],
     };

@@ -94,37 +94,39 @@ function AppSidebar() {
               </SidebarButton>
             )}
           </OrganizationMenu>
+          <Section>
+            <SidebarLink
+              to={homePath()}
+              icon={<HomeIcon />}
+              exact={false}
+              label={t("Home")}
+            />
+            <SidebarLink
+              to={searchPath()}
+              icon={<SearchIcon />}
+              label={t("Search")}
+              exact={false}
+            />
+            {can.createDocument && (
+              <SidebarLink
+                to={draftsPath()}
+                icon={<DraftsIcon />}
+                label={
+                  <Flex align="center" justify="space-between">
+                    {t("Drafts")}
+                    {documents.totalDrafts > 0 ? (
+                      <Drafts size="xsmall" type="tertiary">
+                        {documents.totalDrafts > 25
+                          ? "25+"
+                          : documents.totalDrafts}
+                      </Drafts>
+                    ) : null}
+                  </Flex>
+                }
+              />
+            )}
+          </Section>
           <Scrollable flex shadow>
-            <Section>
-              <SidebarLink
-                to={homePath()}
-                icon={<HomeIcon />}
-                exact={false}
-                label={t("Home")}
-              />
-              <SidebarLink
-                to={searchPath()}
-                icon={<SearchIcon />}
-                label={t("Search")}
-                exact={false}
-              />
-              {can.createDocument && (
-                <SidebarLink
-                  to={draftsPath()}
-                  icon={<DraftsIcon />}
-                  label={
-                    <Flex align="center" justify="space-between">
-                      {t("Drafts")}
-                      {documents.totalDrafts > 0 ? (
-                        <Drafts size="xsmall" type="tertiary">
-                          {documents.totalDrafts}
-                        </Drafts>
-                      ) : null}
-                    </Flex>
-                  }
-                />
-              )}
-            </Section>
             <Section>
               <Starred />
             </Section>
