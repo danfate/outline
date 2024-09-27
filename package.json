@@ -95,7 +95,7 @@
     "babel-plugin-styled-components": "^2.1.4",
     "babel-plugin-transform-class-properties": "^6.24.1",
     "body-scroll-lock": "^4.0.0-beta.0",
-    "bull": "^4.12.2",
+    "bull": "^4.16.3",
     "chalk": "^4.1.0",
     "class-validator": "^0.14.1",
     "command-score": "^0.1.2",
@@ -329,7 +329,7 @@
     "babel-plugin-tsconfig-paths-module-resolver": "^1.0.4",
     "browserslist-to-esbuild": "^1.2.0",
     "concurrently": "^8.2.2",
-    "discord-api-types": "^0.37.87",
+    "discord-api-types": "^0.37.101",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^8.10.0",
     "eslint-import-resolver-typescript": "^3.6.3",
@@ -367,5 +367,5 @@
     "qs": "6.9.7",
     "rollup": "^4.5.1"
   },
-  "version": "0.80.1"
+  "version": "0.80.2"
 }

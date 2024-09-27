@@ -6190,10 +6190,10 @@ builtin-modules@^3.3.0:
   resolved "https://registry.yarnpkg.com/builtin-modules/-/builtin-modules-3.3.0.tgz#cae62812b89801e9656336e46223e030386be7b6"
   integrity sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==
 
-bull@^4.12.2:
-  version "4.12.2"
-  resolved "https://registry.yarnpkg.com/bull/-/bull-4.12.2.tgz#302ee8f35fd37c31baf58817cce9a2c6930c3c5d"
-  integrity sha512-WPuc0VCYx+cIVMiZtPwRpWyyJFBrj4/OgKJ6n9Jf4tIw7rQNV+HAKQv15UDkcTvfpGFehvod7Fd1YztbYSJIDQ==
+bull@^4.16.3:
+  version "4.16.3"
+  resolved "https://registry.yarnpkg.com/bull/-/bull-4.16.3.tgz#b269b25e15223895719b94b0806e3f06906dbb2e"
+  integrity sha512-BZbPzNiKXczfZPXBTVhcN73b+CQFHTzVb7yJi1bSYld4/8bDc9oh/j/dYTsQBgOAZIZahFeHO6dPHbVEXXCvCg==
   dependencies:
     cron-parser "^4.2.1"
     get-port "^5.1.1"
@@ -7504,10 +7504,10 @@ dir-glob@^3.0.1:
   dependencies:
     path-type "^4.0.0"
 
-discord-api-types@^0.37.87:
-  version "0.37.87"
-  resolved "https://registry.yarnpkg.com/discord-api-types/-/discord-api-types-0.37.87.tgz#10169b42f156f149997b8eae964cbf96e387442f"
-  integrity sha512-9KfluFS1J22RuezzouGs2t5X/Yu3jNpmRJrG+dvu1R9R+wfxlhq1RXr/OjjVL6d4rr7Ez92yNWiImf/qX3GV1g==
+discord-api-types@^0.37.101:
+  version "0.37.101"
+  resolved "https://registry.yarnpkg.com/discord-api-types/-/discord-api-types-0.37.101.tgz#1512a26e35b700b9dfb903a5747741a097f9c8bb"
+  integrity sha512-2wizd94t7G3A8U5Phr3AiuL4gSvhqistDwWnlk1VLTit8BI1jWUncFqFQNdPbHqS3661+Nx/iEyIwtVjPuBP3w==
 
 dnd-core@^16.0.1:
   version "16.0.1"
