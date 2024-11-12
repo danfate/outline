@@ -84,11 +84,12 @@ export interface APIContext<ReqT = BaseReq, ResT = BaseRes>
 type BaseEvent<T extends Model> = {
   teamId: string;
   actorId: string;
-  ip: string;
+  ip: string | null;
+  authType?: AuthenticationType | null;
   changes?: {
     attributes: Partial<InferAttributes<T>>;
     previous: Partial<InferAttributes<T>>;
-  };
+  } | null;
 };
 
 export type ApiKeyEvent = BaseEvent<ApiKey> & {
@@ -175,13 +176,22 @@ export type DocumentEvent = BaseEvent<Document> &
           | "documents.delete"
           | "documents.permanent_delete"
           | "documents.archive"
-          | "documents.unarchive"
           | "documents.restore";
         documentId: string;
         collectionId: string;
         data: {
           title: string;
           source?: "import";
+        };
+      }
+    | {
+        name: "documents.unarchive";
+        documentId: string;
+        collectionId: string;
+        data: {
+          title: string;
+          /** Id of collection from which the document is unarchived */
+          sourceCollectionId: string;
         };
       }
     | {
@@ -294,10 +304,15 @@ export type CollectionEvent = BaseEvent<Collection> &
         };
       }
     | {
-        name: "collections.update" | "collections.delete";
+        name:
+          | "collections.update"
+          | "collections.delete"
+          | "collections.archive"
+          | "collections.restore";
         collectionId: string;
         data: {
           name: string;
+          archivedAt: string;
         };
       }
     | {
@@ -364,6 +379,15 @@ export type CommentUpdateEvent = BaseEvent<Comment> & {
   };
 };
 
+export type CommentReactionEvent = BaseEvent<Comment> & {
+  name: "comments.add_reaction" | "comments.remove_reaction";
+  modelId: string;
+  documentId: string;
+  data: {
+    emoji: string;
+  };
+};
+
 export type CommentEvent =
   | (BaseEvent<Comment> & {
       name: "comments.create";
@@ -378,7 +402,8 @@ export type CommentEvent =
       documentId: string;
       actorId: string;
       collectionId: string;
-    });
+    })
+  | CommentReactionEvent;
 
 export type StarEvent = BaseEvent<Star> & {
   name: "stars.create" | "stars.update" | "stars.delete";

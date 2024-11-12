@@ -11,12 +11,12 @@ import { Pagination } from "@shared/constants";
 import { type JSONObject } from "@shared/types";
 import RootStore from "~/stores/RootStore";
 import Policy from "~/models/Policy";
+import ArchivableModel from "~/models/base/ArchivableModel";
 import Model from "~/models/base/Model";
 import { LifecycleManager } from "~/models/decorators/Lifecycle";
 import { getInverseRelationsForModelClass } from "~/models/decorators/Relation";
-import type { PaginationParams, PartialWithId, Properties } from "~/types";
+import type { PaginationParams, PartialExcept, Properties } from "~/types";
 import { client } from "~/utils/ApiClient";
-import Logger from "~/utils/Logger";
 import { AuthorizationError, NotFoundError } from "~/utils/errors";
 
 export enum RPCAction {
@@ -28,9 +28,18 @@ export enum RPCAction {
   Count = "count",
 }
 
-export type FetchPageParams = PaginationParams & Record<string, any>;
-
 export const PAGINATION_SYMBOL = Symbol.for("pagination");
+
+export type PaginatedResponse<T> = T[] & {
+  [PAGINATION_SYMBOL]?: {
+    total: number;
+    limit: number;
+    offset: number;
+    nextPath: string;
+  };
+};
+
+export type FetchPageParams = PaginationParams & Record<string, any>;
 
 export default abstract class Store<T extends Model> {
   @observable
@@ -81,7 +90,7 @@ export default abstract class Store<T extends Model> {
   };
 
   @action
-  add = (item: PartialWithId<T> | T): T => {
+  add = (item: PartialExcept<T, "id"> | T): T => {
     const ModelClass = this.model;
 
     if (!(item instanceof ModelClass)) {
@@ -128,6 +137,7 @@ export default abstract class Store<T extends Model> {
           if (deleteBehavior === "cascade") {
             store.remove(item.id);
           } else if (deleteBehavior === "null") {
+            // @ts-expect-error TODO
             item[relation.idKey] = null;
           }
         });
@@ -142,6 +152,43 @@ export default abstract class Store<T extends Model> {
     LifecycleManager.executeHooks(model.constructor, "beforeRemove", model);
     this.data.delete(id);
     LifecycleManager.executeHooks(model.constructor, "afterRemove", model);
+  }
+
+  @action
+  addToArchive(item: ArchivableModel): void {
+    const inverseRelations = getInverseRelationsForModelClass(this.model);
+
+    inverseRelations.forEach((relation) => {
+      const store = this.rootStore.getStoreForModelName(relation.modelName);
+      if ("orderedData" in store) {
+        const items = (store.orderedData as ArchivableModel[]).filter(
+          (data) => data[relation.idKey] === item.id
+        );
+
+        items.forEach((item) => {
+          let archiveBehavior = relation.options.onArchive;
+
+          if (typeof relation.options.onArchive === "function") {
+            archiveBehavior = relation.options.onArchive(item);
+          }
+
+          if (archiveBehavior === "cascade") {
+            store.addToArchive(item);
+          } else if (archiveBehavior === "null") {
+            // @ts-expect-error TODO
+            item[relation.idKey] = null;
+          }
+        });
+      }
+    });
+
+    // Remove associated policies automatically, not defined through Relation decorator.
+    if (this.modelName !== "Policy") {
+      this.rootStore.policies.remove(item.id);
+    }
+
+    item.archivedAt = new Date().toISOString();
+    (this as unknown as Store<ArchivableModel>).add(item);
   }
 
   /**
@@ -245,7 +292,7 @@ export default abstract class Store<T extends Model> {
   async fetch(
     id: string,
     options: JSONObject = {},
-    accessor = (res: unknown) => (res as { data: PartialWithId<T> }).data
+    accessor = (res: unknown) => (res as { data: PartialExcept<T, "id"> }).data
   ): Promise<T> {
     if (!this.actions.includes(RPCAction.Info)) {
       throw new Error(`Cannot fetch ${this.modelName}`);
@@ -279,7 +326,9 @@ export default abstract class Store<T extends Model> {
   }
 
   @action
-  fetchPage = async (params?: FetchPageParams | undefined): Promise<T[]> => {
+  fetchPage = async (
+    params?: FetchPageParams | undefined
+  ): Promise<PaginatedResponse<T>> => {
     if (!this.actions.includes(RPCAction.List)) {
       throw new Error(`Cannot list ${this.modelName}`);
     }
@@ -290,7 +339,7 @@ export default abstract class Store<T extends Model> {
       const res = await client.post(`/${this.apiEndpoint}.list`, params);
       invariant(res?.data, "Data not available");
 
-      let response: T[] = [];
+      let response: PaginatedResponse<T> = [];
 
       runInAction(`list#${this.modelName}`, () => {
         this.addPolicies(res.policies);
@@ -306,15 +355,16 @@ export default abstract class Store<T extends Model> {
   };
 
   @action
-  fetchAll = async (params?: Record<string, any>): Promise<T[]> => {
+  fetchAll = async (
+    params?: Record<string, any>
+  ): Promise<PaginatedResponse<T>> => {
     const limit = params?.limit ?? Pagination.defaultLimit;
     const response = await this.fetchPage({ ...params, limit });
 
-    if (!response[PAGINATION_SYMBOL]) {
-      Logger.warn("Pagination information not available in response", {
-        params,
-      });
-    }
+    invariant(
+      response[PAGINATION_SYMBOL],
+      "Pagination information not available in response"
+    );
 
     const pages = Math.ceil(response[PAGINATION_SYMBOL].total / limit);
     const fetchPages = [];

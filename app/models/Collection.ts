@@ -3,7 +3,8 @@ import { action, computed, observable, runInAction } from "mobx";
 import {
   CollectionPermission,
   FileOperationFormat,
-  NavigationNode,
+  type NavigationNode,
+  NavigationNodeType,
   type ProsemirrorData,
 } from "@shared/types";
 import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
@@ -79,6 +80,18 @@ export default class Collection extends ParanoidModel {
   @observable
   urlId: string;
 
+  /**
+   * The date and time the collection was archived.
+   */
+  @observable
+  archivedAt: string;
+
+  /**
+   * User who archived the collection.
+   */
+  @observable
+  archivedBy?: User;
+
   /** Returns whether the collection is empty, or undefined if not loaded. */
   @computed
   get isEmpty(): boolean | undefined {
@@ -151,6 +164,21 @@ export default class Collection extends ParanoidModel {
       .filter((m) => m.collectionId === this.id)
       .map((m) => m.user)
       .filter(Boolean);
+  }
+
+  @computed
+  get isArchived() {
+    return !!this.archivedAt;
+  }
+
+  @computed
+  get isDeleted() {
+    return !!this.deletedAt;
+  }
+
+  @computed
+  get isActive() {
+    return !this.isArchived && !this.isDeleted;
   }
 
   fetchDocuments = async (options?: { force: boolean }) => {
@@ -256,6 +284,19 @@ export default class Collection extends ParanoidModel {
     return result;
   }
 
+  @computed
+  get asNavigationNode(): NavigationNode {
+    return {
+      type: NavigationNodeType.Collection,
+      id: this.id,
+      title: this.name,
+      color: this.color ?? undefined,
+      icon: this.icon ?? undefined,
+      children: this.documents ?? [],
+      url: this.url,
+    };
+  }
+
   pathToDocument(documentId: string) {
     let path: NavigationNode[] | undefined = [];
     const document = this.store.rootStore.documents.get(documentId);
@@ -299,6 +340,10 @@ export default class Collection extends ParanoidModel {
 
   @action
   unstar = async () => this.store.unstar(this);
+
+  archive = () => this.store.archive(this);
+
+  restore = () => this.store.restore(this);
 
   export = (format: FileOperationFormat, includeAttachments: boolean) =>
     client.post("/collections.export", {

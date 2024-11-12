@@ -1,13 +1,14 @@
-import { yDocToProsemirrorJSON } from "@getoutline/y-prosemirror";
 import isEqual from "fast-deep-equal";
 import uniq from "lodash/uniq";
 import { Node } from "prosemirror-model";
+import { yDocToProsemirrorJSON } from "y-prosemirror";
 import * as Y from "yjs";
 import { ProsemirrorData } from "@shared/types";
 import { schema, serializer } from "@server/editor";
 import Logger from "@server/logging/Logger";
 import { Document, Event } from "@server/models";
 import { sequelize } from "@server/storage/database";
+import { AuthenticationType } from "@server/types";
 
 type Props = {
   /** The document ID to update. */
@@ -89,6 +90,7 @@ export default async function documentCollaborativeUpdater({
       collectionId: document.collectionId,
       teamId: document.teamId,
       actorId: lastModifiedById,
+      authType: AuthenticationType.APP,
       data: {
         multiplayer: true,
         title: document.title,

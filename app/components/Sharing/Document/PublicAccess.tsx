@@ -1,13 +1,13 @@
-import invariant from "invariant";
 import debounce from "lodash/debounce";
 import isEmpty from "lodash/isEmpty";
 import { observer } from "mobx-react";
-import { CopyIcon, GlobeIcon, InfoIcon } from "outline-icons";
+import { CopyIcon, GlobeIcon, InfoIcon, QuestionMarkIcon } from "outline-icons";
 import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import styled, { useTheme } from "styled-components";
+import Flex from "@shared/components/Flex";
 import Squircle from "@shared/components/Squircle";
 import { s } from "@shared/styles";
 import { UrlHelper } from "@shared/utils/UrlHelper";
@@ -17,7 +17,6 @@ import Input, { NativeInput } from "~/components/Input";
 import Switch from "~/components/Switch";
 import env from "~/env";
 import usePolicy from "~/hooks/usePolicy";
-import useStores from "~/hooks/useStores";
 import { AvatarSize } from "../../Avatar";
 import CopyToClipboard from "../../CopyToClipboard";
 import NudeButton from "../../NudeButton";
@@ -39,7 +38,6 @@ type Props = {
 };
 
 function PublicAccess({ document, share, sharedParent }: Props) {
-  const { shares } = useStores();
   const { t } = useTranslation();
   const theme = useTheme();
   const [validationError, setValidationError] = React.useState("");
@@ -53,20 +51,30 @@ function PublicAccess({ document, share, sharedParent }: Props) {
     setUrlId(share?.urlId);
   }, [share?.urlId]);
 
+  const handleIndexingChanged = React.useCallback(
+    async (event) => {
+      try {
+        await share?.save({
+          allowIndexing: event.currentTarget.checked,
+        });
+      } catch (err) {
+        toast.error(err.message);
+      }
+    },
+    [share]
+  );
+
   const handlePublishedChange = React.useCallback(
     async (event) => {
-      const share = shares.getByDocumentId(document.id);
-      invariant(share, "Share must exist");
-
       try {
-        await share.save({
+        await share?.save({
           published: event.currentTarget.checked,
         });
       } catch (err) {
         toast.error(err.message);
       }
     },
-    [document.id, shares]
+    [share]
   );
 
   const handleUrlChange = React.useMemo(
@@ -159,6 +167,32 @@ function PublicAccess({ document, share, sharedParent }: Props) {
       />
 
       <ResizingHeightContainer>
+        {share?.published && (
+          <ListItem
+            title={
+              <Text type="tertiary" as={Flex}>
+                {t("Search engine indexing")}&nbsp;
+                <Tooltip
+                  content={t(
+                    "Disable this setting to discourage search engines from indexing the page"
+                  )}
+                >
+                  <QuestionMarkIcon size={18} />
+                </Tooltip>
+              </Text>
+            }
+            actions={
+              <Switch
+                aria-label={t("Search engine indexing")}
+                checked={share?.allowIndexing ?? false}
+                onChange={handleIndexingChanged}
+                width={26}
+                height={14}
+              />
+            }
+          />
+        )}
+
         {sharedParent?.published ? (
           <ShareLinkInput type="text" disabled defaultValue={shareUrl}>
             {copyButton}

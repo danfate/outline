@@ -12,9 +12,11 @@ import Document from "./models/Document";
 import FileOperation from "./models/FileOperation";
 import Pin from "./models/Pin";
 import Star from "./models/Star";
+import User from "./models/User";
 import UserMembership from "./models/UserMembership";
 
-export type PartialWithId<T> = Partial<T> & { id: string };
+export type PartialExcept<T, K extends keyof T> = Partial<Omit<T, K>> &
+  Required<Pick<T, K>>;
 
 export type MenuItemButton = {
   type: "button";
@@ -103,6 +105,8 @@ export type Action = {
   shortcut?: string[];
   keywords?: string;
   dangerous?: boolean;
+  /** Higher number is higher in results, default is 0. */
+  priority?: number;
   iconInContextMenu?: boolean;
   icon?: React.ReactElement | React.FC;
   placeholder?: ((context: ActionContext) => string) | string;
@@ -140,15 +144,6 @@ export type FetchOptions = {
   force?: boolean;
 };
 
-export type NavigationNode = {
-  id: string;
-  title: string;
-  emoji?: string | null;
-  url: string;
-  children: NavigationNode[];
-  isDraft?: boolean;
-};
-
 export type CollectionSort = {
   field: string;
   direction: "asc" | "desc";
@@ -172,7 +167,7 @@ export type PaginationParams = {
 export type SearchResult = {
   id: string;
   ranking: number;
-  context: string;
+  context?: string;
   document: Document;
 };
 
@@ -194,14 +189,21 @@ export type WebsocketCollectionUpdateIndexEvent = {
   index: string;
 };
 
+export type WebsocketCommentReactionEvent = {
+  emoji: string;
+  commentId: string;
+  user: User;
+};
+
 export type WebsocketEvent =
-  | PartialWithId<Pin>
-  | PartialWithId<Star>
-  | PartialWithId<FileOperation>
-  | PartialWithId<UserMembership>
+  | PartialExcept<Pin, "id">
+  | PartialExcept<Star, "id">
+  | PartialExcept<FileOperation, "id">
+  | PartialExcept<UserMembership, "id">
   | WebsocketCollectionUpdateIndexEvent
   | WebsocketEntityDeletedEvent
-  | WebsocketEntitiesEvent;
+  | WebsocketEntitiesEvent
+  | WebsocketCommentReactionEvent;
 
 export type AwarenessChangeEvent = {
   states: { user?: { id: string }; cursor: any; scrollY: number | undefined }[];
@@ -221,3 +223,12 @@ export type Properties<C> = {
     ? Property
     : never]?: C[Property];
 };
+
+export enum CommentSortType {
+  MostRecent = "mostRecent",
+  OrderInDocument = "orderInDocument",
+}
+
+export type CommentSortOption =
+  | { type: CommentSortType.MostRecent }
+  | { type: CommentSortType.OrderInDocument; referencedCommentIds: string[] };

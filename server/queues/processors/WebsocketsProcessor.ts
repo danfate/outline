@@ -1,4 +1,6 @@
+import concat from "lodash/concat";
 import uniq from "lodash/uniq";
+import uniqBy from "lodash/uniqBy";
 import { Server } from "socket.io";
 import {
   Comment,
@@ -41,8 +43,7 @@ export default class WebsocketsProcessor {
       case "documents.create":
       case "documents.publish":
       case "documents.unpublish":
-      case "documents.restore":
-      case "documents.unarchive": {
+      case "documents.restore": {
         const document = await Document.findByPk(event.documentId, {
           paranoid: false,
         });
@@ -54,6 +55,7 @@ export default class WebsocketsProcessor {
         }
 
         const channels = await this.getDocumentEventChannels(event, document);
+
         return socketio.to(channels).emit("entities", {
           event: event.name,
           fetchIfMissing: true,
@@ -68,6 +70,50 @@ export default class WebsocketsProcessor {
               id: document.collectionId,
             },
           ],
+        });
+      }
+
+      case "documents.unarchive": {
+        const [document, srcCollection] = await Promise.all([
+          Document.findByPk(event.documentId, { paranoid: false }),
+          Collection.findByPk(event.data.sourceCollectionId, {
+            paranoid: false,
+          }),
+        ]);
+        if (!document || !srcCollection) {
+          return;
+        }
+        const documentChannels = await this.getDocumentEventChannels(
+          event,
+          document
+        );
+        const collectionChannels = this.getCollectionEventChannels(
+          event,
+          srcCollection
+        );
+
+        const channels = uniq(concat(documentChannels, collectionChannels));
+
+        return socketio.to(channels).emit("entities", {
+          event: event.name,
+          fetchIfMissing: true,
+          documentIds: [
+            {
+              id: document.id,
+              updatedAt: document.updatedAt,
+            },
+          ],
+          collectionIds: uniqBy(
+            [
+              {
+                id: document.collectionId,
+              },
+              {
+                id: srcCollection.id,
+              },
+            ],
+            "id"
+          ),
         });
       }
 
@@ -232,6 +278,21 @@ export default class WebsocketsProcessor {
           .to(this.getCollectionEventChannels(event, collection))
           .emit(event.name, {
             modelId: event.collectionId,
+          });
+      }
+
+      case "collections.archive":
+      case "collections.restore": {
+        const collection = await Collection.findByPk(event.collectionId);
+        if (!collection) {
+          return;
+        }
+
+        return socketio
+          .to(this.getCollectionEventChannels(event, collection))
+          .emit(event.name, {
+            id: event.collectionId,
+            archivedAt: event.data.archivedAt,
           });
       }
 
@@ -441,6 +502,37 @@ export default class WebsocketsProcessor {
         );
         return socketio.to(channels).emit(event.name, {
           modelId: event.modelId,
+        });
+      }
+
+      case "comments.add_reaction":
+      case "comments.remove_reaction": {
+        const comment = await Comment.findByPk(event.modelId, {
+          include: [
+            {
+              model: Document.scope(["withoutState", "withDrafts"]),
+              as: "document",
+              required: true,
+            },
+          ],
+        });
+        if (!comment) {
+          return;
+        }
+
+        const user = await User.findByPk(event.actorId);
+        if (!user) {
+          return;
+        }
+
+        const channels = await this.getDocumentEventChannels(
+          event,
+          comment.document
+        );
+        return socketio.to(channels).emit(event.name, {
+          emoji: event.data.emoji,
+          commentId: event.modelId,
+          user: presentUser(user),
         });
       }
 

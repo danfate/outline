@@ -21,7 +21,7 @@ import env from "~/env";
 import type {
   FetchOptions,
   PaginationParams,
-  PartialWithId,
+  PartialExcept,
   SearchResult,
 } from "~/types";
 import { client } from "~/utils/ApiClient";
@@ -33,6 +33,7 @@ type FetchPageParams = PaginationParams & {
 };
 
 export type SearchParams = {
+  query?: string;
   offset?: number;
   limit?: number;
   dateFilter?: DateFilter;
@@ -62,6 +63,7 @@ export default class DocumentsStore extends Store<Document> {
     ".md",
     ".doc",
     ".docx",
+    "text/csv",
     "text/markdown",
     "text/plain",
     "text/html",
@@ -118,6 +120,33 @@ export default class DocumentsStore extends Store<Document> {
     return filter(
       this.all,
       (document) => document.collectionId === collectionId
+    );
+  }
+
+  archivedInCollection(
+    collectionId: string,
+    options?: { archivedAt: string }
+  ): Document[] {
+    const filterCond = (document: Document) =>
+      options
+        ? document.collectionId === collectionId &&
+          document.isArchived &&
+          document.archivedAt === options.archivedAt &&
+          !document.isDeleted
+        : document.collectionId === collectionId &&
+          document.isArchived &&
+          !document.isDeleted;
+
+    return filter(this.orderedData, filterCond);
+  }
+
+  unarchivedInCollection(collectionId: string): Document[] {
+    return filter(
+      this.orderedData,
+      (document) =>
+        document.collectionId === collectionId &&
+        !document.isArchived &&
+        !document.isDeleted
     );
   }
 
@@ -313,8 +342,18 @@ export default class DocumentsStore extends Store<Document> {
   };
 
   @action
-  fetchArchived = async (options?: PaginationParams): Promise<Document[]> =>
-    this.fetchNamedPage("archived", options);
+  fetchArchived = async (options?: PaginationParams): Promise<Document[]> => {
+    const archivedInResponse = await this.fetchNamedPage("archived", options);
+    const archivedInMemory = this.archived;
+
+    archivedInMemory.forEach((docInMemory) => {
+      !archivedInResponse.find(
+        (docInResponse) => docInResponse.id === docInMemory.id
+      ) && this.remove(docInMemory.id);
+    });
+
+    return archivedInResponse;
+  };
 
   @action
   fetchDeleted = async (options?: PaginationParams): Promise<Document[]> =>
@@ -375,14 +414,10 @@ export default class DocumentsStore extends Store<Document> {
     this.fetchNamedPage("list", options);
 
   @action
-  searchTitles = async (
-    query: string,
-    options?: SearchParams
-  ): Promise<SearchResult[]> => {
+  searchTitles = async (options?: SearchParams): Promise<SearchResult[]> => {
     const compactedOptions = omitBy(options, (o) => !o);
     const res = await client.post("/documents.search_titles", {
       ...compactedOptions,
-      query,
     });
     invariant(res?.data, "Search response should be available");
 
@@ -410,14 +445,10 @@ export default class DocumentsStore extends Store<Document> {
   };
 
   @action
-  search = async (
-    query: string,
-    options: SearchParams
-  ): Promise<SearchResult[]> => {
+  search = async (options: SearchParams): Promise<SearchResult[]> => {
     const compactedOptions = omitBy(options, (o) => !o);
     const res = await client.post("/documents.search", {
       ...compactedOptions,
-      query,
     });
     invariant(res?.data, "Search response should be available");
 
@@ -489,7 +520,7 @@ export default class DocumentsStore extends Store<Document> {
     super.fetch(
       id,
       options,
-      (res: { data: { document: PartialWithId<Document> } }) =>
+      (res: { data: { document: PartialExcept<Document, "id"> } }) =>
         res.data.document
     );
 

@@ -4,11 +4,10 @@ import { PlusIcon } from "outline-icons";
 import * as React from "react";
 import { useDrop } from "react-dnd";
 import { useTranslation } from "react-i18next";
-import { useHistory } from "react-router-dom";
 import { CollectionValidation } from "@shared/validations";
 import Collection from "~/models/Collection";
 import Document from "~/models/Document";
-import DocumentReparent from "~/scenes/DocumentReparent";
+import ConfirmMoveDialog from "~/components/ConfirmMoveDialog";
 import Fade from "~/components/Fade";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
 import NudeButton from "~/components/NudeButton";
@@ -30,6 +29,8 @@ type Props = {
   onDisclosureClick: (ev?: React.MouseEvent<HTMLButtonElement>) => void;
   activeDocument: Document | undefined;
   isDraggingAnyCollection?: boolean;
+  depth?: number;
+  onClick?: () => void;
 };
 
 const CollectionLink: React.FC<Props> = ({
@@ -37,13 +38,14 @@ const CollectionLink: React.FC<Props> = ({
   expanded,
   onDisclosureClick,
   isDraggingAnyCollection,
+  depth,
+  onClick,
 }: Props) => {
   const { dialogs, documents, collections } = useStores();
   const [menuOpen, handleMenuOpen, handleMenuClose] = useBoolean();
   const [isEditing, setIsEditing] = React.useState(false);
   const can = usePolicy(collection);
   const { t } = useTranslation();
-  const history = useHistory();
   const sidebarContext = useSidebarContext();
   const editableTitleRef = React.useRef<RefHandle>(null);
 
@@ -52,9 +54,8 @@ const CollectionLink: React.FC<Props> = ({
       await collection.save({
         name,
       });
-      history.replace(collection.path, history.location.state);
     },
-    [collection, history]
+    [collection]
   );
 
   // Drop to re-parent document
@@ -78,20 +79,12 @@ const CollectionLink: React.FC<Props> = ({
 
       if (
         prevCollection &&
-        prevCollection.permission === null &&
         prevCollection.permission !== collection.permission &&
         !document?.isDraft
       ) {
         dialogs.openModal({
-          title: t("Move document"),
-          content: (
-            <DocumentReparent
-              item={item}
-              collection={collection}
-              onSubmit={dialogs.closeAllModals}
-              onCancel={dialogs.closeAllModals}
-            />
-          ),
+          title: t("Change permissions?"),
+          content: <ConfirmMoveDialog item={item} collection={collection} />,
         });
       } else {
         await documents.move({ documentId: id, collectionId: collection.id });
@@ -119,10 +112,15 @@ const CollectionLink: React.FC<Props> = ({
     sidebarContext,
   });
 
+  const handleRename = React.useCallback(() => {
+    editableTitleRef.current?.setIsEditing(true);
+  }, [editableTitleRef]);
+
   return (
     <Relative ref={drop}>
       <DropToImport collectionId={collection.id}>
         <SidebarLink
+          onClick={onClick}
           to={{
             pathname: collection.path,
             state: { sidebarContext },
@@ -148,7 +146,7 @@ const CollectionLink: React.FC<Props> = ({
             />
           }
           exact={false}
-          depth={0}
+          depth={depth ? depth : 0}
           menu={
             !isEditing &&
             !isDraggingAnyCollection && (
@@ -163,7 +161,7 @@ const CollectionLink: React.FC<Props> = ({
                 </NudeButton>
                 <CollectionMenu
                   collection={collection}
-                  onRename={() => editableTitleRef.current?.setIsEditing(true)}
+                  onRename={handleRename}
                   onOpen={handleMenuOpen}
                   onClose={handleMenuClose}
                 />

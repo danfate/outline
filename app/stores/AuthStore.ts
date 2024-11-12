@@ -12,7 +12,7 @@ import Team from "~/models/Team";
 import User from "~/models/User";
 import env from "~/env";
 import { setPostLoginPath } from "~/hooks/useLastVisitedPath";
-import { PartialWithId } from "~/types";
+import { PartialExcept } from "~/types";
 import { client } from "~/utils/ApiClient";
 import Desktop from "~/utils/Desktop";
 import Logger from "~/utils/Logger";
@@ -20,8 +20,8 @@ import isCloudHosted from "~/utils/isCloudHosted";
 import Store from "./base/Store";
 
 type PersistedData = {
-  user?: PartialWithId<User>;
-  team?: PartialWithId<Team>;
+  user?: PartialExcept<User, "id">;
+  team?: PartialExcept<Team, "id">;
   collaborationToken?: string;
   availableTeams?: {
     id: string;
@@ -218,10 +218,10 @@ export default class AuthStore extends Store<Team> {
         this.collaborationToken = res.data.collaborationToken;
 
         if (env.SENTRY_DSN) {
-          Sentry.configureScope(function (scope) {
-            scope.setUser({ id: this.currentUserId });
-            scope.setExtra("team", this.team.name);
-            scope.setExtra("teamId", this.team.id);
+          Sentry.configureScope((scope) => {
+            scope.setUser({ id: this.currentUserId! });
+            scope.setExtra("team", this.team?.name);
+            scope.setExtra("teamId", this.currentTeamId);
           });
         }
 
@@ -241,6 +241,13 @@ export default class AuthStore extends Store<Team> {
           window.location.href = `${data.team.url}${pathname}`;
           return;
         }
+
+        // Update the user's timezone if it has changed
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (data.user.timezone !== timezone) {
+          const user = this.rootStore.users.get(data.user.id)!;
+          void user.save({ timezone });
+        }
       });
     } catch (err) {
       if (err.error === "user_suspended") {
@@ -248,6 +255,7 @@ export default class AuthStore extends Store<Team> {
         this.suspendedContactEmail = err.data.adminEmail;
         return;
       }
+      throw err;
     } finally {
       this.isFetching = false;
     }

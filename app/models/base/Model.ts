@@ -40,6 +40,7 @@ export default abstract class Model {
    * @returns A promise that resolves when loading is complete.
    */
   async loadRelations(
+    this: Model,
     options: { withoutPolicies?: boolean } = {}
   ): Promise<any> {
     const relations = getRelationsForModelClass(
@@ -62,7 +63,7 @@ export default abstract class Model {
       if ("fetch" in store) {
         const id = this[properties.idKey];
         if (id) {
-          promises.push(store.fetch(id));
+          promises.push(store.fetch(id as string));
         }
       }
     }
@@ -141,6 +142,11 @@ export default abstract class Model {
 
     for (const key in data) {
       try {
+        // Some models are serialized with the initialized flag, this should be ignored.
+        if (key === "initialized") {
+          continue;
+        }
+        // @ts-expect-error TODO
         this[key] = data[key];
       } catch (error) {
         Logger.warn(`Error setting ${key} on model`, error);
@@ -150,7 +156,7 @@ export default abstract class Model {
     this.isNew = false;
     this.persistedAttributes = this.toAPI();
 
-    if (!this.initialized) {
+    if (this.initialized) {
       LifecycleManager.executeHooks(
         this.constructor,
         "afterChange",
