@@ -504,7 +504,7 @@ export default class SearchHelper {
       }
 
       if (limitedQuery || iLikeQueries.length === 0) {
-        const keywords = `${"'" + query + "'"}`;
+        const keywords = `${"'" + options.query + "'"}`;
         const whereClause = `
         (text &@~ ${keywords} OR title &@~ ${keywords})
         `;
