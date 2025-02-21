@@ -12,9 +12,11 @@ export type Props = {
   /** Callback when the item is clicked */
   onClick: (event: React.SyntheticEvent) => void;
   /** An optional icon for the item */
-  icon?: React.ReactElement;
+  icon?: React.ReactNode;
   /** The title of the item */
   title: React.ReactNode;
+  /** An optional subtitle for the item */
+  subtitle?: React.ReactNode;
   /** A string representing the keyboard shortcut for the item */
   shortcut?: string;
 };
@@ -24,6 +26,7 @@ function SuggestionsMenuItem({
   disabled,
   onClick,
   title,
+  subtitle,
   shortcut,
   icon,
 }: Props) {
@@ -53,10 +56,16 @@ function SuggestionsMenuItem({
       icon={icon}
     >
       {title}
+      {subtitle && <Subtitle $active={selected}>&middot; {subtitle}</Subtitle>}
       {shortcut && <Shortcut $active={selected}>{shortcut}</Shortcut>}
     </MenuItem>
   );
 }
+
+const Subtitle = styled.span<{ $active?: boolean }>`
+  color: ${(props) =>
+    props.$active ? props.theme.white50 : props.theme.textTertiary};
+`;
 
 const Shortcut = styled.span<{ $active?: boolean }>`
   color: ${(props) =>

@@ -80,7 +80,13 @@ export default function auth(options: AuthenticationOptions = {}) {
         }
 
         if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-          throw AuthenticationError("Invalid API key");
+          throw AuthenticationError("API key is expired");
+        }
+
+        if (!apiKey.canAccess(ctx.request.url)) {
+          throw AuthenticationError(
+            "API key does not have access to this resource"
+          );
         }
 
         user = await User.findByPk(apiKey.userId, {
@@ -154,6 +160,16 @@ export default function auth(options: AuthenticationOptions = {}) {
         throw err;
       }
     }
+
+    Object.defineProperty(ctx, "context", {
+      get() {
+        return {
+          auth: ctx.state.auth,
+          transaction: ctx.state.transaction,
+          ip: ctx.request.ip,
+        };
+      },
+    });
 
     return next();
   };

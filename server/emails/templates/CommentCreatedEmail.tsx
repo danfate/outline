@@ -1,6 +1,7 @@
 import * as React from "react";
 import { NotificationEventType } from "@shared/types";
 import { Collection, Comment, Document } from "@server/models";
+import { DocumentHelper } from "@server/models/helpers/DocumentHelper";
 import NotificationSettingsHelper from "@server/models/helpers/NotificationSettingsHelper";
 import { ProsemirrorHelper } from "@server/models/helpers/ProsemirrorHelper";
 import { can } from "@server/policies";
@@ -14,6 +15,8 @@ import Footer from "./components/Footer";
 import Header from "./components/Header";
 import Heading from "./components/Heading";
 
+const MAX_SUBJECT_CONTENT = 50;
+
 type InputProps = EmailProps & {
   userId: string;
   documentId: string;
@@ -23,10 +26,11 @@ type InputProps = EmailProps & {
 };
 
 type BeforeSend = {
+  comment: Comment;
+  parentComment?: Comment;
   document: Document;
-  collection: Collection;
+  collection: Collection | null;
   body: string | undefined;
-  isFirstComment: boolean;
   isReply: boolean;
   unsubscribeUrl: string;
 };
@@ -52,37 +56,31 @@ export default class CommentCreatedEmail extends BaseEmail<
       return false;
     }
 
-    const collection = await document.$get("collection");
-    if (!collection) {
-      return false;
-    }
-
-    const [comment, team] = await Promise.all([
+    const [comment, team, collection] = await Promise.all([
       Comment.findByPk(commentId),
       document.$get("team"),
+      document.$get("collection"),
     ]);
     if (!comment || !team) {
       return false;
     }
 
-    const firstComment = await Comment.findOne({
-      attributes: ["id"],
-      where: { documentId },
-      order: [["createdAt", "ASC"]],
-    });
+    const parentComment = comment.parentCommentId
+      ? (await comment.$get("parentComment")) ?? undefined
+      : undefined;
 
     const body = await this.htmlForData(
       team,
       ProsemirrorHelper.toProsemirror(comment.data)
     );
     const isReply = !!comment.parentCommentId;
-    const isFirstComment = firstComment?.id === commentId;
 
     return {
+      comment,
+      parentComment,
       document,
       collection,
       isReply,
-      isFirstComment,
       body,
       unsubscribeUrl: this.unsubscribeUrl(props),
     };
@@ -95,8 +93,18 @@ export default class CommentCreatedEmail extends BaseEmail<
     );
   }
 
-  protected subject({ isFirstComment, document }: Props) {
-    return `${isFirstComment ? "" : "Re: "}New comment on “${document.title}”`;
+  protected subject({ comment, parentComment, document }: Props) {
+    const commentText = DocumentHelper.toPlainText(
+      parentComment?.data ?? comment.data
+    );
+    const trimmedText =
+      commentText.length <= MAX_SUBJECT_CONTENT
+        ? commentText
+        : `${commentText.slice(0, MAX_SUBJECT_CONTENT)}...`;
+
+    return `${parentComment ? "Re: " : ""}New comment on “${
+      document.titleWithDefault
+    }” - ${trimmedText}`;
   }
 
   protected preview({ isReply, actorName }: Props): string {
@@ -128,8 +136,8 @@ export default class CommentCreatedEmail extends BaseEmail<
   }: Props): string {
     return `
 ${actorName} ${isReply ? "replied to a thread in" : "commented on"} "${
-      document.title
-    }"${collection.name ? `in the ${collection.name} collection` : ""}.
+      document.titleWithDefault
+    }"${collection?.name ? `in the ${collection.name} collection` : ""}.
 
 Open Thread: ${teamUrl}${document.url}?commentId=${commentId}
 `;
@@ -156,11 +164,11 @@ Open Thread: ${teamUrl}${document.url}?commentId=${commentId}
         <Header />
 
         <Body>
-          <Heading>{document.title}</Heading>
+          <Heading>{document.titleWithDefault}</Heading>
           <p>
             {actorName} {isReply ? "replied to a thread in" : "commented on"}{" "}
-            <a href={threadLink}>{document.title}</a>{" "}
-            {collection.name ? `in the ${collection.name} collection` : ""}.
+            <a href={threadLink}>{document.titleWithDefault}</a>{" "}
+            {collection?.name ? `in the ${collection.name} collection` : ""}.
           </p>
           {body && (
             <>

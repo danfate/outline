@@ -3,20 +3,16 @@ import { ArchiveIcon, GoToIcon, ShapesIcon, TrashIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
+import Icon from "@shared/components/Icon";
 import type { NavigationNode } from "@shared/types";
 import Document from "~/models/Document";
 import Breadcrumb from "~/components/Breadcrumb";
-import Icon from "~/components/Icon";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
+import { useLocationSidebarContext } from "~/hooks/useLocationSidebarContext";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import { MenuInternalLink } from "~/types";
-import {
-  archivePath,
-  collectionPath,
-  settingsPath,
-  trashPath,
-} from "~/utils/routeHelpers";
+import { archivePath, settingsPath, trashPath } from "~/utils/routeHelpers";
 
 type Props = {
   children?: React.ReactNode;
@@ -57,14 +53,14 @@ function useCategory(document: Document): MenuInternalLink | null {
   return null;
 }
 
-const DocumentBreadcrumb: React.FC<Props> = ({
-  document,
-  children,
-  onlyText,
-}: Props) => {
+function DocumentBreadcrumb(
+  { document, children, onlyText }: Props,
+  ref: React.RefObject<HTMLDivElement> | null
+) {
   const { collections } = useStores();
   const { t } = useTranslation();
   const category = useCategory(document);
+  const sidebarContext = useLocationSidebarContext();
   const collection = document.collectionId
     ? collections.get(document.collectionId)
     : undefined;
@@ -81,7 +77,10 @@ const DocumentBreadcrumb: React.FC<Props> = ({
       type: "route",
       title: collection.name,
       icon: <CollectionIcon collection={collection} expanded />,
-      to: collectionPath(collection.path),
+      to: {
+        pathname: collection.path,
+        state: { sidebarContext },
+      },
     };
   } else if (document.isCollectionDeleted) {
     collectionNode = {
@@ -106,20 +105,24 @@ const DocumentBreadcrumb: React.FC<Props> = ({
     }
 
     path.slice(0, -1).forEach((node: NavigationNode) => {
+      const title = node.title || t("Untitled");
       output.push({
         type: "route",
         title: node.icon ? (
           <>
-            <StyledIcon value={node.icon} color={node.color} /> {node.title}
+            <StyledIcon value={node.icon} color={node.color} /> {title}
           </>
         ) : (
-          node.title
+          title
         ),
-        to: node.url,
+        to: {
+          pathname: node.url,
+          state: { sidebarContext },
+        },
       });
     });
     return output;
-  }, [path, category, collectionNode]);
+  }, [t, path, category, sidebarContext, collectionNode]);
 
   if (!collections.isLoaded) {
     return null;
@@ -132,7 +135,7 @@ const DocumentBreadcrumb: React.FC<Props> = ({
         {path.slice(0, -1).map((node: NavigationNode) => (
           <React.Fragment key={node.id}>
             <SmallSlash />
-            {node.title}
+            {node.title || t("Untitled")}
           </React.Fragment>
         ))}
       </>
@@ -140,11 +143,11 @@ const DocumentBreadcrumb: React.FC<Props> = ({
   }
 
   return (
-    <Breadcrumb items={items} highlightFirstItem>
+    <Breadcrumb items={items} ref={ref} highlightFirstItem>
       {children}
     </Breadcrumb>
   );
-};
+}
 
 const StyledIcon = styled(Icon)`
   margin-right: 2px;
@@ -160,4 +163,4 @@ const SmallSlash = styled(GoToIcon)`
   opacity: 0.5;
 `;
 
-export default observer(DocumentBreadcrumb);
+export default observer(React.forwardRef(DocumentBreadcrumb));

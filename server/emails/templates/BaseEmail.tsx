@@ -1,4 +1,4 @@
-import addressparser from "addressparser";
+import addressparser, { EmailAddress } from "addressparser";
 import Bull from "bull";
 import invariant from "invariant";
 import { Node } from "prosemirror-model";
@@ -18,7 +18,6 @@ import { TextHelper } from "@server/models/helpers/TextHelper";
 import { taskQueue } from "@server/queues";
 import { TaskPriority } from "@server/queues/tasks/BaseTask";
 import { NotificationMetadata } from "@server/types";
-import { getEmailMessageId } from "@server/utils/emails";
 
 export enum EmailMessageCategory {
   Authentication = "authentication",
@@ -51,6 +50,15 @@ export default abstract class BaseEmail<
    * @returns A promise that resolves once the email is placed on the task queue
    */
   public schedule(options?: Bull.JobOptions) {
+    // No-op to schedule emails if SMTP is not configured
+    if (!env.SMTP_FROM_EMAIL) {
+      Logger.info(
+        "email",
+        `Email ${this.constructor.name} not sent due to missing SMTP_FROM_EMAIL configuration`
+      );
+      return;
+    }
+
     const templateName = this.constructor.name;
 
     Metrics.increment("email.scheduled", {
@@ -129,7 +137,7 @@ export default abstract class BaseEmail<
     }
 
     const messageId = notification
-      ? getEmailMessageId(notification.id)
+      ? Notification.emailMessageId(notification.id)
       : undefined;
 
     const references = notification
@@ -175,26 +183,25 @@ export default abstract class BaseEmail<
     }
   }
 
-  private from(props: S & T) {
+  private from(props: S & T): EmailAddress {
     invariant(
       env.SMTP_FROM_EMAIL,
       "SMTP_FROM_EMAIL is required to send emails"
     );
 
     const parsedFrom = addressparser(env.SMTP_FROM_EMAIL)[0];
-    const name = this.fromName?.(props);
-
-    if (this.category === EmailMessageCategory.Authentication) {
-      const domain = parsedFrom.address.split("@")[1];
-      return {
-        name: name ?? parsedFrom.name,
-        address: `noreply-${randomstring.generate(24)}@${domain}`,
-      };
-    }
+    const domain = parsedFrom.address.split("@")[1];
+    const customFromName = this.fromName?.(props);
 
     return {
-      name: name ?? parsedFrom.name,
-      address: parsedFrom.address,
+      name: customFromName
+        ? `${customFromName} via ${env.APP_NAME}`
+        : parsedFrom.name,
+      address:
+        env.isCloudHosted &&
+        this.category === EmailMessageCategory.Authentication
+          ? `noreply-${randomstring.generate(24)}@${domain}`
+          : parsedFrom.address,
     };
   }
 

@@ -464,7 +464,7 @@ export default class WebsocketsProcessor {
         const comment = await Comment.findByPk(event.modelId, {
           include: [
             {
-              model: Document.scope(["withoutState", "withDrafts"]),
+              model: Document.scope("withDrafts"),
               as: "document",
               required: true,
             },
@@ -486,7 +486,7 @@ export default class WebsocketsProcessor {
           paranoid: false,
           include: [
             {
-              model: Document.scope(["withoutState", "withDrafts"]),
+              model: Document.scope("withDrafts"),
               as: "document",
               required: true,
             },
@@ -510,7 +510,7 @@ export default class WebsocketsProcessor {
         const comment = await Comment.findByPk(event.modelId, {
           include: [
             {
-              model: Document.scope(["withoutState", "withDrafts"]),
+              model: Document.scope("withDrafts"),
               as: "document",
               required: true,
             },
@@ -852,6 +852,8 @@ export default class WebsocketsProcessor {
         channels.push(
           ...this.getCollectionEventChannels(event, document.collection)
         );
+      } else if (document.isWorkspaceTemplate) {
+        channels.push(`team-${document.teamId}`);
       } else {
         channels.push(`collection-${document.collectionId}`);
       }

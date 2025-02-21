@@ -1,5 +1,5 @@
 import isEqual from "lodash/isEqual";
-import { keymap } from "prosemirror-keymap";
+import { Plugin } from "prosemirror-state";
 import {
   ySyncPlugin,
   yCursorPlugin,
@@ -9,6 +9,7 @@ import {
 } from "y-prosemirror";
 import * as Y from "yjs";
 import Extension from "@shared/editor/lib/Extension";
+import { isRemoteTransaction } from "@shared/editor/lib/multiplayer";
 import { Second } from "@shared/utils/time";
 
 type UserAwareness = {
@@ -104,11 +105,18 @@ export default class Multiplayer extends Extension {
         selectionBuilder,
       }),
       yUndoPlugin(),
-      keymap({
-        "Mod-z": undo,
-        "Mod-y": redo,
-        "Mod-Shift-z": redo,
+      new Plugin({
+        props: {
+          handleScrollToSelection: (view) => isRemoteTransaction(view.state.tr),
+        },
       }),
     ];
+  }
+
+  commands() {
+    return {
+      undo: () => undo,
+      redo: () => redo,
+    };
   }
 }

@@ -1,5 +1,6 @@
 import { observable, action } from "mobx";
 import { AwarenessChangeEvent } from "~/types";
+import RootStore from "./RootStore";
 
 type DocumentPresence = Map<
   string,
@@ -16,6 +17,12 @@ export default class PresenceStore {
   timeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   offlineTimeout = 30000;
+
+  private rootStore: RootStore;
+
+  constructor(rootStore: RootStore) {
+    this.rootStore = rootStore;
+  }
 
   // called when a user leaves the document
   @action
@@ -38,7 +45,7 @@ export default class PresenceStore {
 
     event.states.forEach((state) => {
       const { user, cursor } = state;
-      if (user) {
+      if (user && this.rootStore.auth.currentUserId !== user.id) {
         this.update(documentId, user.id, !!cursor);
         existingUserIds = existingUserIds.filter((id) => id !== user.id);
       }
@@ -68,12 +75,16 @@ export default class PresenceStore {
 
   @action
   private update(documentId: string, userId: string, isEditing: boolean) {
-    const existing = this.data.get(documentId) || new Map();
-    existing.set(userId, {
-      isEditing,
-      userId,
-    });
-    this.data.set(documentId, existing);
+    const presence = this.data.get(documentId) || new Map();
+    const existing = presence.get(userId);
+
+    if (!existing || existing.isEditing !== isEditing) {
+      presence.set(userId, {
+        isEditing,
+        userId,
+      });
+      this.data.set(documentId, presence);
+    }
   }
 
   public get(documentId: string): DocumentPresence | null | undefined {

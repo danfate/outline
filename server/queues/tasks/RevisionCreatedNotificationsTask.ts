@@ -1,7 +1,7 @@
 import { subHours } from "date-fns";
 import differenceBy from "lodash/differenceBy";
 import { Op } from "sequelize";
-import { NotificationEventType } from "@shared/types";
+import { MentionType, NotificationEventType } from "@shared/types";
 import { createSubscriptionsForDocument } from "@server/commands/subscriptionCreator";
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
@@ -28,17 +28,21 @@ export default class RevisionCreatedNotificationsTask extends BaseTask<RevisionE
     const before = await revision.before();
 
     // If the content looks the same, don't send notifications
-    if (DocumentHelper.isTextContentEqual(before, revision)) {
+    if (!DocumentHelper.isChangeOverThreshold(before, revision, 5)) {
       Logger.info(
         "processor",
-        `suppressing notifications as update has no visual changes`
+        `suppressing notifications as update has insignificant changes`
       );
       return;
     }
 
     // Send notifications to mentioned users first
-    const oldMentions = before ? DocumentHelper.parseMentions(before) : [];
-    const newMentions = DocumentHelper.parseMentions(document);
+    const oldMentions = before
+      ? DocumentHelper.parseMentions(before, { type: MentionType.User })
+      : [];
+    const newMentions = DocumentHelper.parseMentions(document, {
+      type: MentionType.User,
+    });
     const mentions = differenceBy(newMentions, oldMentions, "id");
     const userIdsMentioned: string[] = [];
 

@@ -42,6 +42,8 @@ class GroupUser extends Model<
   InferAttributes<GroupUser>,
   Partial<InferCreationAttributes<GroupUser>>
 > {
+  static eventNamespace = "groups";
+
   @BelongsTo(() => User, "userId")
   user: User;
 
@@ -62,6 +64,10 @@ class GroupUser extends Model<
   @ForeignKey(() => User)
   @Column(DataType.UUID)
   createdById: string;
+
+  get modelId() {
+    return this.groupId;
+  }
 }
 
 export default GroupUser;

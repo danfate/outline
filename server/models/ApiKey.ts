@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { Matches } from "class-validator";
 import { subMinutes } from "date-fns";
 import randomstring from "randomstring";
 import { InferAttributes, InferCreationAttributes, Op } from "sequelize";
@@ -17,6 +18,7 @@ import {
 import { ApiKeyValidation } from "@shared/validations";
 import User from "./User";
 import ParanoidModel from "./base/ParanoidModel";
+import { SkipChangeset } from "./decorators/Changeset";
 import Fix from "./decorators/Fix";
 import Length from "./validators/Length";
 
@@ -28,6 +30,9 @@ class ApiKey extends ParanoidModel<
 > {
   static prefix = "ol_api_";
 
+  static eventNamespace = "api_keys";
+
+  /** The human-readable name of this API key */
   @Length({
     min: ApiKeyValidation.minNameLength,
     max: ApiKeyValidation.maxNameLength,
@@ -35,6 +40,13 @@ class ApiKey extends ParanoidModel<
   })
   @Column
   name: string;
+
+  /** A space-separated list of scopes that this API key has access to */
+  @Matches(/[\/\.\w\s]*/, {
+    each: true,
+  })
+  @Column(DataType.ARRAY(DataType.STRING))
+  scope: string[] | null;
 
   /** @deprecated The plain text value of the API key, removed soon. */
   @Unique
@@ -48,18 +60,23 @@ class ApiKey extends ParanoidModel<
   /** The hashed value of the API key */
   @Unique
   @Column
+  @SkipChangeset
   hash: string;
 
   /** The last 4 characters of the API key */
   @Column
+  @SkipChangeset
   last4: string;
 
+  /** The date and time when this API key will expire */
   @IsDate
   @Column
   expiresAt: Date | null;
 
+  /** The date and time when this API key was last used */
   @IsDate
   @Column
+  @SkipChangeset
   lastActiveAt: Date | null;
 
   // hooks
@@ -148,7 +165,28 @@ class ApiKey extends ParanoidModel<
       this.lastActiveAt = new Date();
     }
 
-    return this.save();
+    return this.save({ silent: true });
+  };
+
+  /** Checks if the API key has access to the given path */
+  canAccess = (path: string) => {
+    if (!this.scope) {
+      return true;
+    }
+
+    const resource = path.split("/").pop() ?? "";
+    const [namespace, method] = resource.split(".");
+
+    return this.scope.some((scope) => {
+      const [scopeNamespace, scopeMethod] = scope
+        .replace("/api/", "")
+        .split(".");
+      return (
+        scope.startsWith("/api/") &&
+        (namespace === scopeNamespace || scopeNamespace === "*") &&
+        (method === scopeMethod || scopeMethod === "*")
+      );
+    });
   };
 }
 

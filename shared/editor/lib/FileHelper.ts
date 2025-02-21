@@ -22,6 +22,23 @@ export default class FileHelper {
   }
 
   /**
+   * Download a file from a URL and return it as a File object.
+   *
+   * @param url The URL to download the file from
+   * @returns The downloaded file
+   */
+  static async getFileForUrl(url: string): Promise<File> {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const fileName = (response.headers.get("content-disposition") || "").split(
+      "filename="
+    )[1];
+    return new File([blob], fileName || "file", {
+      type: blob.type,
+    });
+  }
+
+  /**
    * Loads the dimensions of a video file.
    *
    * @param file The file to load the dimensions for
@@ -44,8 +61,8 @@ export default class FileHelper {
   }
 
   /**
-   * Loads the dimensions of an image file – currently only PNGs are supported – but we mainly use
-   * this to get the "real" dimensions of a retina image.
+   * Loads the dimensions of an image file – for PNG's we parse the pHYs chunk to get the
+   * "real" dimensions of a retina image, for other formats we use an Image element.
    *
    * @param file The file to load the dimensions for
    * @returns The dimensions of the image, if known.
@@ -53,10 +70,6 @@ export default class FileHelper {
   static async getImageDimensions(
     file: File
   ): Promise<{ width: number; height: number } | undefined> {
-    if (file.type !== "image/png") {
-      return;
-    }
-
     function parsePhys(view: DataView) {
       return {
         ppux: view.getUint32(0),
@@ -72,30 +85,41 @@ export default class FileHelper {
       };
     }
 
-    try {
-      const buffer = await file.arrayBuffer();
-      const chunks = extract(new Uint8Array(buffer));
-      const pHYsChunk = chunks.find((chunk) => chunk.name === "pHYs");
-      const iHDRChunk = chunks.find((chunk) => chunk.name === "IHDR");
+    if (file.type === "image/png") {
+      try {
+        const buffer = await file.arrayBuffer();
+        const chunks = extract(new Uint8Array(buffer));
+        const pHYsChunk = chunks.find((chunk) => chunk.name === "pHYs");
+        const iHDRChunk = chunks.find((chunk) => chunk.name === "IHDR");
 
-      if (!pHYsChunk || !iHDRChunk) {
-        return;
+        if (!pHYsChunk || !iHDRChunk) {
+          return;
+        }
+
+        const idhrData = parseIHDR(new DataView(iHDRChunk.data.buffer));
+        const physData = parsePhys(new DataView(pHYsChunk.data.buffer));
+
+        if (physData.unit === 0 && physData.ppux === physData.ppuy) {
+          const pixelRatio = Math.round(physData.ppux / 2834.5);
+          return {
+            width: idhrData.width / pixelRatio,
+            height: idhrData.height / pixelRatio,
+          };
+        }
+      } catch (_e) {
+        return undefined;
       }
-
-      const idhrData = parseIHDR(new DataView(iHDRChunk.data.buffer));
-      const physData = parsePhys(new DataView(pHYsChunk.data.buffer));
-
-      if (physData.unit === 0 && physData.ppux === physData.ppuy) {
-        const pixelRatio = Math.round(physData.ppux / 2834.5);
-        return {
-          width: idhrData.width / pixelRatio,
-          height: idhrData.height / pixelRatio,
-        };
-      }
-    } catch (_e) {
-      return undefined;
     }
 
-    return undefined;
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = function () {
+        window.URL.revokeObjectURL(img.src);
+        resolve({ width: img.width, height: img.height });
+      };
+
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
   }
 }

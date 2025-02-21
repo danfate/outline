@@ -6,6 +6,7 @@ import * as React from "react";
 import { mergeRefs } from "react-merge-refs";
 import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import Icon, { IconTitleWrapper } from "@shared/components/Icon";
 import isMarkdown from "@shared/editor/lib/isMarkdown";
 import normalizePastedMarkdown from "@shared/editor/lib/markdown/normalize";
 import { extraArea, s } from "@shared/styles";
@@ -15,14 +16,13 @@ import {
   getCurrentDateTimeAsString,
   getCurrentTimeAsString,
 } from "@shared/utils/date";
+import { isModKey } from "@shared/utils/keyboard";
 import { DocumentValidation } from "@shared/validations";
 import ContentEditable, { RefHandle } from "~/components/ContentEditable";
 import { useDocumentContext } from "~/components/DocumentContext";
-import Icon, { IconTitleWrapper } from "~/components/Icon";
 import { PopoverButton } from "~/components/IconPicker/components/PopoverButton";
 import useBoolean from "~/hooks/useBoolean";
 import usePolicy from "~/hooks/usePolicy";
-import { isModKey } from "~/utils/keyboard";
 
 const IconPicker = React.lazy(() => import("~/components/IconPicker"));
 

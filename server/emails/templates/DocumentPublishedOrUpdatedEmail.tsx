@@ -7,6 +7,7 @@ import HTMLHelper from "@server/models/helpers/HTMLHelper";
 import NotificationSettingsHelper from "@server/models/helpers/NotificationSettingsHelper";
 import SubscriptionHelper from "@server/models/helpers/SubscriptionHelper";
 import { can } from "@server/policies";
+import { CacheHelper } from "@server/utils/CacheHelper";
 import BaseEmail, { EmailMessageCategory, EmailProps } from "./BaseEmail";
 import Body from "./components/Body";
 import Button from "./components/Button";
@@ -30,7 +31,7 @@ type InputProps = EmailProps & {
 
 type BeforeSend = {
   document: Document;
-  collection: Collection;
+  collection: Collection | null;
   unsubscribeUrl: string;
   body: string | undefined;
 };
@@ -62,27 +63,31 @@ export default class DocumentPublishedOrUpdatedEmail extends BaseEmail<
       document.$get("collection"),
       document.$get("team"),
     ]);
-    if (!collection) {
-      return false;
-    }
 
     let body;
     if (revisionId && team?.getPreference(TeamPreference.PreviewsInEmails)) {
-      // generate the diff html for the email
-      const revision = await Revision.findByPk(revisionId);
+      body = await CacheHelper.getDataOrSet<string>(
+        `diff:${revisionId}`,
+        async () => {
+          // generate the diff html for the email
+          const revision = await Revision.findByPk(revisionId);
 
-      if (revision) {
-        const before = await revision.before();
-        const content = await DocumentHelper.toEmailDiff(before, revision, {
-          includeTitle: false,
-          centered: false,
-          signedUrls: 4 * Day.seconds,
-          baseUrl: props.teamUrl,
-        });
+          if (revision) {
+            const before = await revision.before();
+            const content = await DocumentHelper.toEmailDiff(before, revision, {
+              includeTitle: false,
+              centered: false,
+              signedUrls: 4 * Day.seconds,
+              baseUrl: props.teamUrl,
+            });
 
-        // inline all css so that it works in as many email providers as possible.
-        body = content ? await HTMLHelper.inlineCSS(content) : undefined;
-      }
+            // inline all css so that it works in as many email providers as possible.
+            return content ? await HTMLHelper.inlineCSS(content) : undefined;
+          }
+          return;
+        },
+        30
+      );
     }
 
     return {
@@ -109,7 +114,7 @@ export default class DocumentPublishedOrUpdatedEmail extends BaseEmail<
   }
 
   protected subject({ document, eventType }: Props) {
-    return `“${document.title}” ${this.eventName(eventType)}`;
+    return `“${document.titleWithDefault}” ${this.eventName(eventType)}`;
   }
 
   protected preview({ actorName, eventType }: Props): string {
@@ -139,9 +144,11 @@ export default class DocumentPublishedOrUpdatedEmail extends BaseEmail<
     const eventName = this.eventName(eventType);
 
     return `
-"${document.title}" ${eventName}
+"${document.titleWithDefault}" ${eventName}
 
-${actorName} ${eventName} the document "${document.title}", in the ${collection.name} collection.
+${actorName} ${eventName} the document "${document.titleWithDefault}"${
+      collection?.name ? `, in the ${collection.name} collection` : ""
+    }.
 
 Open Document: ${teamUrl}${document.url}
 `;
@@ -169,12 +176,13 @@ Open Document: ${teamUrl}${document.url}
 
         <Body>
           <Heading>
-            “{document.title}” {eventName}
+            “{document.titleWithDefault}” {eventName}
           </Heading>
           <p>
             {actorName} {eventName} the document{" "}
-            <a href={documentLink}>{document.title}</a>, in the{" "}
-            {collection.name} collection.
+            <a href={documentLink}>{document.titleWithDefault}</a>
+            {collection?.name ? <>, in the {collection.name} collection</> : ""}
+            .
           </p>
           {body && (
             <>

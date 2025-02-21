@@ -3,7 +3,7 @@ import { transparentize } from "polished";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import styled, { css } from "styled-components";
-import { s } from "@shared/styles";
+import { s, hover } from "@shared/styles";
 import type { ReactionSummary } from "@shared/types";
 import { getEmojiId } from "@shared/utils/emoji";
 import User from "~/models/User";
@@ -13,7 +13,6 @@ import NudeButton from "~/components/NudeButton";
 import Text from "~/components/Text";
 import Tooltip from "~/components/Tooltip";
 import useCurrentUser from "~/hooks/useCurrentUser";
-import { hover } from "~/styles";
 
 type Props = {
   /** Thin reaction data - contains the emoji & active user ids for this reaction. */
@@ -128,7 +127,7 @@ const Reaction: React.FC<Props> = ({
   );
 
   return tooltipContent ? (
-    <Tooltip content={tooltipContent} delay={250} placement="bottom">
+    <Tooltip content={tooltipContent} placement="bottom">
       {DisplayedEmoji}
     </Tooltip>
   ) : (
@@ -144,7 +143,6 @@ const EmojiButton = styled(NudeButton)<{
   height: 28px;
   padding: 6px;
   border-radius: 12px;
-  transition: ${s("backgroundTransition")};
   background: ${s("backgroundTertiary")};
   pointer-events: ${({ disabled }) => disabled && "none"};
 

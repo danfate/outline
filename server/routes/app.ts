@@ -76,7 +76,7 @@ export const renderApp = async (
         const csp = ctx.response.get("Content-Security-Policy");
         ctx.set(
           "Content-Security-Policy",
-          csp.replace("script-src", `script-src ${parsed.hostname}`)
+          csp.replace("script-src", `script-src ${parsed.host}`)
         );
       }
     });
@@ -168,10 +168,15 @@ export const renderShare = async (ctx: Context, next: Next) => {
     });
 
     if (share && !ctx.userAgent.isBot) {
-      await share.update({
-        lastAccessedAt: new Date(),
-        views: Sequelize.literal("views + 1"),
-      });
+      await share.update(
+        {
+          lastAccessedAt: new Date(),
+          views: Sequelize.literal("views + 1"),
+        },
+        {
+          hooks: false,
+        }
+      );
     }
   } catch (err) {
     // If the share or document does not exist, return a 404.

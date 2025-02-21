@@ -1,19 +1,18 @@
 import React from "react";
 import useDictionary from "~/hooks/useDictionary";
 import getMenuItems from "../menus/block";
+import { useEditor } from "./EditorContext";
 import SuggestionsMenu, {
   Props as SuggestionsMenuProps,
 } from "./SuggestionsMenu";
 import SuggestionsMenuItem from "./SuggestionsMenuItem";
 
-type Props = Omit<
-  SuggestionsMenuProps,
-  "renderMenuItem" | "items" | "trigger"
-> &
+type Props = Omit<SuggestionsMenuProps, "renderMenuItem" | "items"> &
   Required<Pick<SuggestionsMenuProps, "embeds">>;
 
 function BlockMenu(props: Props) {
   const dictionary = useDictionary();
+  const { elementRef } = useEditor();
 
   return (
     <SuggestionsMenu
@@ -29,7 +28,7 @@ function BlockMenu(props: Props) {
           shortcut={item.shortcut}
         />
       )}
-      items={getMenuItems(dictionary)}
+      items={getMenuItems(dictionary, elementRef)}
     />
   );
 }

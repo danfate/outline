@@ -18,12 +18,15 @@ import {
   AfterCreate,
   AfterUpdate,
   Length,
+  AfterDestroy,
 } from "sequelize-typescript";
 import { CollectionPermission, DocumentPermission } from "@shared/types";
+import { APIContext } from "@server/types";
 import Collection from "./Collection";
 import Document from "./Document";
 import User from "./User";
 import IdModel from "./base/IdModel";
+import { HookContext } from "./base/Model";
 import Fix from "./decorators/Fix";
 
 /**
@@ -144,12 +147,12 @@ class UserMembership extends IdModel<
     options: SaveOptions
   ) {
     const { transaction } = options;
-    const groupMemberships = await this.findAll({
+    const userMemberships = await this.findAll({
       where,
       transaction,
     });
     await Promise.all(
-      groupMemberships.map((membership) =>
+      userMemberships.map((membership) =>
         this.create(
           {
             documentId: document.id,
@@ -158,7 +161,7 @@ class UserMembership extends IdModel<
             permission: membership.permission,
             createdById: membership.createdById,
           },
-          { transaction }
+          { transaction, hooks: false }
         )
       )
     );
@@ -209,6 +212,16 @@ class UserMembership extends IdModel<
     return this.recreateSourcedMemberships(model, options);
   }
 
+  @AfterCreate
+  static async publishAddUserEventAfterCreate(
+    model: UserMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "add_user", {
+      isNew: true,
+    });
+  }
+
   @AfterUpdate
   static async updateSourcedMemberships(
     model: UserMembership,
@@ -236,6 +249,24 @@ class UserMembership extends IdModel<
     }
   }
 
+  @AfterUpdate
+  static async publishAddUserEventAfterUpdate(
+    model: UserMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "add_user", {
+      isNew: false,
+    });
+  }
+
+  @AfterDestroy
+  static async publishRemoveUserEvent(
+    model: UserMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "remove_user");
+  }
+
   /**
    * Recreate all sourced permissions for a given permission.
    */
@@ -256,13 +287,15 @@ class UserMembership extends IdModel<
       transaction,
     });
 
-    const document = await Document.unscoped().findOne({
-      attributes: ["id"],
-      where: {
-        id: model.documentId,
-      },
-      transaction,
-    });
+    const document = await Document.unscoped()
+      .scope("withoutState")
+      .findOne({
+        attributes: ["id"],
+        where: {
+          id: model.documentId,
+        },
+        transaction,
+      });
     if (!document) {
       return;
     }
@@ -291,8 +324,26 @@ class UserMembership extends IdModel<
         },
         {
           transaction,
+          hooks: false,
         }
       );
+    }
+  }
+
+  private async insertEvent(
+    ctx: APIContext["context"],
+    name: string,
+    data?: Record<string, unknown>
+  ) {
+    const hookContext = {
+      ...ctx,
+      event: { name, data, create: true },
+    } as HookContext;
+
+    if (this.collectionId) {
+      await Collection.insertEvent(name, this, hookContext);
+    } else {
+      await Document.insertEvent(name, this, hookContext);
     }
   }
 }

@@ -7,7 +7,6 @@ import {
   NavigationNode,
   Client,
   CollectionPermission,
-  DocumentPermission,
   JSONValue,
   UnfurlResourceType,
   ProsemirrorData,
@@ -49,8 +48,8 @@ export type AuthenticationResult = AccountProvisionerResult & {
 
 export type Authentication = {
   user: User;
-  token: string;
-  type: AuthenticationType;
+  token?: string;
+  type?: AuthenticationType;
 };
 
 export type Pagination = {
@@ -77,8 +76,15 @@ export interface APIContext<ReqT = BaseReq, ResT = BaseRes>
     DefaultContext & IRouterParamContext<AppState>,
     ResT
   > {
-  /** Typed and validated version of request, consisting of validated body, query, etc */
+  /** Typed and validated version of request, consisting of validated body, query, etc. */
   input: ReqT;
+
+  /** The current request's context, which is passed to database mutations. */
+  context: {
+    transaction?: Transaction;
+    auth: Authentication;
+    ip?: string;
+  };
 }
 
 type BaseEvent<T extends Model> = {
@@ -109,6 +115,10 @@ export type AttachmentEvent = BaseEvent<Attachment> &
           name: string;
           source?: "import";
         };
+      }
+    | {
+        name: "attachments.update";
+        modelId: string;
       }
     | {
         name: "attachments.delete";
@@ -258,7 +268,6 @@ export type CollectionUserEvent = BaseEvent<UserMembership> & {
   collectionId: string;
   data: {
     isNew?: boolean;
-    permission?: CollectionPermission;
   };
 };
 
@@ -266,7 +275,7 @@ export type CollectionGroupEvent = BaseEvent<GroupMembership> & {
   name: "collections.add_group" | "collections.remove_group";
   collectionId: string;
   modelId: string;
-  data: { name: string; membershipId: string };
+  data: { membershipId: string };
 };
 
 export type DocumentUserEvent = BaseEvent<UserMembership> & {
@@ -275,9 +284,7 @@ export type DocumentUserEvent = BaseEvent<UserMembership> & {
   modelId: string;
   documentId: string;
   data: {
-    title: string;
     isNew?: boolean;
-    permission?: DocumentPermission;
   };
 };
 
@@ -286,9 +293,7 @@ export type DocumentGroupEvent = BaseEvent<GroupMembership> & {
   documentId: string;
   modelId: string;
   data: {
-    name: string;
     isNew?: boolean;
-    permission?: DocumentPermission;
     membershipId: string;
   };
 };
@@ -336,9 +341,6 @@ export type GroupUserEvent = BaseEvent<UserMembership> & {
   name: "groups.add_user" | "groups.remove_user";
   userId: string;
   modelId: string;
-  data: {
-    name: string;
-  };
 };
 
 export type GroupEvent = BaseEvent<Group> &
@@ -347,9 +349,6 @@ export type GroupEvent = BaseEvent<Group> &
     | {
         name: "groups.create" | "groups.delete" | "groups.update";
         modelId: string;
-        data: {
-          name: string;
-        };
       }
   );
 
@@ -417,9 +416,6 @@ export type ShareEvent = BaseEvent<Share> & {
   modelId: string;
   documentId: string;
   collectionId?: string;
-  data: {
-    name: string;
-  };
 };
 
 export type SubscriptionEvent = BaseEvent<Subscription> & {

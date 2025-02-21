@@ -6,6 +6,8 @@ import {
   StatusFilter,
   UserRole,
 } from "@shared/types";
+import { TextHelper } from "@shared/utils/TextHelper";
+import { createContext } from "@server/context";
 import {
   Document,
   View,
@@ -416,7 +418,7 @@ describe("#documents.info", () => {
       teamId: document.teamId,
       userId: user.id,
     });
-    await share.revoke(user.id);
+    await share.revoke(createContext({ user }));
     const res = await server.post("/api/documents.info", {
       body: {
         shareId: share.id,
@@ -1995,14 +1997,18 @@ describe("#documents.templatize", () => {
     });
     const body = await res.json();
     expect(res.status).toBe(400);
-    expect(body.message).toBe("id: Required");
+    expect(body.message).toBe("id: Must be a valid UUID or slug");
   });
   it("should require publish", async () => {
     const user = await buildUser();
+    const document = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+    });
     const res = await server.post("/api/documents.templatize", {
       body: {
         token: user.getJwtToken(),
-        id: "random-id",
+        id: document.id,
       },
     });
     const body = await res.json();
@@ -2579,7 +2585,7 @@ describe("#documents.move", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should fail for invalid index", async () => {
@@ -2885,7 +2891,7 @@ describe("#documents.restore", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should fail for invalid collectionId", async () => {
@@ -3034,6 +3040,92 @@ describe("#documents.restore", () => {
     expect(body.data.deletedAt).toEqual(null);
     expect(body.data.archivedAt).toEqual(null);
     expect(body.data.collectionId).toEqual(anotherCollection.id);
+  });
+
+  it("should allow restore of collection templates", async () => {
+    const team = await buildTeam();
+    const user = await buildUser({ teamId: team.id });
+    const collection = await buildCollection({
+      userId: user.id,
+      teamId: team.id,
+    });
+    const template = await buildDocument({
+      template: true,
+      userId: user.id,
+      collectionId: collection.id,
+      teamId: team.id,
+    });
+    await template.delete(user);
+
+    const res = await server.post("/api/documents.restore", {
+      body: {
+        token: user.getJwtToken(),
+        id: template.id,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.deletedAt).toEqual(null);
+    expect(body.data.collectionId).toEqual(collection.id);
+  });
+
+  it("should allow restore of templates from a deleted collection", async () => {
+    const team = await buildTeam();
+    const user = await buildUser({ teamId: team.id });
+    const collection = await buildCollection({
+      userId: user.id,
+      teamId: team.id,
+    });
+    const anotherCollection = await buildCollection({
+      userId: user.id,
+      teamId: team.id,
+    });
+    const template = await buildDocument({
+      template: true,
+      userId: user.id,
+      collectionId: collection.id,
+      teamId: team.id,
+    });
+    await template.delete(user);
+    await collection.destroy({ hooks: false });
+
+    const res = await server.post("/api/documents.restore", {
+      body: {
+        token: user.getJwtToken(),
+        id: template.id,
+        collectionId: anotherCollection.id,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.deletedAt).toEqual(null);
+    expect(body.data.collectionId).toEqual(anotherCollection.id);
+  });
+
+  it("should allow restore of workspace templates", async () => {
+    const team = await buildTeam();
+    const user = await buildUser({ teamId: team.id });
+    const template = await buildDocument({
+      template: true,
+      userId: user.id,
+      teamId: team.id,
+      collectionId: null,
+    });
+    await template.delete(user);
+
+    const res = await server.post("/api/documents.restore", {
+      body: {
+        token: user.getJwtToken(),
+        id: template.id,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.deletedAt).toEqual(null);
+    expect(body.data.collectionId).toEqual(null);
   });
 
   it("should not allow restore of documents to a deleted collection", async () => {
@@ -3270,6 +3362,127 @@ describe("#documents.import", () => {
 });
 
 describe("#documents.create", () => {
+  it("should replace template variables when a doc is created from a template", async () => {
+    const user = await buildUser();
+    const template = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      template: true,
+      title: "template title",
+      text: "Created by user {author} on {date}",
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        templateId: template.id,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.title).toEqual(
+      TextHelper.replaceTemplateVariables(template.title, user)
+    );
+    expect(body.data.text).toEqual(
+      TextHelper.replaceTemplateVariables(template.text, user)
+    );
+  });
+
+  it("should retain template variables when a template is created from another template", async () => {
+    const user = await buildUser();
+    const template = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      template: true,
+      title: "template title",
+      text: "Created by user {author} on {date}",
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        templateId: template.id,
+        template: true,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.title).toEqual(template.title);
+    expect(body.data.text).toEqual(template.text);
+  });
+
+  it("should create a document with empty title if no title is explicitly passed", async () => {
+    const user = await buildUser();
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        text: "hello",
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.title).toEqual("");
+  });
+
+  it("should use template title when doc is supposed to be created using the template and title is not explicitly passed", async () => {
+    const user = await buildUser();
+    const template = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      template: true,
+      title: "template title",
+      text: "template text",
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        templateId: template.id,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.title).toEqual(template.title);
+    expect(body.data.text).toEqual(template.text);
+  });
+
+  it("should override template title when doc title is explicitly passed", async () => {
+    const user = await buildUser();
+    const template = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      template: true,
+      title: "template title",
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        templateId: template.id,
+        title: "doc title",
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.title).toEqual("doc title");
+  });
+
+  it("should override template text when doc text is explicitly passed", async () => {
+    const user = await buildUser();
+    const template = await buildDocument({
+      userId: user.id,
+      teamId: user.teamId,
+      template: true,
+      text: "template text",
+    });
+    const res = await server.post("/api/documents.create", {
+      body: {
+        token: user.getJwtToken(),
+        templateId: template.id,
+        text: "doc text",
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.text).toEqual("doc text");
+  });
+
   it("should fail for invalid collectionId", async () => {
     const user = await buildUser();
     const res = await server.post("/api/documents.create", {
@@ -4122,7 +4335,7 @@ describe("#documents.update", () => {
     });
     const body = await res.json();
     expect(res.status).toBe(400);
-    expect(body.message).toBe("id: Required");
+    expect(body.message).toBe("id: Must be a valid UUID or slug");
   });
 });
 
@@ -4136,7 +4349,7 @@ describe("#documents.archive", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should allow archiving document", async () => {
@@ -4179,7 +4392,7 @@ describe("#documents.delete", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should allow deleting document", async () => {
@@ -4328,7 +4541,7 @@ describe("#documents.unpublish", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should unpublish a document", async () => {
@@ -4874,7 +5087,7 @@ describe("#documents.add_user", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should require authentication", async () => {
@@ -4960,7 +5173,7 @@ describe("#documents.remove_user", () => {
     });
     const body = await res.json();
     expect(res.status).toEqual(400);
-    expect(body.message).toEqual("id: Required");
+    expect(body.message).toEqual("id: Must be a valid UUID or slug");
   });
 
   it("should require authentication", async () => {

@@ -9,6 +9,12 @@ export default function isMarkdown(text: string): boolean {
     signals += fences.length;
   }
 
+  // latex-ish
+  const latex = text.match(/\$(.+)\$/g);
+  if (latex && latex.length > 0) {
+    signals += latex.length;
+  }
+
   // link-ish
   const links = text.match(/\[[^]+\]\(https?:\/\/\S+\)/gm);
   if (links) {

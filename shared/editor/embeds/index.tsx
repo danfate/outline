@@ -14,6 +14,7 @@ import GitLabSnippet from "./GitLabSnippet";
 import InVision from "./InVision";
 import JSFiddle from "./JSFiddle";
 import Linkedin from "./Linkedin";
+import Pinterest from "./Pinterest";
 import Spotify from "./Spotify";
 import Trello from "./Trello";
 import Vimeo from "./Vimeo";
@@ -30,9 +31,9 @@ export type EmbedProps = {
 };
 
 const Img = styled(Image)`
-  border-radius: 2px;
+  border-radius: 3px;
   background: #fff;
-  box-shadow: 0 0 0 1px #fff;
+  box-shadow: 0 0 0 1px ${(props) => props.theme.divider};
   margin: 3px;
   width: 18px;
   height: 18px;
@@ -178,10 +179,22 @@ const embeds: EmbedDescriptor[] = [
     title: "Canva",
     keywords: "design",
     regexMatch: [
-      /^https:\/\/(?:www\.)?canva\.com\/design\/([a-zA-Z0-9_]*)\/(.*)$/,
+      /^https:\/\/(?:www\.)?canva\.com\/design\/([\/a-zA-Z0-9_\-]*)$/,
     ],
-    transformMatch: (matches: RegExpMatchArray) =>
-      `https://www.canva.com/design/${matches[1]}/view?embed`,
+    transformMatch: (matches: RegExpMatchArray) => {
+      const input = matches.input ?? matches[0];
+
+      try {
+        const url = new URL(input);
+        const params = new URLSearchParams(url.search);
+        params.append("embed", "");
+        return `${url.origin}${url.pathname}?${params.toString()}`;
+      } catch (e) {
+        //
+      }
+
+      return input;
+    },
     icon: <Img src="/images/canva.png" alt="Canva" />,
   }),
   new EmbedDescriptor({
@@ -403,11 +416,20 @@ const embeds: EmbedDescriptor[] = [
     transformMatch: (matches: RegExpMatchArray) => {
       const input = matches.input ?? matches[0];
 
-      if (input.includes("style=singlePage")) {
-        return input;
+      try {
+        const url = new URL(input);
+        const params = new URLSearchParams(url.search);
+        if (params.has("embed") || params.get("style") === "singlePage") {
+          return input;
+        }
+
+        params.append("embed", "true");
+        return `${url.origin}${url.pathname}?${params.toString()}`;
+      } catch (e) {
+        //
       }
 
-      return input.replace(/(\?embed=true)?$/, "?embed=true");
+      return input;
     },
     icon: <Img src="/images/grist.png" alt="Grist" />,
   }),
@@ -607,6 +629,18 @@ const embeds: EmbedDescriptor[] = [
     ],
     icon: <Img src="/images/vimeo.png" alt="Vimeo" />,
     component: Vimeo,
+  }),
+  new EmbedDescriptor({
+    title: "Pinterest",
+    keywords: "board moodboard pins",
+    regexMatch: [
+      // Match board URLs but exclude pins
+      /^(?:https?:\/\/)?(?:(?:www\.|[a-z]{2}\.)?pinterest\.(?:com|[a-z]{2,3}))\/(?!pin\/)([^/]+)\/([^/]+)\/?$/,
+      // Match profile URLs but exclude pins
+      /^(?:https?:\/\/)?(?:(?:www\.|[a-z]{2}\.)?pinterest\.(?:com|[a-z]{2,3}))\/(?!pin\/)([^/]+)\/?$/,
+    ],
+    icon: <Img src="/images/pinterest.png" alt="Pinterest" />,
+    component: Pinterest,
   }),
   new EmbedDescriptor({
     title: "Whimsical",

@@ -55,6 +55,7 @@ class Event extends IdModel<
 
   /**
    * Metadata associated with the event, previously used for storing some changed attributes.
+   * Note that the `data` column will be visible to the client and API requests.
    */
   @Column(DataType.JSONB)
   data: Record<string, any> | null;
@@ -82,7 +83,12 @@ class Event extends IdModel<
     options: SaveOptions<InferAttributes<Event>>
   ) {
     if (options.transaction) {
-      options.transaction.afterCommit(() => void globalEventQueue.add(model));
+      // 'findOrCreate' creates a new transaction always, and the transaction from the middleware is set as its parent.
+      // We want to use the parent transaction, otherwise the 'afterCommit' hook will never fire in this case.
+      // See: https://github.com/sequelize/sequelize/issues/17452
+      (options.transaction.parent || options.transaction).afterCommit(
+        () => void globalEventQueue.add(model)
+      );
       return;
     }
     void globalEventQueue.add(model);

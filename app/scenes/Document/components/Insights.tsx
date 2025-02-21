@@ -1,4 +1,3 @@
-import emojiRegex from "emoji-regex";
 import { observer } from "mobx-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +6,7 @@ import styled from "styled-components";
 import { s } from "@shared/styles";
 import { stringToColor } from "@shared/utils/color";
 import User from "~/models/User";
-import { Avatar } from "~/components/Avatar";
+import { Avatar, AvatarSize } from "~/components/Avatar";
 import { useDocumentContext } from "~/components/DocumentContext";
 import DocumentViews from "~/components/DocumentViews";
 import Flex from "~/components/Flex";
@@ -16,9 +15,11 @@ import PaginatedList from "~/components/PaginatedList";
 import Text from "~/components/Text";
 import Time from "~/components/Time";
 import useKeyDown from "~/hooks/useKeyDown";
+import { useLocationSidebarContext } from "~/hooks/useLocationSidebarContext";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import useTextSelection from "~/hooks/useTextSelection";
+import { useTextStats } from "~/hooks/useTextStats";
 import InsightsMenu from "~/menus/InsightsMenu";
 import { documentPath } from "~/utils/routeHelpers";
 import Sidebar from "./SidebarLayout";
@@ -28,6 +29,7 @@ function Insights() {
   const { t } = useTranslation();
   const match = useRouteMatch<{ documentSlug: string }>();
   const history = useHistory();
+  const sidebarContext = useLocationSidebarContext();
   const selectedText = useTextSelection();
   const document = documents.getByUrl(match.params.documentSlug);
   const { editor } = useDocumentContext();
@@ -38,7 +40,10 @@ function Insights() {
 
   const onCloseInsights = () => {
     if (document) {
-      history.push(documentPath(document));
+      history.push({
+        pathname: documentPath(document),
+        state: { sidebarContext },
+      });
     }
   };
 
@@ -131,7 +136,7 @@ function Insights() {
                           avatarUrl: null,
                           initial: document.sourceMetadata.createdByName[0],
                         }}
-                        size={32}
+                        size={AvatarSize.Large}
                       />
                     }
                     subtitle={t("Creator")}
@@ -206,32 +211,6 @@ function Insights() {
       ) : null}
     </Sidebar>
   );
-}
-
-function useTextStats(text: string, selectedText: string) {
-  const numTotalWords = countWords(text);
-  const regex = emojiRegex();
-  const matches = Array.from(text.matchAll(regex));
-
-  return {
-    total: {
-      words: numTotalWords,
-      characters: text.length,
-      emoji: matches.length ?? 0,
-      readingTime: Math.max(1, Math.floor(numTotalWords / 200)),
-    },
-    selected: {
-      words: countWords(selectedText),
-      characters: selectedText.length,
-    },
-  };
-}
-
-function countWords(text: string): number {
-  const t = text.trim();
-
-  // Hyphenated words are counted as two words
-  return t ? t.replace(/-/g, " ").split(/\s+/g).length : 0;
 }
 
 const ListSpacing = styled("div")`

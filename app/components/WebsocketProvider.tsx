@@ -190,7 +190,7 @@ class WebsocketProvider extends React.Component<Props> {
             if (collection?.updatedAt === collectionDescriptor.updatedAt) {
               continue;
             }
-            if (!collection?.documents?.length && !event.fetchIfMissing) {
+            if (!collection?.documents && !event.fetchIfMissing) {
               continue;
             }
 
@@ -528,13 +528,6 @@ class WebsocketProvider extends React.Component<Props> {
     this.socket.on("stars.delete", (event: WebsocketEntityDeletedEvent) => {
       stars.remove(event.modelId);
     });
-
-    this.socket.on(
-      "user.typing",
-      (event: { userId: string; documentId: string; commentId: string }) => {
-        comments.setTyping(event);
-      }
-    );
 
     this.socket.on("collections.add_user", async (event: Membership) => {
       memberships.add(event);

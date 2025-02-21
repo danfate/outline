@@ -1,8 +1,10 @@
 import { JSDOM } from "jsdom";
 import { Node } from "prosemirror-model";
+import ukkonen from "ukkonen";
 import { updateYFragment, yDocToProsemirrorJSON } from "y-prosemirror";
 import * as Y from "yjs";
 import textBetween from "@shared/editor/lib/textBetween";
+import { getTextSerializers } from "@shared/editor/lib/textSerializers";
 import { EditorStyleHelper } from "@shared/editor/styles/EditorStyleHelper";
 import { IconType, ProsemirrorData } from "@shared/types";
 import { determineIconType } from "@shared/utils/icon";
@@ -132,10 +134,10 @@ export class DocumentHelper {
    * Returns the document as plain text. This method uses the
    * collaborative state if available, otherwise it falls back to Markdown.
    *
-   * @param document The document or revision to convert
+   * @param document The document or revision or prosemirror data to convert
    * @returns The document content as plain text without formatting.
    */
-  static toPlainText(document: Document | Revision) {
+  static toPlainText(document: Document | Revision | ProsemirrorData) {
     const node = DocumentHelper.toProsemirror(document);
 
     return textBetween(node, 0, node.content.size, this.textSerializers);
@@ -231,6 +233,17 @@ export class DocumentHelper {
   ) {
     const node = DocumentHelper.toProsemirror(document);
     return ProsemirrorHelper.parseMentions(node, options);
+  }
+
+  /**
+   * Parse a list of document IDs contained in a document or revision
+   *
+   * @param document Document or Revision
+   * @returns An array of identifiers in passed document or revision
+   */
+  static parseDocumentIds(document: Document | Revision) {
+    const node = DocumentHelper.toProsemirror(document);
+    return ProsemirrorHelper.parseDocumentIds(node);
   }
 
   /**
@@ -466,30 +479,27 @@ export class DocumentHelper {
   }
 
   /**
-   * Compares two documents and returns true if the text content is equal. This does not take into account
-   * changes to other properties such as table column widths, other visual settings.
+   * Compares two documents or revisions and returns whether the text differs by more than the threshold.
    *
    * @param document The document to compare
    * @param other The other document to compare
-   * @returns True if the text content is equal
+   * @param threshold The threshold for the change in characters
+   * @returns True if the text differs by more than the threshold
    */
-  public static isTextContentEqual(
+  public static isChangeOverThreshold(
     before: Document | Revision | null,
-    after: Document | Revision | null
+    after: Document | Revision | null,
+    threshold: number
   ) {
     if (!before || !after) {
       return false;
     }
 
-    return (
-      before.title === after.title &&
-      this.toMarkdown(before) === this.toMarkdown(after)
-    );
+    const first = before.title + this.toPlainText(before);
+    const second = after.title + this.toPlainText(after);
+    const distance = ukkonen(first, second, threshold + 1);
+    return distance > threshold;
   }
 
-  private static textSerializers = Object.fromEntries(
-    Object.entries(schema.nodes)
-      .filter(([, n]) => n.spec.toPlainText)
-      .map(([name, n]) => [name, n.spec.toPlainText])
-  );
+  private static textSerializers = getTextSerializers(schema);
 }

@@ -1,28 +1,26 @@
-import throttle from "lodash/throttle";
 import { observer } from "mobx-react";
+import { darken } from "polished";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory, useLocation } from "react-router-dom";
 import scrollIntoView from "scroll-into-view-if-needed";
 import styled, { css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
-import { s } from "@shared/styles";
+import { s, hover } from "@shared/styles";
 import { ProsemirrorData } from "@shared/types";
+import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import Comment from "~/models/Comment";
 import Document from "~/models/Document";
-import { Avatar } from "~/components/Avatar";
+import { AvatarSize } from "~/components/Avatar";
 import { useDocumentContext } from "~/components/DocumentContext";
+import Facepile from "~/components/Facepile";
 import Fade from "~/components/Fade";
-import Flex from "~/components/Flex";
 import { ResizingHeightContainer } from "~/components/ResizingHeightContainer";
-import Typing from "~/components/Typing";
-import { WebsocketContext } from "~/components/WebsocketProvider";
-import useCurrentUser from "~/hooks/useCurrentUser";
+import { useLocationSidebarContext } from "~/hooks/useLocationSidebarContext";
 import useOnClickOutside from "~/hooks/useOnClickOutside";
 import usePersistedState from "~/hooks/usePersistedState";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
-import { hover } from "~/styles";
 import { sidebarAppearDuration } from "~/styles/animations";
 import CommentForm from "./CommentForm";
 import CommentThreadItem from "./CommentThreadItem";
@@ -40,27 +38,11 @@ type Props = {
   enableScroll: () => void;
   /** Disable scroll for the comments container */
   disableScroll: () => void;
+  /** Number of replies before collapsing */
+  collapseThreshold?: number;
+  /** Number of replies to display when collapsed */
+  collapseNumDisplayed?: number;
 };
-
-function useTypingIndicator({
-  document,
-  comment,
-}: Pick<Props, "document" | "comment">): [undefined, () => void] {
-  const socket = React.useContext(WebsocketContext);
-
-  const setIsTyping = React.useMemo(
-    () =>
-      throttle(() => {
-        socket?.emit("typing", {
-          documentId: document.id,
-          commentId: comment.id,
-        });
-      }, 500),
-    [socket, document.id, comment.id]
-  );
-
-  return [undefined, setIsTyping];
-}
 
 function CommentThread({
   comment: thread,
@@ -69,21 +51,20 @@ function CommentThread({
   focused,
   enableScroll,
   disableScroll,
+  collapseThreshold = 5,
+  collapseNumDisplayed = 3,
 }: Props) {
-  const [focusedOnMount] = React.useState(focused);
+  const [scrollOnMount] = React.useState(focused && !window.location.hash);
   const { editor } = useDocumentContext();
   const { comments } = useStores();
   const topRef = React.useRef<HTMLDivElement>(null);
   const replyRef = React.useRef<HTMLDivElement>(null);
-  const user = useCurrentUser();
   const { t } = useTranslation();
   const history = useHistory();
   const location = useLocation();
+  const sidebarContext = useLocationSidebarContext();
   const [autoFocus, setAutoFocus] = React.useState(thread.isNew);
-  const [, setIsTyping] = useTypingIndicator({
-    document,
-    comment: thread,
-  });
+
   const can = usePolicy(document);
 
   const [draft, onSaveDraft] = usePersistedState<ProsemirrorData | undefined>(
@@ -93,14 +74,25 @@ function CommentThread({
 
   const canReply = can.comment && !thread.isResolved;
 
-  const highlightedCommentMarks = editor
-    ?.getComments()
-    .filter((comment) => comment.id === thread.id);
-  const highlightedText = highlightedCommentMarks?.map((c) => c.text).join("");
+  const highlightedText = ProsemirrorHelper.getAnchorTextForComment(
+    editor?.getComments() ?? [],
+    thread.id
+  );
 
   const commentsInThread = comments
     .inThread(thread.id)
     .filter((comment) => !comment.isNew);
+
+  const [collapse, setCollapse] = React.useState(() => {
+    const numReplies = commentsInThread.length - 1;
+    if (numReplies >= collapseThreshold) {
+      return {
+        begin: 1,
+        final: commentsInThread.length - collapseNumDisplayed - 1,
+      };
+    }
+    return null;
+  });
 
   useOnClickOutside(topRef, (event) => {
     if (
@@ -111,7 +103,10 @@ function CommentThread({
       history.replace({
         search: location.search,
         pathname: location.pathname,
-        state: { commentId: undefined },
+        state: {
+          commentId: undefined,
+          sidebarContext,
+        },
       });
     }
   });
@@ -125,8 +120,38 @@ function CommentThread({
       // Clear any commentId from the URL when explicitly focusing a thread
       search: thread.isResolved ? "resolved=" : "",
       pathname: location.pathname.replace(/\/history$/, ""),
-      state: { commentId: thread.id },
+      state: {
+        commentId: thread.id,
+        sidebarContext,
+      },
     });
+  };
+
+  const handleClickExpand = (ev: React.SyntheticEvent) => {
+    ev.stopPropagation();
+    setCollapse(null);
+  };
+
+  const renderShowMore = (collapse: { begin: number; final: number }) => {
+    const count = collapse.final - collapse.begin + 1;
+    const createdBy = commentsInThread
+      .slice(collapse.begin, collapse.final + 1)
+      .map((c) => c.createdBy);
+    const users = Array.from(new Set(createdBy));
+    const limit = 3;
+    const overflow = users.length - limit;
+
+    return (
+      <ShowMore onClick={handleClickExpand} key="show-more">
+        {t("Show {{ count }} reply", { count })}
+        <Facepile
+          users={users}
+          limit={limit}
+          overflow={overflow}
+          size={AvatarSize.Medium}
+        />
+      </ShowMore>
+    );
   };
 
   React.useEffect(() => {
@@ -137,7 +162,7 @@ function CommentThread({
 
   React.useEffect(() => {
     if (focused) {
-      if (focusedOnMount) {
+      if (scrollOnMount) {
         setTimeout(() => {
           if (!topRef.current) {
             return;
@@ -181,7 +206,7 @@ function CommentThread({
         isMarkVisible ? 0 : sidebarAppearDuration
       );
     }
-  }, [focused, focusedOnMount, thread.id]);
+  }, [focused, scrollOnMount, thread.id]);
 
   return (
     <Thread
@@ -192,8 +217,17 @@ function CommentThread({
       onClick={handleClickThread}
     >
       {commentsInThread.map((comment, index) => {
+        if (collapse !== null) {
+          if (index === collapse.begin) {
+            return renderShowMore(collapse);
+          } else if (index > collapse.begin && index <= collapse.final) {
+            return null;
+          }
+        }
+
         const firstOfAuthor =
           index === 0 ||
+          (collapse && index === collapse.final + 1) ||
           comment.createdById !== commentsInThread[index - 1].createdById;
         const lastOfAuthor =
           index === commentsInThread.length - 1 ||
@@ -219,15 +253,6 @@ function CommentThread({
         );
       })}
 
-      {thread.currentlyTypingUsers
-        .filter((typing) => typing.id !== user.id)
-        .map((typing) => (
-          <Flex gap={8} key={typing.id}>
-            <Avatar model={typing} size={24} />
-            <Typing />
-          </Flex>
-        ))}
-
       <ResizingHeightContainer hideOverflow={false} ref={replyRef}>
         {(focused || draft || commentsInThread.length === 0) && canReply && (
           <Fade timing={100}>
@@ -237,7 +262,6 @@ function CommentThread({
               draft={draft}
               documentId={document.id}
               thread={thread}
-              onTyping={setIsTyping}
               standalone={commentsInThread.length === 0}
               dir={document.dir}
               autoFocus={autoFocus}
@@ -274,6 +298,29 @@ const Reply = styled.button`
   ${breakpoint("tablet")`
     opacity: 0;
   `}
+`;
+
+const ShowMore = styled.div<{ $dir?: "rtl" | "ltr" }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1px;
+  margin-left: ${(props) => (props.$dir === "rtl" ? 0 : 32)}px;
+  margin-right: ${(props) => (props.$dir !== "rtl" ? 0 : 32)}px;
+  padding: 8px 12px;
+  color: ${s("textTertiary")};
+  background: ${(props) => darken(0.015, props.theme.backgroundSecondary)};
+  cursor: var(--pointer);
+  font-size: 13px;
+
+  &: ${hover} {
+    color: ${s("textSecondary")};
+    background: ${s("backgroundTertiary")};
+  }
+
+  * {
+    border-color: ${(props) => darken(0.015, props.theme.backgroundSecondary)};
+  }
 `;
 
 const Thread = styled.div<{

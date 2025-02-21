@@ -28,7 +28,7 @@ export const CommentsCreateSchema = BaseSchema.extend({
     id: z.string().uuid().optional(),
 
     /** Create comment for this document */
-    documentId: z.string(),
+    documentId: z.string().uuid(),
 
     /** Create comment under this parent */
     parentCommentId: z.string().uuid().optional(),
@@ -65,13 +65,18 @@ export const CommentsListSchema = BaseSchema.extend({
     parentCommentId: z.string().uuid().optional(),
     /** Comment statuses to include in results */
     statusFilter: z.nativeEnum(CommentStatusFilter).array().optional(),
+    /** Whether to include anchor text, if it exists */
+    includeAnchorText: z.boolean().optional(),
   }),
 });
 
 export type CommentsListReq = z.infer<typeof CommentsListSchema>;
 
 export const CommentsInfoSchema = z.object({
-  body: BaseIdSchema,
+  body: BaseIdSchema.extend({
+    /** Whether to include anchor text, if it exists */
+    includeAnchorText: z.boolean().optional(),
+  }),
 });
 
 export type CommentsInfoReq = z.infer<typeof CommentsInfoSchema>;

@@ -6,6 +6,7 @@ import JSZip from "jszip";
 import Router from "koa-router";
 import escapeRegExp from "lodash/escapeRegExp";
 import has from "lodash/has";
+import isNil from "lodash/isNil";
 import remove from "lodash/remove";
 import uniq from "lodash/uniq";
 import mime from "mime-types";
@@ -573,12 +574,13 @@ router.post(
       teamId: teamFromCtx?.id,
     });
     const isPublic = cannot(user, "read", document);
-    const serializedDocument = await presentDocument(ctx, document, {
-      isPublic,
-      shareId,
-    });
-
-    const team = await document.$get("team");
+    const [serializedDocument, team] = await Promise.all([
+      presentDocument(ctx, document, {
+        isPublic,
+        shareId,
+      }),
+      teamFromCtx?.id === document.teamId ? teamFromCtx : document.$get("team"),
+    ]);
 
     // Passing apiVersion=2 has a single effect, to change the response payload to
     // include top level keys for document, sharedTree, and team.
@@ -828,13 +830,14 @@ router.post(
         }).findByPk(destCollectionId)
       : undefined;
 
-    if (!destCollection?.isActive) {
+    // In case of workspace templates, both source and destination collections are undefined.
+    if (!document.isWorkspaceTemplate && !destCollection?.isActive) {
       throw ValidationError(
         "Unable to restore, the collection may have been deleted or archived"
       );
     }
 
-    // Skip this for drafts of a deleted collection as they won't have sourceCollectionId
+    // Skip this for workspace templates and drafts of a deleted collection as they won't have sourceCollectionId.
     if (sourceCollectionId && sourceCollectionId !== destCollectionId) {
       authorize(user, "updateDocument", srcCollection);
       await srcCollection?.removeDocumentInStructure(document, {
@@ -843,7 +846,19 @@ router.post(
       });
     }
 
-    if (document.deletedAt) {
+    if (document.deletedAt && document.isWorkspaceTemplate) {
+      authorize(user, "restore", document);
+
+      await document.restore({ transaction });
+      await Event.createFromContext(ctx, {
+        name: "documents.restore",
+        documentId: document.id,
+        collectionId: document.collectionId,
+        data: {
+          title: document.title,
+        },
+      });
+    } else if (document.deletedAt) {
       authorize(user, "restore", document);
       authorize(user, "updateDocument", destCollection);
 
@@ -1273,10 +1288,9 @@ router.post(
       document,
       title,
       publish,
-      transaction,
       recursive,
       parentDocumentId,
-      ip: ctx.request.ip,
+      ctx,
     });
 
     ctx.body = {
@@ -1535,7 +1549,6 @@ router.post(
       collectionId,
       parentDocumentId,
       publish,
-      ip: ctx.request.ip,
     });
     const response: DocumentImportTaskResponse = await job.finished();
     if ("error" in response) {
@@ -1562,6 +1575,7 @@ router.post(
   transaction(),
   async (ctx: APIContext<T.DocumentsCreateReq>) => {
     const {
+      id,
       title,
       text,
       icon,
@@ -1629,13 +1643,11 @@ router.post(
     }
 
     const document = await documentCreator({
+      id,
       title,
-      text: await TextHelper.replaceImagesWithAttachments(
-        text,
-        user,
-        ctx.request.ip,
-        transaction
-      ),
+      text: !isNil(text)
+        ? await TextHelper.replaceImagesWithAttachments(ctx, text, user)
+        : text,
       icon,
       color,
       createdAt,
@@ -1647,8 +1659,7 @@ router.post(
       fullWidth,
       user,
       editorVersion,
-      ip: ctx.request.ip,
-      transaction,
+      ctx,
     });
 
     if (collection) {
@@ -1669,8 +1680,8 @@ router.post(
   rateLimiter(RateLimiterStrategy.OneHundredPerHour),
   transaction(),
   async (ctx: APIContext<T.DocumentsAddUserReq>) => {
-    const { auth, transaction } = ctx.state;
-    const actor = auth.user;
+    const { transaction } = ctx.state;
+    const { user: actor } = ctx.state.auth;
     const { id, userId, permission } = ctx.input.body;
 
     if (userId === actor.id) {
@@ -1723,30 +1734,18 @@ router.post(
         permission: permission || user.defaultDocumentPermission,
         createdById: actor.id,
       },
-      transaction,
       lock: transaction.LOCK.UPDATE,
+      ...ctx.context,
     });
 
-    if (permission) {
+    if (!isNew && permission) {
       membership.permission = permission;
 
       // disconnect from the source if the permission is manually updated
       membership.sourceId = null;
 
-      await membership.save({ transaction });
+      await membership.save(ctx.context);
     }
-
-    await Event.createFromContext(ctx, {
-      name: "documents.add_user",
-      userId,
-      modelId: membership.id,
-      documentId: document.id,
-      data: {
-        title: document.title,
-        isNew,
-        permission: membership.permission,
-      },
-    });
 
     ctx.body = {
       data: {
@@ -1794,14 +1793,7 @@ router.post(
       rejectOnEmpty: true,
     });
 
-    await membership.destroy({ transaction });
-
-    await Event.createFromContext(ctx, {
-      name: "documents.remove_user",
-      userId,
-      modelId: membership.id,
-      documentId: document.id,
-    });
+    await membership.destroy(ctx.context);
 
     ctx.body = {
       success: true,
@@ -1833,7 +1825,7 @@ router.post(
     authorize(user, "update", document);
     authorize(user, "read", group);
 
-    const [membership, isNew] = await GroupMembership.findOrCreate({
+    const [membership, created] = await GroupMembership.findOrCreate({
       where: {
         documentId: id,
         groupId,
@@ -1843,29 +1835,17 @@ router.post(
         createdById: user.id,
       },
       lock: transaction.LOCK.UPDATE,
-      transaction,
+      ...ctx.context,
     });
 
-    if (permission) {
+    if (!created && permission) {
       membership.permission = permission;
 
       // disconnect from the source if the permission is manually updated
       membership.sourceId = null;
 
-      await membership.save({ transaction });
+      await membership.save(ctx.context);
     }
-
-    await Event.createFromContext(ctx, {
-      name: "documents.add_group",
-      documentId: document.id,
-      modelId: groupId,
-      data: {
-        name: group.name,
-        isNew,
-        permission: membership.permission,
-        membershipId: membership.id,
-      },
-    });
 
     ctx.body = {
       data: {
@@ -1909,17 +1889,7 @@ router.post(
       rejectOnEmpty: true,
     });
 
-    await membership.destroy({ transaction });
-
-    await Event.createFromContext(ctx, {
-      name: "documents.remove_group",
-      documentId: document.id,
-      modelId: groupId,
-      data: {
-        name: group.name,
-        membershipId: membership.id,
-      },
-    });
+    await membership.destroy(ctx.context);
 
     ctx.body = {
       success: true,

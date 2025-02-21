@@ -26,8 +26,10 @@ import {
   TeamPreference,
 } from "@shared/types";
 import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
+import { TextHelper } from "@shared/utils/TextHelper";
 import { parseDomain } from "@shared/utils/domains";
 import { determineIconType } from "@shared/utils/icon";
+import { isModKey } from "@shared/utils/keyboard";
 import RootStore from "~/stores/RootStore";
 import Document from "~/models/Document";
 import Revision from "~/models/Revision";
@@ -40,13 +42,12 @@ import LoadingIndicator from "~/components/LoadingIndicator";
 import PageTitle from "~/components/PageTitle";
 import PlaceholderDocument from "~/components/PlaceholderDocument";
 import RegisterKeyDown from "~/components/RegisterKeyDown";
+import { SidebarContextType } from "~/components/Sidebar/components/SidebarContext";
 import withStores from "~/components/withStores";
 import type { Editor as TEditor } from "~/editor";
-import { SearchResult } from "~/editor/components/LinkEditor";
+import { Properties } from "~/types";
 import { client } from "~/utils/ApiClient";
-import { replaceTitleVariables } from "~/utils/date";
 import { emojiToUrl } from "~/utils/emoji";
-import { isModKey } from "~/utils/keyboard";
 
 import {
   documentHistoryPath,
@@ -58,7 +59,6 @@ import Contents from "./Contents";
 import Editor from "./Editor";
 import Header from "./Header";
 import KeyboardShortcutsButton from "./KeyboardShortcutsButton";
-import MarkAsViewed from "./MarkAsViewed";
 import { MeasuredContainer } from "./MeasuredContainer";
 import Notices from "./Notices";
 import PublicReferences from "./PublicReferences";
@@ -77,6 +77,7 @@ type LocationState = {
   title?: string;
   restore?: boolean;
   revisionId?: string;
+  sidebarContext?: SidebarContextType;
 };
 
 type Props = WithTranslation &
@@ -88,9 +89,11 @@ type Props = WithTranslation &
     revision?: Revision;
     readOnly: boolean;
     shareId?: string;
-    tocPosition?: TOCPosition;
-    onCreateLink?: (title: string, nested?: boolean) => Promise<string>;
-    onSearchLink?: (term: string) => Promise<SearchResult[]>;
+    tocPosition?: TOCPosition | false;
+    onCreateLink?: (
+      params: Properties<Document>,
+      nested?: boolean
+    ) => Promise<string>;
   };
 
 @observer
@@ -151,7 +154,13 @@ class DocumentScene extends React.Component<Props> {
     }
 
     const { view, schema } = editorRef;
-    const doc = Node.fromJSON(schema, template.data);
+    const doc = Node.fromJSON(
+      schema,
+      ProsemirrorHelper.replaceTemplateVariables(
+        template.data,
+        this.props.auth.user!
+      )
+    );
 
     if (doc) {
       view.dispatch(
@@ -168,9 +177,9 @@ class DocumentScene extends React.Component<Props> {
     }
 
     if (!this.title) {
-      const title = replaceTitleVariables(
+      const title = TextHelper.replaceTemplateVariables(
         template.title,
-        this.props.auth.user || undefined
+        this.props.auth.user!
       );
       this.title = title;
       this.props.document.title = title;
@@ -215,13 +224,15 @@ class DocumentScene extends React.Component<Props> {
 
   onUndoRedo = (event: KeyboardEvent) => {
     if (isModKey(event)) {
+      event.preventDefault();
+
       if (event.shiftKey) {
-        if (this.editor.current?.redo()) {
-          event.preventDefault();
+        if (!this.props.readOnly) {
+          this.editor.current?.commands.redo();
         }
       } else {
-        if (this.editor.current?.undo()) {
-          event.preventDefault();
+        if (!this.props.readOnly) {
+          this.editor.current?.commands.undo();
         }
       }
     }
@@ -244,7 +255,10 @@ class DocumentScene extends React.Component<Props> {
       const { document, abilities } = this.props;
 
       if (abilities.update) {
-        this.props.history.push(documentEditPath(document));
+        this.props.history.push({
+          pathname: documentEditPath(document),
+          state: { sidebarContext: this.props.location.state?.sidebarContext },
+        });
       }
     } else if (this.editor.current?.isBlurred) {
       ev.preventDefault();
@@ -263,9 +277,15 @@ class DocumentScene extends React.Component<Props> {
     const { document, location } = this.props;
 
     if (location.pathname.endsWith("history")) {
-      this.props.history.push(document.url);
+      this.props.history.push({
+        pathname: document.url,
+        state: { sidebarContext: this.props.location.state?.sidebarContext },
+      });
     } else {
-      this.props.history.push(documentHistoryPath(document));
+      this.props.history.push({
+        pathname: documentHistoryPath(document),
+        state: { sidebarContext: this.props.location.state?.sidebarContext },
+      });
     }
   };
 
@@ -331,10 +351,16 @@ class DocumentScene extends React.Component<Props> {
       this.isEditorDirty = false;
 
       if (options.done) {
-        this.props.history.push(savedDocument.url);
+        this.props.history.push({
+          pathname: savedDocument.url,
+          state: { sidebarContext: this.props.location.state?.sidebarContext },
+        });
         this.props.ui.setActiveDocument(savedDocument);
       } else if (document.isNew) {
-        this.props.history.push(documentEditPath(savedDocument));
+        this.props.history.push({
+          pathname: documentEditPath(savedDocument),
+          state: { sidebarContext: this.props.location.state?.sidebarContext },
+        });
         this.props.ui.setActiveDocument(savedDocument);
       }
     } catch (err) {
@@ -354,24 +380,23 @@ class DocumentScene extends React.Component<Props> {
     AUTOSAVE_DELAY
   );
 
-  updateIsDirty = () => {
+  updateIsDirty = action(() => {
     const { document } = this.props;
     const doc = this.editor.current?.view.state.doc;
-    this.isEditorDirty = !isEqual(doc?.toJSON(), document.data);
 
-    // a single hash is a doc with just an empty title
+    this.isEditorDirty = !isEqual(doc?.toJSON(), document.data);
     this.isEmpty = (!doc || ProsemirrorHelper.isEmpty(doc)) && !this.title;
-  };
+  });
 
   updateIsDirtyDebounced = debounce(this.updateIsDirty, 500);
 
-  onFileUploadStart = () => {
+  onFileUploadStart = action(() => {
     this.isUploading = true;
-  };
+  });
 
-  onFileUploadStop = () => {
+  onFileUploadStop = action(() => {
     this.isUploading = false;
-  };
+  });
 
   handleChangeTitle = action((value: string) => {
     this.title = value;
@@ -388,7 +413,10 @@ class DocumentScene extends React.Component<Props> {
 
   goBack = () => {
     if (!this.props.readOnly) {
-      this.props.history.push(this.props.document.url);
+      this.props.history.push({
+        pathname: this.props.document.url,
+        state: { sidebarContext: this.props.location.state?.sidebarContext },
+      });
     }
   };
 
@@ -409,12 +437,15 @@ class DocumentScene extends React.Component<Props> {
     const embedsDisabled =
       (team && team.documentEmbeds === false) || document.embedsDisabled;
 
-    const showContents =
-      ui.tocVisible === true || (isShare && ui.tocVisible !== false);
     const tocPos =
       tocPosition ??
       ((team?.getPreference(TeamPreference.TocPosition) as TOCPosition) ||
         TOCPosition.Left);
+    const showContents =
+      tocPos &&
+      (isShare
+        ? ui.tocVisible !== false
+        : !document.isTemplate && ui.tocVisible === true);
     const multiplayerEditor =
       !document.isArchived && !document.isDeleted && !revision && !isShare;
 
@@ -511,14 +542,6 @@ class DocumentScene extends React.Component<Props> {
                   </RevisionContainer>
                 ) : (
                   <>
-                    {showContents && (
-                      <ContentsContainer
-                        docFullWidth={document.fullWidth}
-                        position={tocPos}
-                      >
-                        <Contents />
-                      </ContentsContainer>
-                    )}
                     <MeasuredContainer
                       name="document"
                       as={EditorContainer}
@@ -543,7 +566,6 @@ class DocumentScene extends React.Component<Props> {
                         onSynced={this.onSynced}
                         onFileUploadStart={this.onFileUploadStart}
                         onFileUploadStop={this.onFileUploadStop}
-                        onSearchLink={this.props.onSearchLink}
                         onCreateLink={this.props.onCreateLink}
                         onChangeTitle={this.handleChangeTitle}
                         onChangeIcon={this.handleChangeIcon}
@@ -553,8 +575,9 @@ class DocumentScene extends React.Component<Props> {
                         readOnly={readOnly}
                         canUpdate={abilities.update}
                         canComment={abilities.comment}
+                        autoFocus={document.createdAt === document.updatedAt}
                       >
-                        {shareId && (
+                        {shareId ? (
                           <ReferencesWrapper>
                             <PublicReferences
                               shareId={shareId}
@@ -562,17 +585,21 @@ class DocumentScene extends React.Component<Props> {
                               sharedTree={this.props.sharedTree}
                             />
                           </ReferencesWrapper>
-                        )}
-                        {!isShare && !revision && (
-                          <>
-                            <MarkAsViewed document={document} />
-                            <ReferencesWrapper>
-                              <References document={document} />
-                            </ReferencesWrapper>
-                          </>
-                        )}
+                        ) : !revision ? (
+                          <ReferencesWrapper>
+                            <References document={document} />
+                          </ReferencesWrapper>
+                        ) : null}
                       </Editor>
                     </MeasuredContainer>
+                    {showContents && (
+                      <ContentsContainer
+                        docFullWidth={document.fullWidth}
+                        position={tocPos}
+                      >
+                        <Contents />
+                      </ContentsContainer>
+                    )}
                   </>
                 )}
               </React.Suspense>
@@ -597,7 +624,7 @@ class DocumentScene extends React.Component<Props> {
 
 type MainProps = {
   fullWidth: boolean;
-  tocPosition: TOCPosition;
+  tocPosition: TOCPosition | false;
 };
 
 const Main = styled.div<MainProps>`
@@ -625,7 +652,7 @@ const Main = styled.div<MainProps>`
 
 type ContentsContainerProps = {
   docFullWidth: boolean;
-  position: TOCPosition;
+  position: TOCPosition | false;
 };
 
 const ContentsContainer = styled.div<ContentsContainerProps>`
@@ -643,7 +670,7 @@ const ContentsContainer = styled.div<ContentsContainerProps>`
 type EditorContainerProps = {
   docFullWidth: boolean;
   showContents: boolean;
-  tocPosition: TOCPosition;
+  tocPosition: TOCPosition | false;
 };
 
 const EditorContainer = styled.div<EditorContainerProps>`
@@ -695,7 +722,6 @@ const Footer = styled.div`
 const Background = styled(Container)`
   position: relative;
   background: ${s("background")};
-  transition: ${s("backgroundTransition")};
 `;
 
 const ReferencesWrapper = styled.div`

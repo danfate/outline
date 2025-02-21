@@ -124,7 +124,6 @@ declare module "styled-components" {
     backgroundSecondary: string;
     backgroundTertiary: string;
     backgroundQuaternary: string;
-    backgroundTransition: string;
     accent: string;
     accentText: string;
     link: string;
@@ -158,6 +157,7 @@ declare module "styled-components" {
     inputBorderFocused: string;
     listItemHoverBackground: string;
     mentionBackground: string;
+    mentionHoverBackground: string;
     buttonNeutralBackground: string;
     buttonNeutralText: string;
     buttonNeutralBorder: string;

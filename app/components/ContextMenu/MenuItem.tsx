@@ -23,7 +23,7 @@ type Props = {
   as?: string | React.ComponentType<any>;
   hide?: () => void;
   level?: number;
-  icon?: React.ReactElement;
+  icon?: React.ReactNode;
   children?: React.ReactNode;
   ref?: React.LegacyRef<HTMLButtonElement> | undefined;
 };
@@ -109,6 +109,8 @@ const Title = styled.div`
   ${ellipsis()}
   flex-grow: 1;
   display: flex;
+  align-items: center;
+  gap: 8px;
 `;
 
 type MenuAnchorProps = {

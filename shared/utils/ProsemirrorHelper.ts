@@ -1,7 +1,9 @@
 import { Node, Schema } from "prosemirror-model";
 import headingToSlug from "../editor/lib/headingToSlug";
 import textBetween from "../editor/lib/textBetween";
+import { getTextSerializers } from "../editor/lib/textSerializers";
 import { ProsemirrorData } from "../types";
+import { TextHelper } from "./TextHelper";
 
 export type Heading = {
   /* The heading in plain text */
@@ -27,6 +29,11 @@ export type Task = {
   /* Whether the task is completed or not */
   completed: boolean;
 };
+
+interface User {
+  name: string;
+  language: string | null;
+}
 
 export const attachmentRedirectRegex =
   /\/api\/attachments\.redirect\?id=(?<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
@@ -84,12 +91,7 @@ export class ProsemirrorHelper {
    * @returns The document content as plain text without formatting.
    */
   static toPlainText(root: Node, schema: Schema) {
-    const textSerializers = Object.fromEntries(
-      Object.entries(schema.nodes)
-        .filter(([, node]) => node.spec.toPlainText)
-        .map(([name, node]) => [name, node.spec.toPlainText])
-    );
-
+    const textSerializers = getTextSerializers(schema);
     return textBetween(root, 0, root.content.size, textSerializers);
   }
 
@@ -147,11 +149,7 @@ export class ProsemirrorHelper {
       return !doc || doc.textContent.trim() === "";
     }
 
-    const textSerializers = Object.fromEntries(
-      Object.entries(schema.nodes)
-        .filter(([, node]) => node.spec.toPlainText)
-        .map(([name, node]) => [name, node.spec.toPlainText])
-    );
+    const textSerializers = getTextSerializers(schema);
 
     let empty = true;
     doc.descendants((child: Node) => {
@@ -196,6 +194,24 @@ export class ProsemirrorHelper {
     });
 
     return comments;
+  }
+
+  /**
+   * Builds the consolidated anchor text for the given comment-id.
+   *
+   * @param marks all available comment marks in a document.
+   * @param commentId the comment-id to build the anchor text.
+   * @returns consolidated anchor text.
+   */
+  static getAnchorTextForComment(
+    marks: CommentMark[],
+    commentId: string
+  ): string | undefined {
+    const anchorTexts = marks
+      .filter((mark) => mark.id === commentId)
+      .map((mark) => mark.text);
+
+    return anchorTexts.length ? anchorTexts.join("") : undefined;
   }
 
   /**
@@ -306,5 +322,28 @@ export class ProsemirrorHelper {
       }
     });
     return headings;
+  }
+
+  /**
+   * Replaces all template variables in the node.
+   *
+   * @param data The ProsemirrorData object to replace variables in
+   * @param user The user to use for replacing variables
+   * @returns The content with variables replaced
+   */
+  static replaceTemplateVariables(data: ProsemirrorData, user: User) {
+    function replace(node: ProsemirrorData) {
+      if (node.type === "text" && node.text) {
+        node.text = TextHelper.replaceTemplateVariables(node.text, user);
+      }
+
+      if (node.content) {
+        node.content.forEach(replace);
+      }
+
+      return node;
+    }
+
+    return replace(data);
   }
 }

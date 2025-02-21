@@ -1,11 +1,6 @@
 import Router from "koa-router";
 import { Op, WhereOptions } from "sequelize";
 import { MAX_AVATAR_DISPLAY } from "@shared/constants";
-import groupCreator from "@server/commands/groupCreator";
-import groupDestroyer from "@server/commands/groupDestroyer";
-import groupUpdater from "@server/commands/groupUpdater";
-import groupUserCreator from "@server/commands/groupUserCreator";
-import groupUserDestroyer from "@server/commands/groupUserDestroyer";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import { transaction } from "@server/middlewares/transaction";
@@ -31,7 +26,7 @@ router.post(
   pagination(),
   validate(T.GroupsListSchema),
   async (ctx: APIContext<T.GroupsListReq>) => {
-    const { sort, direction, query, userId, name } = ctx.input.body;
+    const { sort, direction, query, userId, externalId, name } = ctx.input.body;
     const { user } = ctx.state.auth;
     authorize(user, "listGroups", user.team);
 
@@ -52,6 +47,13 @@ router.post(
         name: {
           [Op.iLike]: `%${query}%`,
         },
+      };
+    }
+
+    if (externalId) {
+      where = {
+        ...where,
+        externalId,
       };
     }
 
@@ -95,10 +97,14 @@ router.post(
   auth(),
   validate(T.GroupsInfoSchema),
   async (ctx: APIContext<T.GroupsInfoReq>) => {
-    const { id } = ctx.input.body;
+    const { id, externalId } = ctx.input.body;
     const { user } = ctx.state.auth;
 
-    const group = await Group.findByPk(id);
+    const group = id
+      ? await Group.findByPk(id)
+      : externalId
+      ? await Group.findOne({ where: { externalId } })
+      : null;
     authorize(user, "read", group);
 
     ctx.body = {
@@ -110,21 +116,20 @@ router.post(
 
 router.post(
   "groups.create",
-  rateLimiter(RateLimiterStrategy.TenPerHour),
+  rateLimiter(RateLimiterStrategy.TenPerMinute),
   auth(),
   validate(T.GroupsCreateSchema),
   transaction(),
   async (ctx: APIContext<T.GroupsCreateReq>) => {
-    const { name } = ctx.input.body;
+    const { name, externalId } = ctx.input.body;
     const { user } = ctx.state.auth;
-    const { transaction } = ctx.state;
     authorize(user, "createGroup", user.team);
 
-    const group = await groupCreator({
+    const group = await Group.createWithCtx(ctx, {
       name,
-      actor: user,
-      ip: ctx.request.ip,
-      transaction,
+      externalId,
+      teamId: user.teamId,
+      createdById: user.id,
     });
 
     ctx.body = {
@@ -140,20 +145,17 @@ router.post(
   validate(T.GroupsUpdateSchema),
   transaction(),
   async (ctx: APIContext<T.GroupsUpdateReq>) => {
-    const { id, name } = ctx.input.body;
+    const { id } = ctx.input.body;
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
 
-    let group = await Group.findByPk(id, { transaction });
+    const group = await Group.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
     authorize(user, "update", group);
 
-    group = await groupUpdater({
-      group,
-      name,
-      actor: user,
-      ip: ctx.request.ip,
-      transaction,
-    });
+    await group.updateWithCtx(ctx, ctx.input.body);
 
     ctx.body = {
       data: await presentGroup(group),
@@ -172,15 +174,13 @@ router.post(
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
 
-    const group = await Group.findByPk(id, { transaction });
+    const group = await Group.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
     authorize(user, "delete", group);
 
-    await groupDestroyer({
-      group,
-      actor: user,
-      ip: ctx.request.ip,
-      transaction,
-    });
+    await group.destroyWithCtx(ctx);
 
     ctx.body = {
       success: true,
@@ -261,13 +261,21 @@ router.post(
     const group = await Group.findByPk(id, { transaction });
     authorize(actor, "update", group);
 
-    const groupUser = await groupUserCreator({
-      group,
-      user,
-      actor,
-      ip: ctx.request.ip,
-      transaction,
-    });
+    const [groupUser] = await GroupUser.findOrCreateWithCtx(
+      ctx,
+      {
+        where: {
+          groupId: group.id,
+          userId: user.id,
+        },
+        defaults: {
+          createdById: actor.id,
+        },
+      },
+      { name: "add_user" }
+    );
+
+    groupUser.user = user;
 
     ctx.body = {
       data: {
@@ -295,13 +303,16 @@ router.post(
     const user = await User.findByPk(userId, { transaction });
     authorize(actor, "read", user);
 
-    await groupUserDestroyer({
-      group,
-      user,
-      actor,
-      ip: ctx.request.ip,
+    const groupUser = await GroupUser.unscoped().findOne({
+      where: {
+        groupId: group.id,
+        userId: user.id,
+      },
       transaction,
+      lock: transaction.LOCK.UPDATE,
     });
+
+    await groupUser?.destroyWithCtx(ctx, { name: "remove_user" });
 
     ctx.body = {
       data: {

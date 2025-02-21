@@ -35,6 +35,15 @@ this is code
   ).toBe(true);
 });
 
+test("returns true for latex fence", () => {
+  expect(isMarkdown(`\$i\$`)).toBe(true);
+  expect(
+    isMarkdown(`\$0.00
+random content
+\$1.00`)
+  ).toBe(false);
+});
+
 test("returns false for non-closed fence", () => {
   expect(
     isMarkdown(`\`\`\`

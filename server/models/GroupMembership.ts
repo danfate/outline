@@ -21,10 +21,12 @@ import {
   AfterDestroy,
 } from "sequelize-typescript";
 import { CollectionPermission, DocumentPermission } from "@shared/types";
+import { APIContext } from "@server/types";
 import Collection from "./Collection";
 import Document from "./Document";
 import Group from "./Group";
 import User from "./User";
+import { type HookContext } from "./base/Model";
 import ParanoidModel from "./base/ParanoidModel";
 import Fix from "./decorators/Fix";
 
@@ -123,6 +125,10 @@ class GroupMembership extends ParanoidModel<
   @Column(DataType.UUID)
   createdById: string;
 
+  get modelId() {
+    return this.groupId;
+  }
+
   // static methods
 
   /**
@@ -152,7 +158,7 @@ class GroupMembership extends ParanoidModel<
             permission: membership.permission,
             createdById: membership.createdById,
           },
-          { transaction }
+          { transaction, hooks: false }
         )
       )
     );
@@ -203,6 +209,17 @@ class GroupMembership extends ParanoidModel<
     return this.recreateSourcedMemberships(model, options);
   }
 
+  @AfterCreate
+  static async publishAddGroupEventAfterCreate(
+    model: GroupMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "add_group", {
+      membershipId: model.id,
+      isNew: true,
+    });
+  }
+
   @AfterUpdate
   static async updateSourcedMemberships(
     model: GroupMembership,
@@ -230,6 +247,17 @@ class GroupMembership extends ParanoidModel<
     }
   }
 
+  @AfterUpdate
+  static async publishAddGroupEventAfterUpdate(
+    model: GroupMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "add_group", {
+      membershipId: model.id,
+      isNew: false,
+    });
+  }
+
   @AfterDestroy
   static async destroySourcedMemberships(
     model: GroupMembership,
@@ -246,6 +274,16 @@ class GroupMembership extends ParanoidModel<
         sourceId: model.id,
       },
       transaction,
+    });
+  }
+
+  @AfterDestroy
+  static async publishRemoveGroupEvent(
+    model: GroupMembership,
+    context: APIContext["context"]
+  ) {
+    await model.insertEvent(context, "remove_group", {
+      membershipId: model.id,
     });
   }
 
@@ -269,13 +307,15 @@ class GroupMembership extends ParanoidModel<
       transaction,
     });
 
-    const document = await Document.unscoped().findOne({
-      attributes: ["id"],
-      where: {
-        id: model.documentId,
-      },
-      transaction,
-    });
+    const document = await Document.unscoped()
+      .scope("withoutState")
+      .findOne({
+        attributes: ["id"],
+        where: {
+          id: model.documentId,
+        },
+        transaction,
+      });
     if (!document) {
       return;
     }
@@ -304,8 +344,26 @@ class GroupMembership extends ParanoidModel<
         },
         {
           transaction,
+          hooks: false,
         }
       );
+    }
+  }
+
+  private async insertEvent(
+    ctx: APIContext["context"],
+    name: string,
+    data: Record<string, unknown>
+  ) {
+    const hookContext = {
+      ...ctx,
+      event: { name, data, create: true },
+    } as HookContext;
+
+    if (this.collectionId) {
+      await Collection.insertEvent(name, this, hookContext);
+    } else {
+      await Document.insertEvent(name, this, hookContext);
     }
   }
 }

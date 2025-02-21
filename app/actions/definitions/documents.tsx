@@ -32,6 +32,7 @@ import {
 } from "outline-icons";
 import * as React from "react";
 import { toast } from "sonner";
+import Icon from "@shared/components/Icon";
 import {
   ExportContentType,
   TeamPreference,
@@ -45,8 +46,7 @@ import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
 import DocumentPublish from "~/scenes/DocumentPublish";
 import DeleteDocumentsInTrash from "~/scenes/Trash/components/DeleteDocumentsInTrash";
 import ConfirmationDialog from "~/components/ConfirmationDialog";
-import DuplicateDialog from "~/components/DuplicateDialog";
-import Icon from "~/components/Icon";
+import DocumentCopy from "~/components/DocumentCopy";
 import MarkdownIcon from "~/components/Icons/MarkdownIcon";
 import SharePopover from "~/components/Sharing/Document";
 import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
@@ -131,11 +131,30 @@ export const createDocumentFromTemplate = createAction({
   section: DocumentSection,
   icon: <NewDocumentIcon />,
   keywords: "create",
-  visible: ({ currentTeamId, activeDocumentId, stores }) =>
-    !!currentTeamId &&
-    !!activeDocumentId &&
-    !!stores.documents.get(activeDocumentId)?.template &&
-    stores.policies.abilities(currentTeamId).createDocument,
+  visible: ({
+    currentTeamId,
+    activeCollectionId,
+    activeDocumentId,
+    stores,
+  }) => {
+    const document = activeDocumentId
+      ? stores.documents.get(activeDocumentId)
+      : undefined;
+
+    if (
+      !currentTeamId ||
+      !document?.isTemplate ||
+      !!document?.isDraft ||
+      !!document?.isDeleted
+    ) {
+      return false;
+    }
+
+    if (activeCollectionId) {
+      return stores.policies.abilities(activeCollectionId).createDocument;
+    }
+    return stores.policies.abilities(currentTeamId).createDocument;
+  },
   perform: ({ activeCollectionId, activeDocumentId, sidebarContext }) =>
     history.push(
       newDocumentPath(activeCollectionId, { templateId: activeDocumentId }),
@@ -339,7 +358,7 @@ export const unsubscribeDocument = createAction({
 
     const document = stores.documents.get(activeDocumentId);
 
-    await document?.unsubscribe(currentUserId);
+    await document?.unsubscribe();
 
     toast.success(t("Unsubscribed from document notifications"));
   },
@@ -543,7 +562,7 @@ export const duplicateDocument = createAction({
     stores.dialogs.openModal({
       title: t("Copy document"),
       content: (
-        <DuplicateDialog
+        <DocumentCopy
           document={document}
           onSubmit={(response) => {
             stores.dialogs.closeAllModals();
@@ -713,7 +732,6 @@ export const importDocument = createAction({
         history.push(document.url);
       } catch (err) {
         toast.error(err.message);
-        throw err;
       }
     };
 
@@ -1035,7 +1053,7 @@ export const openDocumentComments = createAction({
       return;
     }
 
-    stores.ui.toggleComments(activeDocumentId);
+    stores.ui.toggleComments();
   },
 });
 
@@ -1161,6 +1179,7 @@ export const rootDocumentActions = [
   openDocument,
   archiveDocument,
   createDocument,
+  createNestedDocument,
   createTemplateFromDocument,
   deleteDocument,
   importDocument,

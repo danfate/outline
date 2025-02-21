@@ -2,7 +2,6 @@ import crypto from "crypto";
 import path from "path";
 import { formatRFC7231 } from "date-fns";
 import Koa, { BaseContext } from "koa";
-import compress from "koa-compress";
 import Router from "koa-router";
 import send from "koa-send";
 import userAgent, { UserAgentContext } from "koa-useragent";
@@ -92,8 +91,6 @@ if (env.isProduction) {
   });
 }
 
-router.use(compress());
-
 router.get("/locales/:lng.json", async (ctx) => {
   const { lng } = ctx.params;
 
@@ -132,6 +129,7 @@ router.get("/s/:shareId/*", shareDomains(), renderShare);
 router.get("/embeds/gitlab", renderEmbed);
 router.get("/embeds/github", renderEmbed);
 router.get("/embeds/dropbox", renderEmbed);
+router.get("/embeds/pinterest", renderEmbed);
 
 // catch all for application
 router.get("*", shareDomains(), async (ctx, next) => {

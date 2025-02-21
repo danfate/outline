@@ -26,8 +26,8 @@ import * as React from "react";
 import styled from "styled-components";
 import Image from "@shared/editor/components/Img";
 import { MenuItem } from "@shared/editor/types";
+import { metaDisplay } from "@shared/utils/keyboard";
 import { Dictionary } from "~/hooks/useDictionary";
-import { metaDisplay } from "~/utils/keyboard";
 
 const Img = styled(Image)`
   border-radius: 2px;
@@ -38,7 +38,12 @@ const Img = styled(Image)`
   height: 18px;
 `;
 
-export default function blockMenuItems(dictionary: Dictionary): MenuItem[] {
+export default function blockMenuItems(
+  dictionary: Dictionary,
+  documentRef: React.RefObject<HTMLDivElement>
+): MenuItem[] {
+  const documentWidth = documentRef.current?.clientWidth ?? 0;
+
   return [
     {
       name: "heading",
@@ -119,7 +124,11 @@ export default function blockMenuItems(dictionary: Dictionary): MenuItem[] {
       name: "table",
       title: dictionary.table,
       icon: <TableIcon />,
-      attrs: { rowsCount: 3, colsCount: 3 },
+      attrs: {
+        rowsCount: 3,
+        colsCount: 3,
+        colWidth: documentWidth / 3,
+      },
     },
     {
       name: "blockquote",
