@@ -17,7 +17,6 @@ import { s } from "@shared/styles";
 import { StatusFilter } from "@shared/types";
 import { colorPalette } from "@shared/utils/collections";
 import Collection from "~/models/Collection";
-import Search from "~/scenes/Search";
 import { Action } from "~/components/Actions";
 import CenteredContent from "~/components/CenteredContent";
 import { CollectionBreadcrumb } from "~/components/CollectionBreadcrumb";
@@ -41,6 +40,7 @@ import { usePinnedDocuments } from "~/hooks/usePinnedDocuments";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import { collectionPath, updateCollectionPath } from "~/utils/routeHelpers";
+import Error404 from "../Errors/Error404";
 import Actions from "./components/Actions";
 import DropToImport from "./components/DropToImport";
 import Empty from "./components/Empty";
@@ -73,10 +73,13 @@ const CollectionScene = observer(function _CollectionScene() {
   const sidebarContext = useLocationSidebarContext();
 
   const id = params.id || "";
+  const urlId = id.split("-").pop() ?? "";
+
   const collection: Collection | null | undefined =
     collections.getByUrl(id) || collections.get(id);
   const can = usePolicy(collection);
-  const { pins, count } = usePinnedDocuments(id, collection?.id);
+
+  const { pins, count } = usePinnedDocuments(urlId, collection?.id);
   const [collectionTab, setCollectionTab] = usePersistedState<CollectionPath>(
     `collection-tab:${collection?.id}`,
     collection?.hasDescription
@@ -136,7 +139,7 @@ const CollectionScene = observer(function _CollectionScene() {
   useCommandBarActions([editCollection], [ui.activeCollectionId ?? "none"]);
 
   if (!collection && error) {
-    return <Search notFound />;
+    return <Error404 />;
   }
 
   const hasOverview = can.update || collection?.hasDescription;

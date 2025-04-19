@@ -57,6 +57,7 @@ import FileOperation from "./FileOperation";
 import Group from "./Group";
 import GroupMembership from "./GroupMembership";
 import GroupUser from "./GroupUser";
+import Import from "./Import";
 import Revision from "./Revision";
 import Star from "./Star";
 import Team from "./Team";
@@ -537,6 +538,13 @@ class Document extends ArchivableModel<
   @Column(DataType.UUID)
   importId: string | null;
 
+  @BelongsTo(() => Import, "apiImportId")
+  apiImport: Import<any> | null;
+
+  @ForeignKey(() => Import)
+  @Column(DataType.UUID)
+  apiImportId: string | null;
+
   @AllowNull
   @Column(DataType.JSONB)
   sourceMetadata: SourceMetadata | null;
@@ -830,7 +838,9 @@ class Document extends ArchivableModel<
     }
 
     this.content = revision.content;
-    this.text = revision.text;
+    this.text = DocumentHelper.toMarkdown(revision, {
+      includeTitle: false,
+    });
     this.title = revision.title;
     this.icon = revision.icon;
     this.color = revision.color;
@@ -981,7 +991,13 @@ class Document extends ArchivableModel<
     return false;
   };
 
-  unpublish = async (user: User) => {
+  /**
+   *
+   * @param user User who is performing the action
+   * @param options.detach Whether to detach the document from the containing collection
+   * @returns Updated document
+   */
+  unpublish = async (user: User, options: { detach: boolean }) => {
     // If the document is already a draft then calling unpublish should act like save
     if (!this.publishedAt) {
       return this.save();
@@ -1010,6 +1026,11 @@ class Document extends ArchivableModel<
     this.createdBy = user;
     this.updatedBy = user;
     this.publishedAt = null;
+
+    if (options.detach) {
+      this.collectionId = null;
+    }
+
     return this.save();
   };
 
@@ -1091,18 +1112,26 @@ class Document extends ArchivableModel<
   // Delete a document, archived or otherwise.
   delete = (user: User) =>
     this.sequelize.transaction(async (transaction: Transaction) => {
-      if (!this.archivedAt && !this.template && this.collectionId) {
-        // delete any children and remove from the document structure
-        const collection = await Collection.findByPk(this.collectionId, {
+      let deleted = false;
+
+      if (!this.template && this.collectionId) {
+        const collection = await Collection.findByPk(this.collectionId!, {
           transaction,
           lock: transaction.LOCK.UPDATE,
           paranoid: false,
         });
-        await collection?.deleteDocument(this, { transaction });
-      } else {
+
+        if (!this.archivedAt || (this.archivedAt && collection?.archivedAt)) {
+          await collection?.deleteDocument(this, { transaction });
+          deleted = true;
+        }
+      }
+
+      if (!deleted) {
         await this.destroy({
           transaction,
         });
+        deleted = true;
       }
 
       this.lastModifiedById = user.id;

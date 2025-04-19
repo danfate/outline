@@ -16,7 +16,11 @@ import { Primitive } from "utility-types";
 import { v4 as uuidv4 } from "uuid";
 import env from "../../env";
 import { MentionType } from "../../types";
-import { MentionDocument, MentionUser } from "../components/Mentions";
+import {
+  MentionCollection,
+  MentionDocument,
+  MentionUser,
+} from "../components/Mentions";
 import { MarkdownSerializerState } from "../lib/markdown/serializer";
 import mentionRule from "../rules/mention";
 import { ComponentProps } from "../types";
@@ -28,6 +32,11 @@ export default class Mention extends Node {
   }
 
   get schema(): NodeSpec {
+    const toPlainText = (node: ProsemirrorNode) =>
+      node.attrs.type === MentionType.User
+        ? `@${node.attrs.label}`
+        : node.attrs.label;
+
     return {
       attrs: {
         type: {
@@ -76,18 +85,17 @@ export default class Mention extends Node {
           href:
             node.attrs.type === MentionType.User
               ? undefined
-              : `${env.URL}/doc/${node.attrs.modelId}`,
+              : node.attrs.type === MentionType.Document
+              ? `${env.URL}/doc/${node.attrs.modelId}`
+              : `${env.URL}/collection/${node.attrs.modelId}`,
           "data-type": node.attrs.type,
           "data-id": node.attrs.modelId,
           "data-actorid": node.attrs.actorId,
           "data-url": `mention://${node.attrs.id}/${node.attrs.type}/${node.attrs.modelId}`,
         },
-        String(node.attrs.label),
+        toPlainText(node),
       ],
-      toPlainText: (node) =>
-        node.attrs.type === MentionType.User
-          ? `@${node.attrs.label}`
-          : node.attrs.label,
+      toPlainText,
     };
   }
 
@@ -97,6 +105,8 @@ export default class Mention extends Node {
         return <MentionUser {...props} />;
       case MentionType.Document:
         return <MentionDocument {...props} />;
+      case MentionType.Collection:
+        return <MentionCollection {...props} />;
       default:
         return null;
     }
@@ -145,10 +155,23 @@ export default class Mention extends Node {
         if (
           selection instanceof NodeSelection &&
           selection.node.type.name === this.name &&
-          selection.node.attrs.type === MentionType.Document
+          (selection.node.attrs.type === MentionType.Document ||
+            selection.node.attrs.type === MentionType.Collection)
         ) {
           const { modelId } = selection.node.attrs;
-          this.editor.props.onClickLink?.(`/doc/${modelId}`);
+
+          const linkType =
+            selection.node.attrs.type === MentionType.Document
+              ? "doc"
+              : selection.node.attrs.type === MentionType.Collection
+              ? "collection"
+              : undefined;
+
+          if (!linkType) {
+            return false;
+          }
+
+          this.editor.props.onClickLink?.(`/${linkType}/${modelId}`);
           return true;
         }
         return false;
