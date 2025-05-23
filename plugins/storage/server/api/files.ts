@@ -5,6 +5,7 @@ import env from "@server/env";
 import {
   AuthenticationError,
   AuthorizationError,
+  NotFoundError,
   ValidationError,
 } from "@server/errors";
 import auth from "@server/middlewares/authentication";
@@ -77,22 +78,25 @@ router.get(
     const { isPublicBucket, fileName } = AttachmentHelper.parseKey(key);
     const skipAuthorize = isPublicBucket || isSignedRequest;
     const cacheHeader = "max-age=604800, immutable";
-    let contentType =
-      (fileName ? mime.lookup(fileName) : undefined) ||
-      "application/octet-stream";
+    const attachment = await Attachment.findByKey(key);
 
     if (!skipAuthorize) {
-      const attachment = await Attachment.findOne({
-        where: { key },
-        rejectOnEmpty: true,
-      });
+      if (!attachment && !!ctx.input.query.key) {
+        throw NotFoundError();
+      }
+
       authorize(actor, "read", attachment);
-      contentType = attachment.contentType;
     }
+
+    const contentType =
+      attachment?.contentType ||
+      (fileName ? mime.lookup(fileName) : undefined) ||
+      "application/octet-stream";
 
     ctx.set("Accept-Ranges", "bytes");
     ctx.set("Cache-Control", cacheHeader);
     ctx.set("Content-Type", contentType);
+    ctx.set("Content-Security-Policy", "sandbox");
     ctx.attachment(fileName, {
       type: forceDownload
         ? "attachment"

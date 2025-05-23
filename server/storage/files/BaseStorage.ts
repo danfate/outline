@@ -1,10 +1,12 @@
 import { Blob } from "buffer";
 import { Readable } from "stream";
 import { PresignedPost } from "@aws-sdk/s3-presigned-post";
-import { isBase64Url } from "@shared/utils/urls";
+import omit from "lodash/omit";
+import FileHelper from "@shared/editor/lib/FileHelper";
+import { isBase64Url, isInternalUrl } from "@shared/utils/urls";
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
-import fetch, { RequestInit } from "@server/utils/fetch";
+import fetch, { chromeUserAgent, RequestInit } from "@server/utils/fetch";
 
 export default abstract class BaseStorage {
   /** The default number of seconds until a signed URL expires. */
@@ -149,7 +151,7 @@ export default abstract class BaseStorage {
     const endpoint = this.getUploadUrl(true);
 
     // Early return if url is already uploaded to the storage provider
-    if (url.startsWith("/api") || url.startsWith(endpoint)) {
+    if (url.startsWith(endpoint) || isInternalUrl(url)) {
       return;
     }
 
@@ -161,6 +163,12 @@ export default abstract class BaseStorage {
       buffer = Buffer.from(match[2], "base64");
     } else {
       try {
+        const headers = {
+          "User-Agent": chromeUserAgent,
+          ...init?.headers,
+        };
+        const initWithoutHeaders = omit(init, ["headers"]);
+
         const res = await fetch(url, {
           follow: 3,
           redirect: "follow",
@@ -168,8 +176,9 @@ export default abstract class BaseStorage {
             options?.maxUploadSize ?? Infinity,
             env.FILE_STORAGE_UPLOAD_MAX_SIZE
           ),
+          headers,
           timeout: 10000,
-          ...init,
+          ...initWithoutHeaders,
         });
 
         if (!res.ok) {
@@ -236,14 +245,14 @@ export default abstract class BaseStorage {
    * @returns The content disposition
    */
   public getContentDisposition(contentType?: string) {
-    if (contentType && this.safeInlineContentTypes.includes(contentType)) {
-      return "inline";
+    if (!contentType) {
+      return "attachment";
     }
+
     if (
-      contentType &&
-      this.safeInlineContentPrefixes.some((prefix) =>
-        contentType.startsWith(prefix)
-      )
+      FileHelper.isAudio(contentType) ||
+      FileHelper.isVideo(contentType) ||
+      this.safeInlineContentTypes.includes(contentType)
     ) {
       return "inline";
     }
@@ -252,8 +261,8 @@ export default abstract class BaseStorage {
   }
 
   /**
-   * A list of content types considered safe to display inline in the browser. Note that
-   * SVGs are purposefully not included here as they can contain JavaScript.
+   * A list of content types considered safe to display inline in the browser.
+   * Note that SVGs are purposefully not included here as they can contain JS.
    */
   protected safeInlineContentTypes = [
     "application/pdf",
@@ -262,9 +271,4 @@ export default abstract class BaseStorage {
     "image/gif",
     "image/webp",
   ];
-
-  /**
-   * A list of content type prefixes considered safe to display inline in the browser.
-   */
-  protected safeInlineContentPrefixes = ["video/", "audio/"];
 }

@@ -1,3 +1,4 @@
+import { getLuminance } from "polished";
 import styled from "styled-components";
 import { s } from "@shared/styles";
 import Flex from "~/components/Flex";
@@ -12,14 +13,15 @@ const Initials = styled(Flex)<{
 }>`
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
   width: 100%;
   height: 100%;
-  color: ${s("white75")};
+  color: ${(props) =>
+    getLuminance(props.color ?? props.theme.textTertiary) > 0.5
+      ? s("black50")
+      : s("white75")};
   background-color: ${(props) => props.color ?? props.theme.textTertiary};
   width: ${(props) => props.size}px;
   height: ${(props) => props.size}px;
-  border-radius: 50%;
   flex-shrink: 0;
 
   // adjust font size down for each additional character

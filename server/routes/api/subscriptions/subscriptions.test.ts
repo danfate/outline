@@ -1,15 +1,44 @@
-import { Event } from "@server/models";
+import queryString from "query-string";
+import { QueryNotices, SubscriptionType } from "@shared/types";
+import { Event, Subscription } from "@server/models";
+import SubscriptionHelper from "@server/models/helpers/SubscriptionHelper";
 import {
   buildUser,
   buildSubscription,
   buildDocument,
+  buildCollection,
+  buildDraftDocument,
 } from "@server/test/factories";
 import { getTestServer } from "@server/test/support";
 
 const server = getTestServer();
 
 describe("#subscriptions.create", () => {
-  it("should create a subscription", async () => {
+  it("should create a document subscription for the whole collection", async () => {
+    const user = await buildUser();
+
+    const collection = await buildCollection({
+      userId: user.id,
+      teamId: user.teamId,
+    });
+
+    const res = await server.post("/api/subscriptions.create", {
+      body: {
+        token: user.getJwtToken(),
+        collectionId: collection.id,
+        event: SubscriptionType.Document,
+      },
+    });
+
+    const body = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(body.data.id).toBeDefined();
+    expect(body.data.userId).toEqual(user.id);
+    expect(body.data.collectionId).toEqual(collection.id);
+  });
+
+  it("should create a document subscription", async () => {
     const user = await buildUser();
 
     const document = await buildDocument({
@@ -21,7 +50,7 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -45,7 +74,7 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -79,7 +108,7 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -88,7 +117,7 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -97,17 +126,16 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
-    // List subscriptions associated with
-    // `document.id`
+    // List subscriptions associated with `document.id`
     const res = await server.post("/api/subscriptions.list", {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -132,8 +160,7 @@ describe("#subscriptions.create", () => {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        // Subscription on event
-        // that cannot be subscribed to.
+        // Subscription on event that cannot be subscribed to.
         event: "documents.publish",
       },
     });
@@ -147,10 +174,62 @@ describe("#subscriptions.create", () => {
       `event: Invalid literal value, expected "documents.update"`
     );
   });
+
+  it("should throw 400 when neither documentId nor collectionId is provided", async () => {
+    const user = await buildUser();
+
+    const res = await server.post("/api/subscriptions.create", {
+      body: {
+        token: user.getJwtToken(),
+        event: SubscriptionType.Document,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(400);
+    expect(body.ok).toEqual(false);
+    expect(body.error).toEqual("validation_error");
+    expect(body.message).toEqual(
+      "body: one of collectionId or documentId is required"
+    );
+  });
 });
 
 describe("#subscriptions.info", () => {
-  it("should provide info about a subscription", async () => {
+  it("should provide info about a document subscription for the collection", async () => {
+    const user = await buildUser();
+
+    const subscriber = await buildUser({ teamId: user.teamId });
+
+    const collection = await buildCollection({
+      userId: user.id,
+      teamId: user.teamId,
+    });
+
+    await server.post("/api/subscriptions.create", {
+      body: {
+        token: subscriber.getJwtToken(),
+        collectionId: collection.id,
+        event: SubscriptionType.Document,
+      },
+    });
+
+    const res = await server.post("/api/subscriptions.info", {
+      body: {
+        token: subscriber.getJwtToken(),
+        collectionId: collection.id,
+        event: SubscriptionType.Document,
+      },
+    });
+    const subscription = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(subscription.data.id).toBeDefined();
+    expect(subscription.data.userId).toEqual(subscriber.id);
+    expect(subscription.data.collectionId).toEqual(collection.id);
+  });
+
+  it("should provide info about a document subscription", async () => {
     const creator = await buildUser();
 
     const subscriber = await buildUser({ teamId: creator.teamId });
@@ -171,7 +250,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document0.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -180,7 +259,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document1.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -190,7 +269,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document0.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -200,6 +279,25 @@ describe("#subscriptions.info", () => {
     expect(response0.data.id).toBeDefined();
     expect(response0.data.userId).toEqual(subscriber.id);
     expect(response0.data.documentId).toEqual(document0.id);
+  });
+
+  it("should throw 400 when neither documentId nor collectionId is provided", async () => {
+    const user = await buildUser();
+
+    const res = await server.post("/api/subscriptions.info", {
+      body: {
+        token: user.getJwtToken(),
+        event: SubscriptionType.Document,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(400);
+    expect(body.ok).toEqual(false);
+    expect(body.error).toEqual("validation_error");
+    expect(body.message).toEqual(
+      "body: one of collectionId or documentId is required"
+    );
   });
 
   it("should throw 404 if no subscription found", async () => {
@@ -214,7 +312,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -243,7 +341,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document0.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -252,17 +350,16 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document1.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
-    // `viewer` wants info about `subscriber`'s
-    // subscription on `document0`.
+    // `viewer` wants info about `subscriber`'s subscription on `document0`.
     const subscription0 = await server.post("/api/subscriptions.info", {
       body: {
         token: viewer.getJwtToken(),
         documentId: document0.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -274,13 +371,12 @@ describe("#subscriptions.info", () => {
     expect(response0.error).toEqual("authorization_error");
     expect(response0.message).toEqual("Authorization error");
 
-    // `viewer` wants info about `subscriber`'s
-    // subscription on `document0`.
+    // `viewer` wants info about `subscriber`'s subscription on `document0`.
     const subscription1 = await server.post("/api/subscriptions.info", {
       body: {
         token: viewer.getJwtToken(),
         documentId: document1.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -316,7 +412,7 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document0.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -325,13 +421,11 @@ describe("#subscriptions.info", () => {
       body: {
         token: subscriber.getJwtToken(),
         documentId: document1.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
-    // `viewer` wants info about `subscriber`'s
-    // subscription on `document0`.
-    // They have requested an invalid event.
+    // `viewer` wants info about `subscriber`'s subscription on `document0` - they have requested an invalid event.
     const subscription0 = await server.post("/api/subscriptions.info", {
       body: {
         token: viewer.getJwtToken(),
@@ -372,7 +466,7 @@ describe("#subscriptions.info", () => {
 });
 
 describe("#subscriptions.list", () => {
-  it("should list user subscriptions", async () => {
+  it("should list user subscriptions for the document", async () => {
     const user = await buildUser();
 
     const document = await buildDocument({
@@ -380,19 +474,16 @@ describe("#subscriptions.list", () => {
       teamId: user.teamId,
     });
 
-    await buildSubscription();
-
     const subscription = await buildSubscription({
       userId: user.id,
       documentId: document.id,
-      event: "documents.update",
     });
 
     const res = await server.post("/api/subscriptions.list", {
       body: {
         token: user.getJwtToken(),
         documentId: document.id,
-        event: "documents.update",
+        event: SubscriptionType.Document,
       },
     });
 
@@ -594,131 +685,242 @@ describe("#subscriptions.list", () => {
     expect(body.error).toEqual("authorization_error");
     expect(body.message).toEqual("Authorization error");
   });
+
+  it("should throw 400 when neither documentId nor collectionId is provided", async () => {
+    const user = await buildUser();
+
+    const res = await server.post("/api/subscriptions.list", {
+      body: {
+        token: user.getJwtToken(),
+        event: SubscriptionType.Document,
+      },
+    });
+    const body = await res.json();
+
+    expect(res.status).toEqual(400);
+    expect(body.ok).toEqual(false);
+    expect(body.error).toEqual("validation_error");
+    expect(body.message).toEqual(
+      "body: one of collectionId or documentId is required"
+    );
+  });
 });
 
 describe("#subscriptions.delete", () => {
-  it("should delete user's subscription", async () => {
-    const user = await buildUser();
-
-    const document = await buildDocument({
-      userId: user.id,
-      teamId: user.teamId,
-    });
-
-    const subscription = await buildSubscription({
-      userId: user.id,
-      documentId: document.id,
-      event: "documents.update",
-    });
-
-    const res = await server.post("/api/subscriptions.delete", {
-      body: {
+  describe("GET", () => {
+    it("should delete user's document subscription", async () => {
+      const user = await buildUser();
+      const document = await buildDraftDocument({
         userId: user.id,
-        id: subscription.id,
-        token: user.getJwtToken(),
-      },
+        teamId: user.teamId,
+      });
+      const subscription = await buildSubscription({
+        userId: user.id,
+        documentId: document.id,
+      });
+
+      const res = await server.get(
+        `/api/subscriptions.delete?${queryString.stringify({
+          userId: user.id,
+          documentId: document.id,
+          follow: true,
+          token: SubscriptionHelper.unsubscribeToken(user.id, document.id),
+        })}`,
+        {
+          redirect: "manual",
+        }
+      );
+
+      expect(res.status).toEqual(302);
+      expect(res.headers.get("location")).toContain(
+        `/home?notice=${QueryNotices.UnsubscribeDocument}`
+      );
+      expect(await Subscription.findByPk(subscription.id)).toBeNull();
     });
 
-    const body = await res.json();
+    it("should delete user's collection subscription", async () => {
+      const user = await buildUser();
+      const document = await buildDocument({
+        userId: user.id,
+        teamId: user.teamId,
+      });
+      const subscription = await buildSubscription({
+        userId: user.id,
+        collectionId: document.collectionId,
+      });
 
-    expect(res.status).toEqual(200);
-    expect(body.ok).toEqual(true);
-    expect(body.success).toEqual(true);
+      const res = await server.get(
+        `/api/subscriptions.delete?${queryString.stringify({
+          userId: user.id,
+          documentId: document.id,
+          follow: true,
+          token: SubscriptionHelper.unsubscribeToken(user.id, document.id),
+        })}`,
+        {
+          redirect: "manual",
+        }
+      );
+
+      expect(res.status).toEqual(302);
+      expect(res.headers.get("location")).toContain(
+        `/home?notice=${QueryNotices.UnsubscribeCollection}`
+      );
+      expect(await Subscription.findByPk(subscription.id)).toBeNull();
+    });
+
+    it("should not fail if subscription is already deleted", async () => {
+      const user = await buildUser();
+      const document = await buildDocument({
+        userId: user.id,
+        teamId: user.teamId,
+      });
+      const subscription = await buildSubscription({
+        userId: user.id,
+        documentId: document.id,
+      });
+
+      await subscription.destroy();
+
+      const res = await server.get(
+        `/api/subscriptions.delete?${queryString.stringify({
+          userId: user.id,
+          documentId: document.id,
+          follow: true,
+          token: SubscriptionHelper.unsubscribeToken(user.id, document.id),
+        })}`,
+        {
+          redirect: "manual",
+        }
+      );
+
+      expect(res.status).toEqual(302);
+      expect(res.headers.get("location")).toContain(`/home`);
+      expect(await Subscription.findByPk(subscription.id)).toBeNull();
+    });
   });
 
-  it("should emit event", async () => {
-    const user = await buildUser();
-
-    const document = await buildDocument({
-      userId: user.id,
-      teamId: user.teamId,
-    });
-
-    const subscription = await buildSubscription({
-      userId: user.id,
-      documentId: document.id,
-      event: "documents.update",
-    });
-
-    const res = await server.post("/api/subscriptions.delete", {
-      body: {
+  describe("POST", () => {
+    it("should delete user's document subscription", async () => {
+      const user = await buildUser();
+      const document = await buildDocument({
         userId: user.id,
-        id: subscription.id,
-        token: user.getJwtToken(),
-      },
-    });
-
-    const events = await Event.findAll({
-      where: {
-        teamId: document.teamId,
-      },
-    });
-
-    expect(events.length).toEqual(1);
-    expect(events[0].name).toEqual("subscriptions.delete");
-    expect(events[0].modelId).toEqual(subscription.id);
-    expect(events[0].actorId).toEqual(user.id);
-    expect(events[0].documentId).toEqual(document.id);
-
-    const body = await res.json();
-
-    expect(res.status).toEqual(200);
-    expect(body.ok).toEqual(true);
-    expect(body.success).toEqual(true);
-  });
-
-  it("users should not be able to delete other's subscriptions on document", async () => {
-    const subscriber0 = await buildUser();
-    // `subscriber1` belongs to `subscriber0`'s team.
-    const subscriber1 = await buildUser({ teamId: subscriber0.teamId });
-
-    // `subscriber0` created a document.
-    const document = await buildDocument({
-      userId: subscriber0.id,
-      teamId: subscriber0.teamId,
-    });
-
-    // `subscriber0` wants to be notified about
-    // changes on this document.
-    await server.post("/api/subscriptions.create", {
-      body: {
-        token: subscriber0.getJwtToken(),
+        teamId: user.teamId,
+      });
+      const subscription = await buildSubscription({
+        userId: user.id,
         documentId: document.id,
-        event: "documents.update",
-      },
+      });
+
+      const res = await server.post("/api/subscriptions.delete", {
+        body: {
+          id: subscription.id,
+          token: user.getJwtToken(),
+        },
+      });
+
+      const body = await res.json();
+
+      expect(res.status).toEqual(200);
+      expect(body.ok).toEqual(true);
+      expect(body.success).toEqual(true);
+
+      const events = await Event.findAll({
+        where: {
+          teamId: document.teamId,
+        },
+      });
+
+      expect(events.length).toEqual(1);
+      expect(events[0].name).toEqual("subscriptions.delete");
+      expect(events[0].modelId).toEqual(subscription.id);
+      expect(events[0].actorId).toEqual(user.id);
+      expect(events[0].documentId).toEqual(document.id);
     });
 
-    // `subscriber1` wants to be notified about
-    // changes on this document.
-    const resp = await server.post("/api/subscriptions.create", {
-      body: {
-        token: subscriber1.getJwtToken(),
-        documentId: document.id,
-        event: "documents.update",
-      },
+    it("should delete user's collection subscription", async () => {
+      const user = await buildUser();
+      const collection = await buildCollection({ userId: user.id });
+      const subscription = await buildSubscription({
+        userId: user.id,
+        collectionId: collection.id,
+      });
+
+      const res = await server.post("/api/subscriptions.delete", {
+        body: {
+          id: subscription.id,
+          token: user.getJwtToken(),
+        },
+      });
+
+      const body = await res.json();
+
+      expect(res.status).toEqual(200);
+      expect(body.ok).toEqual(true);
+      expect(body.success).toEqual(true);
+
+      const events = await Event.findAll({
+        where: {
+          teamId: user.teamId,
+        },
+      });
+
+      expect(events.length).toEqual(1);
+      expect(events[0].name).toEqual("subscriptions.delete");
+      expect(events[0].modelId).toEqual(subscription.id);
+      expect(events[0].actorId).toEqual(user.id);
+      expect(events[0].collectionId).toEqual(collection.id);
     });
 
-    const subscription1 = await resp.json();
-    const subscription1Id = subscription1.data.id;
+    it("users should not be able to delete other's subscriptions on document", async () => {
+      const subscriber0 = await buildUser();
+      // `subscriber1` belongs to `subscriber0`'s team.
+      const subscriber1 = await buildUser({ teamId: subscriber0.teamId });
 
-    // `subscriber0` wants to change `subscriber1`'s
-    // subscription for this document.
-    const res = await server.post("/api/subscriptions.delete", {
-      body: {
-        // `subscriber0`
+      // `subscriber0` created a document.
+      const document = await buildDocument({
         userId: subscriber0.id,
-        // subscription id of `subscriber1`
-        id: subscription1Id,
-        token: subscriber0.getJwtToken(),
-      },
+        teamId: subscriber0.teamId,
+      });
+
+      // `subscriber0` wants to be notified about
+      // changes on this document.
+      await server.post("/api/subscriptions.create", {
+        body: {
+          token: subscriber0.getJwtToken(),
+          documentId: document.id,
+          event: "documents.update",
+        },
+      });
+
+      // `subscriber1` wants to be notified about
+      // changes on this document.
+      const resp = await server.post("/api/subscriptions.create", {
+        body: {
+          token: subscriber1.getJwtToken(),
+          documentId: document.id,
+          event: "documents.update",
+        },
+      });
+
+      const subscription1 = await resp.json();
+      const subscription1Id = subscription1.data.id;
+
+      // `subscriber0` wants to change `subscriber1`'s
+      // subscription for this document.
+      const res = await server.post("/api/subscriptions.delete", {
+        body: {
+          id: subscription1Id,
+          token: subscriber0.getJwtToken(),
+        },
+      });
+
+      const body = await res.json();
+
+      // `subscriber0` should be unauthorized.
+      expect(res.status).toEqual(403);
+      expect(body.ok).toEqual(false);
+      expect(body.error).toEqual("authorization_error");
+      expect(body.message).toEqual("Authorization error");
     });
-
-    const body = await res.json();
-
-    // `subscriber0` should be unauthorized.
-    expect(res.status).toEqual(403);
-    expect(body.ok).toEqual(false);
-    expect(body.error).toEqual("authorization_error");
-    expect(body.message).toEqual("Authorization error");
   });
 });

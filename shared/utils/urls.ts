@@ -77,13 +77,36 @@ export function isDocumentUrl(url: string) {
 }
 
 /**
+ * Returns true if the given string is a link to a collection.
+ *
+ * @param options Parsing options.
+ * @returns True if a collection, false otherwise.
+ */
+export function isCollectionUrl(url: string) {
+  try {
+    const parsed = new URL(url, env.URL);
+    return isInternalUrl(url) && parsed.pathname.startsWith("/collection/");
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
  * Returns true if the given string is a url.
  *
  * @param text The url to check.
  * @param options Parsing options.
  * @returns True if a url, false otherwise.
  */
-export function isUrl(text: string, options?: { requireHostname: boolean }) {
+export function isUrl(
+  text: string,
+  options?: {
+    /** Require the url to have a hostname. */
+    requireHostname?: boolean;
+    /** Require the url not to use HTTP, custom protocols are ok. */
+    requireHttps?: boolean;
+  }
+) {
   if (text.match(/\n/)) {
     return false;
   }
@@ -97,6 +120,9 @@ export function isUrl(text: string, options?: { requireHostname: boolean }) {
     }
     if (url.hostname) {
       return true;
+    }
+    if (options?.requireHttps && url.protocol === "http:") {
+      return false;
     }
 
     return (

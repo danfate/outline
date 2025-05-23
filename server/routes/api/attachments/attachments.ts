@@ -166,7 +166,7 @@ router.post(
       )
     );
 
-    const job = await UploadAttachmentFromUrlTask.schedule({
+    const job = await new UploadAttachmentFromUrlTask().schedule({
       attachmentId: attachment.id,
       url,
     });
@@ -175,6 +175,8 @@ router.post(
     if ("error" in response) {
       throw InvalidRequestError(response.error);
     }
+
+    await attachment.reload();
 
     ctx.body = {
       data: presentAttachment(attachment),

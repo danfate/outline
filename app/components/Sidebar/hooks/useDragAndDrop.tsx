@@ -166,11 +166,13 @@ export function useDropToReorderStar(getIndex?: () => string) {
  * @param node The NavigationNode model to drag.
  * @param depth The depth of the node in the sidebar.
  * @param document The related Document model.
+ * @param isEditing Whether the sidebar item is currently being edited.
  */
 export function useDragDocument(
   node: NavigationNode,
   depth: number,
-  document?: Document
+  document?: Document,
+  isEditing?: boolean
 ) {
   const icon = document?.icon || node.icon || node.emoji;
   const color = document?.color || node.color;
@@ -188,7 +190,7 @@ export function useDragDocument(
         icon: icon ? <Icon value={icon} color={color} /> : undefined,
         collectionId: document?.collectionId || "",
       } as DragObject),
-    canDrag: () => !!document?.isActive,
+    canDrag: () => !!document?.isActive && !isEditing,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -583,6 +585,48 @@ export function useDropToArchive() {
     collect: (monitor) => ({
       isOverArchiveSection: !!monitor.isOver(),
       isDragging: monitor.canDrop(),
+    }),
+  });
+}
+
+export function useDropToUnpublish() {
+  const { t } = useTranslation();
+  const { policies, documents } = useStores();
+
+  return useDrop<
+    DragObject,
+    Promise<void>,
+    { isOver: boolean; canDrop: boolean }
+  >({
+    accept: "document",
+    drop: async (item) => {
+      const document = documents.get(item.id);
+      if (!document) {
+        return;
+      }
+
+      try {
+        await document.unpublish({ detach: true });
+        toast.success(
+          t("Unpublished {{ documentName }}", {
+            documentName: document.noun,
+          })
+        );
+      } catch (err) {
+        toast.error(err.message);
+      }
+    },
+    canDrop: (item) => {
+      const policy = policies.abilities(item.id);
+      if (!policy) {
+        return true; // optimistic, let the server check for the necessary permission.
+      }
+
+      return policy.unpublish;
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
     }),
   });
 }

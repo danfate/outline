@@ -105,7 +105,7 @@ function Message({ notice }: { notice: string }) {
     case "authentication-provider-disabled":
       return (
         <Trans>
-          Authentication failed – this login method was disabled by a team
+          Authentication failed – this login method was disabled by a workspace
           admin.
         </Trans>
       );
@@ -123,7 +123,7 @@ function Message({ notice }: { notice: string }) {
   }
 }
 
-export default function Notices() {
+export function Notices() {
   const query = useQuery();
   const notice = query.get("notice");
 

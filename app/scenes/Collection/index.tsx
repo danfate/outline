@@ -17,11 +17,9 @@ import { s } from "@shared/styles";
 import { StatusFilter } from "@shared/types";
 import { colorPalette } from "@shared/utils/collections";
 import Collection from "~/models/Collection";
-import Search from "~/scenes/Search";
 import { Action } from "~/components/Actions";
 import CenteredContent from "~/components/CenteredContent";
 import { CollectionBreadcrumb } from "~/components/CollectionBreadcrumb";
-import CollectionDescription from "~/components/CollectionDescription";
 import Heading from "~/components/Heading";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
 import InputSearchPage from "~/components/InputSearchPage";
@@ -41,11 +39,13 @@ import { usePinnedDocuments } from "~/hooks/usePinnedDocuments";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import { collectionPath, updateCollectionPath } from "~/utils/routeHelpers";
+import Error404 from "../Errors/Error404";
 import Actions from "./components/Actions";
 import DropToImport from "./components/DropToImport";
 import Empty from "./components/Empty";
 import MembershipPreview from "./components/MembershipPreview";
 import Notices from "./components/Notices";
+import Overview from "./components/Overview";
 import ShareButton from "./components/ShareButton";
 
 const IconPicker = React.lazy(() => import("~/components/IconPicker"));
@@ -66,17 +66,19 @@ const CollectionScene = observer(function _CollectionScene() {
   const location = useLocation();
   const { t } = useTranslation();
   const { documents, collections, ui } = useStores();
-  const [isFetching, setFetching] = React.useState(false);
   const [error, setError] = React.useState<Error | undefined>();
   const currentPath = location.pathname;
   const [, setLastVisitedPath] = useLastVisitedPath();
   const sidebarContext = useLocationSidebarContext();
 
   const id = params.id || "";
+  const urlId = id.split("-").pop() ?? "";
+
   const collection: Collection | null | undefined =
     collections.getByUrl(id) || collections.get(id);
   const can = usePolicy(collection);
-  const { pins, count } = usePinnedDocuments(id, collection?.id);
+
+  const { pins, count } = usePinnedDocuments(urlId, collection?.id);
   const [collectionTab, setCollectionTab] = usePersistedState<CollectionPath>(
     `collection-tab:${collection?.id}`,
     collection?.hasDescription
@@ -117,26 +119,21 @@ const CollectionScene = observer(function _CollectionScene() {
 
   React.useEffect(() => {
     async function fetchData() {
-      if ((!can || !collection) && !error && !isFetching) {
-        try {
-          setError(undefined);
-          setFetching(true);
-          await collections.fetch(id);
-        } catch (err) {
-          setError(err);
-        } finally {
-          setFetching(false);
-        }
+      try {
+        setError(undefined);
+        await collections.fetch(id);
+      } catch (err) {
+        setError(err);
       }
     }
 
     void fetchData();
-  }, [collections, isFetching, collection, error, id, can]);
+  }, []);
 
   useCommandBarActions([editCollection], [ui.activeCollectionId ?? "none"]);
 
   if (!collection && error) {
-    return <Search notFound />;
+    return <Error404 />;
   }
 
   const hasOverview = can.update || collection?.hasDescription;
@@ -262,7 +259,7 @@ const CollectionScene = observer(function _CollectionScene() {
                 path={collectionPath(collection.path, CollectionPath.Overview)}
               >
                 {hasOverview ? (
-                  <CollectionDescription collection={collection} />
+                  <Overview collection={collection} />
                 ) : (
                   <Redirect
                     to={{

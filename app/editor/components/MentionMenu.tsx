@@ -1,6 +1,6 @@
 import { isEmail } from "class-validator";
 import { observer } from "mobx-react";
-import { DocumentIcon, PlusIcon } from "outline-icons";
+import { DocumentIcon, PlusIcon, CollectionIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
@@ -10,11 +10,14 @@ import Icon from "@shared/components/Icon";
 import { MenuItem } from "@shared/editor/types";
 import { MentionType } from "@shared/types";
 import parseDocumentSlug from "@shared/utils/parseDocumentSlug";
-import Document from "~/models/Document";
-import User from "~/models/User";
 import { Avatar, AvatarSize } from "~/components/Avatar";
+import DocumentBreadcrumb from "~/components/DocumentBreadcrumb";
 import Flex from "~/components/Flex";
-import { DocumentsSection, UserSection } from "~/actions/sections";
+import {
+  DocumentsSection,
+  UserSection,
+  CollectionsSection,
+} from "~/actions/sections";
 import useRequest from "~/hooks/useRequest";
 import useStores from "~/hooks/useStores";
 import { client } from "~/utils/ApiClient";
@@ -42,24 +45,20 @@ function MentionMenu({ search, isActive, ...rest }: Props) {
   const [loaded, setLoaded] = React.useState(false);
   const [items, setItems] = React.useState<MentionItem[]>([]);
   const { t } = useTranslation();
-  const { auth, documents, users } = useStores();
+  const { auth, documents, users, collections } = useStores();
   const actorId = auth.currentUserId;
   const location = useLocation();
   const documentId = parseDocumentSlug(location.pathname);
   const maxResultsInSection = search ? 25 : 5;
 
-  const { loading, request } = useRequest<{
-    documents: Document[];
-    users: User[];
-  }>(
+  const { loading, request } = useRequest(
     React.useCallback(async () => {
       const res = await client.post("/suggestions.mention", { query: search });
 
-      return {
-        documents: res.data.documents.map(documents.add),
-        users: res.data.users.map(users.add),
-      };
-    }, [search, documents, users])
+      res.data.documents.map(documents.add);
+      res.data.users.map(users.add);
+      res.data.collections.map(collections.add);
+    }, [search, documents, users, collections])
   );
 
   React.useEffect(() => {
@@ -70,7 +69,7 @@ function MentionMenu({ search, isActive, ...rest }: Props) {
 
   React.useEffect(() => {
     if (actorId && !loading) {
-      const items = users
+      const items: MentionItem[] = users
         .findByQuery(search, { maxResults: maxResultsInSection })
         .map(
           (user) =>
@@ -114,7 +113,14 @@ function MentionMenu({ search, isActive, ...rest }: Props) {
                     <DocumentIcon />
                   ),
                   title: doc.title,
-                  subtitle: doc.collection?.name,
+                  subtitle: (
+                    <DocumentBreadcrumb
+                      document={doc}
+                      onlyText
+                      reverse
+                      maxDepth={2}
+                    />
+                  ),
                   section: DocumentsSection,
                   appendSpace: true,
                   attrs: {
@@ -123,6 +129,34 @@ function MentionMenu({ search, isActive, ...rest }: Props) {
                     modelId: doc.id,
                     actorId,
                     label: doc.title,
+                  },
+                } as MentionItem)
+            )
+        )
+        .concat(
+          collections
+            .findByQuery(search, { maxResults: maxResultsInSection })
+            .map(
+              (collection) =>
+                ({
+                  name: "mention",
+                  icon: collection.icon ? (
+                    <Icon
+                      value={collection.icon}
+                      color={collection.color ?? undefined}
+                    />
+                  ) : (
+                    <CollectionIcon />
+                  ),
+                  title: collection.name,
+                  section: CollectionsSection,
+                  appendSpace: true,
+                  attrs: {
+                    id: v4(),
+                    type: MentionType.Collection,
+                    modelId: collection.id,
+                    actorId,
+                    label: collection.name,
                   },
                 } as MentionItem)
             )
@@ -154,7 +188,10 @@ function MentionMenu({ search, isActive, ...rest }: Props) {
 
   const handleSelect = React.useCallback(
     async (item: MentionItem) => {
-      if (item.attrs.type === MentionType.Document) {
+      if (
+        item.attrs.type === MentionType.Document ||
+        item.attrs.type === MentionType.Collection
+      ) {
         return;
       }
       if (!documentId) {

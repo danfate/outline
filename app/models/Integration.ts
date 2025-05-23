@@ -1,8 +1,8 @@
 import { observable } from "mobx";
-import type {
+import {
   IntegrationService,
-  IntegrationSettings,
-  IntegrationType,
+  type IntegrationSettings,
+  type IntegrationType,
 } from "@shared/types";
 import User from "~/models/User";
 import Model from "~/models/base/Model";
@@ -11,8 +11,6 @@ import Relation from "~/models/decorators/Relation";
 
 class Integration<T = unknown> extends Model {
   static modelName = "Integration";
-
-  id: string;
 
   type: IntegrationType;
 

@@ -10,7 +10,7 @@ type Props = {
 };
 
 export default class CleanupDeletedTeamsTask extends BaseTask<Props> {
-  static cron = TaskSchedule.Daily;
+  static cron = TaskSchedule.Hour;
 
   public async perform({ limit }: Props) {
     Logger.info(
@@ -29,7 +29,7 @@ export default class CleanupDeletedTeamsTask extends BaseTask<Props> {
     });
 
     for (const team of teams) {
-      await CleanupDeletedTeamTask.schedule({
+      await new CleanupDeletedTeamTask().schedule({
         teamId: team.id,
       });
     }

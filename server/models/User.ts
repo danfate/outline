@@ -614,6 +614,7 @@ class User extends ParanoidModel<
           where: { email: this.email },
         },
       ],
+      order: [["createdAt", "ASC"]],
     });
 
   // hooks
@@ -716,7 +717,7 @@ class User extends ParanoidModel<
       });
 
       if (attachment) {
-        await DeleteAttachmentTask.schedule({
+        await new DeleteAttachmentTask().schedule({
           attachmentId: attachment.id,
           teamId: model.teamId,
         });

@@ -8,6 +8,7 @@ import {
 } from "@shared/types";
 import { TextHelper } from "@shared/utils/TextHelper";
 import { createContext } from "@server/context";
+import { parser } from "@server/editor";
 import {
   Document,
   View,
@@ -976,7 +977,7 @@ describe("#documents.list", () => {
     const res = await server.post("/api/documents.list", {
       body: {
         token: user.getJwtToken(),
-        collection: document.collectionId,
+        collectionId: document.collectionId,
       },
     });
     const body = await res.json();
@@ -1012,7 +1013,7 @@ describe("#documents.list", () => {
     const res = await server.post("/api/documents.list", {
       body: {
         token: user.getJwtToken(),
-        collection: collection.id,
+        collectionId: collection.id,
       },
     });
     const body = await res.json();
@@ -3257,21 +3258,26 @@ describe("#documents.restore", () => {
       teamId: user.teamId,
     });
     const revision = await Revision.createFromDocument(document);
-    const previousText = revision.text;
+    const previous = revision.content;
     const revisionId = revision.id;
+
     // update the document contents
-    document.text = "UPDATED";
+    document.content = parser.parse("updated")?.toJSON();
     await document.save();
+
     const res = await server.post("/api/documents.restore", {
       body: {
         token: user.getJwtToken(),
         id: document.id,
         revisionId,
       },
+      headers: {
+        "x-api-version": 3,
+      },
     });
     const body = await res.json();
     expect(res.status).toEqual(200);
-    expect(body.data.text).toEqual(previousText);
+    expect(body.data.data).toEqual(previous);
   });
 
   it("should not allow restoring a revision in another document", async () => {

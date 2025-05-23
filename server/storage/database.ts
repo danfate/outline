@@ -1,5 +1,6 @@
 import path from "path";
 import { InferAttributes, InferCreationAttributes } from "sequelize";
+import sequelizeStrictAttributes from "sequelize-strict-attributes";
 import { Sequelize } from "sequelize-typescript";
 import { Umzug, SequelizeStorage, MigrationError } from "umzug";
 import env from "@server/env";
@@ -23,7 +24,7 @@ export function createDatabaseInstance(
   }
 ): Sequelize {
   try {
-    return new Sequelize(databaseUrl, {
+    const instance = new Sequelize(databaseUrl, {
       logging: (msg) =>
         process.env.DEBUG?.includes("database") &&
         Logger.debug("database", msg),
@@ -47,17 +48,18 @@ export function createDatabaseInstance(
       },
       schema,
     });
+    sequelizeStrictAttributes(instance);
+    return instance;
   } catch (error) {
-    if (error instanceof URIError) {
-      Logger.fatal(
-        "Could not connect to database",
-        new Error(
-          `Failed to parse: ${databaseUrl}, ensure special characters in database URL are properly encoded`
-        )
-      );
-      process.exit(1);
-    }
-    throw error;
+    Logger.fatal(
+      "Could not connect to database",
+      databaseUrl
+        ? new Error(
+            `Failed to parse: "${databaseUrl}". Ensure special characters in database URL are encoded`
+          )
+        : new Error(`DATABASE_URL is not set.`)
+    );
+    process.exit(1);
   }
 }
 

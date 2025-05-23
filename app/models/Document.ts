@@ -17,6 +17,7 @@ import {
   NavigationNodeType,
   NotificationEventType,
 } from "@shared/types";
+import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
 import Storage from "@shared/utils/Storage";
 import { isRTL } from "@shared/utils/rtl";
 import slugify from "@shared/utils/slugify";
@@ -27,6 +28,7 @@ import { client } from "~/utils/ApiClient";
 import { settingsPath } from "~/utils/routeHelpers";
 import Collection from "./Collection";
 import Notification from "./Notification";
+import Pin from "./Pin";
 import View from "./View";
 import ArchivableModel from "./base/ArchivableModel";
 import Field from "./decorators/Field";
@@ -187,9 +189,10 @@ export default class Document extends ArchivableModel implements Searchable {
   @observable
   collaboratorIds: string[];
 
-  @observable
+  @Relation(() => User)
   createdBy: User | undefined;
 
+  @Relation(() => User)
   @observable
   updatedBy: User | undefined;
 
@@ -329,6 +332,16 @@ export default class Document extends ArchivableModel implements Searchable {
   }
 
   /**
+   * Returns the documents that link to this document.
+   *
+   * @returns documents that link to this document
+   */
+  @computed
+  get backlinks(): Document[] {
+    return this.store.getBacklinkedDocuments(this.id);
+  }
+
+  /**
    * Returns users that have been individually given access to the document.
    *
    * @returns users that have been individually given access to the document
@@ -448,7 +461,11 @@ export default class Document extends ArchivableModel implements Searchable {
   restore = (options?: { revisionId?: string; collectionId?: string }) =>
     this.store.restore(this, options);
 
-  unpublish = () => this.store.unpublish(this);
+  unpublish = (
+    options: { detach?: boolean } = {
+      detach: false,
+    }
+  ) => this.store.unpublish(this, options);
 
   @action
   enableEmbeds = () => {
@@ -461,11 +478,16 @@ export default class Document extends ArchivableModel implements Searchable {
   };
 
   @action
-  pin = (collectionId?: string | null) =>
-    this.store.rootStore.pins.create({
+  pin = async (collectionId?: string | null) => {
+    const pin = new Pin({}, this.store.rootStore.pins);
+
+    await pin.save({
       documentId: this.id,
       ...(collectionId ? { collectionId } : {}),
     });
+
+    return pin;
+  };
 
   @action
   unpin = (collectionId?: string) => {
@@ -589,7 +611,7 @@ export default class Document extends ArchivableModel implements Searchable {
    */
   getSummary = (blocks = 4) => ({
     ...this.data,
-    content: this.data.content.slice(0, blocks),
+    content: this.data.content?.slice(0, blocks),
   });
 
   @computed
@@ -650,6 +672,24 @@ export default class Document extends ArchivableModel implements Searchable {
       softBreak: true,
     });
     return markdown;
+  };
+
+  /**
+   * Returns the plain text representation of the document derived from the ProseMirror data.
+   *
+   * @returns The plain text representation of the document as a string.
+   */
+  toPlainText = () => {
+    const extensionManager = new ExtensionManager(withComments(richExtensions));
+    const schema = new Schema({
+      nodes: extensionManager.nodes,
+      marks: extensionManager.marks,
+    });
+    const text = ProsemirrorHelper.toPlainText(
+      Node.fromJSON(schema, this.data),
+      schema
+    );
+    return text;
   };
 
   download = (contentType: ExportContentType) =>
