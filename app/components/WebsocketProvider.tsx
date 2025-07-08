@@ -1,8 +1,9 @@
+import * as Sentry from "@sentry/react";
 import invariant from "invariant";
 import find from "lodash/find";
 import { action, observable } from "mobx";
 import { observer } from "mobx-react";
-import * as React from "react";
+import { createContext, Component } from "react";
 import { withTranslation, WithTranslation } from "react-i18next";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
@@ -43,13 +44,14 @@ type SocketWithAuthentication = Socket & {
   authenticated?: boolean;
 };
 
-export const WebsocketContext =
-  React.createContext<SocketWithAuthentication | null>(null);
+export const WebsocketContext = createContext<SocketWithAuthentication | null>(
+  null
+);
 
 type Props = WithTranslation & RootStore;
 
 @observer
-class WebsocketProvider extends React.Component<Props> {
+class WebsocketProvider extends Component<Props> {
   @observable
   socket: SocketWithAuthentication | null;
 
@@ -134,6 +136,15 @@ class WebsocketProvider extends React.Component<Props> {
       throw err;
     });
 
+    // add a listener for all events that logs a sentry breadcrumb
+    this.socket.onAny((event: string, data: Record<string, unknown>) => {
+      Sentry.addBreadcrumb({
+        category: "websocket",
+        message: `Received event: ${event}`,
+        data,
+      });
+    });
+
     this.socket.on(
       "entities",
       action(async (event: WebsocketEntitiesEvent) => {
@@ -148,8 +159,14 @@ class WebsocketProvider extends React.Component<Props> {
             if (document?.updatedAt === documentDescriptor.updatedAt) {
               continue;
             }
-            if (!document && !event.fetchIfMissing) {
+            if (!document) {
               continue;
+            }
+
+            if (event.invalidatedPolicies) {
+              event.invalidatedPolicies.forEach((policyId) => {
+                policies.remove(policyId);
+              });
             }
 
             // otherwise, grab the latest version of the document
@@ -196,8 +213,14 @@ class WebsocketProvider extends React.Component<Props> {
             if (collection?.updatedAt === collectionDescriptor.updatedAt) {
               continue;
             }
-            if (!collection?.documents && !event.fetchIfMissing) {
+            if (!collection?.documents) {
               continue;
+            }
+
+            if (event.invalidatedPolicies) {
+              event.invalidatedPolicies.forEach((policyId) => {
+                policies.remove(policyId);
+              });
             }
 
             try {
@@ -251,8 +274,10 @@ class WebsocketProvider extends React.Component<Props> {
           }
           policies.remove(document.id);
 
-          const collection = collections.get(event.collectionId);
-          collection?.removeDocument(document.id);
+          if (event.collectionId) {
+            const collection = collections.get(event.collectionId);
+            collection?.removeDocument(document.id);
+          }
         }
       )
     );

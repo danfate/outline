@@ -182,7 +182,7 @@ export const renderShare = async (ctx: Context, next: Next) => {
         }
       );
     }
-  } catch (err) {
+  } catch (_err) {
     // If the share or document does not exist, return a 404.
     ctx.status = 404;
   }
@@ -190,20 +190,25 @@ export const renderShare = async (ctx: Context, next: Next) => {
   // Allow shares to be embedded in iframes on other websites
   ctx.remove("X-Frame-Options");
 
+  const publicBranding =
+    team?.getPreference(TeamPreference.PublicBranding) ?? false;
+
   // Inject share information in SSR HTML
   return renderApp(ctx, next, {
-    title: document?.title,
-    description: document?.getSummary(),
+    title:
+      document?.title || (publicBranding && team?.name ? team.name : undefined),
+    description:
+      document?.getSummary() ||
+      (publicBranding && team?.description ? team.description : undefined),
     shortcutIcon:
-      team?.getPreference(TeamPreference.PublicBranding) && team.avatarUrl
-        ? team.avatarUrl
-        : undefined,
+      publicBranding && team?.avatarUrl ? team.avatarUrl : undefined,
     analytics,
     isShare: true,
     rootShareId,
-    canonical: share
-      ? `${share.canonicalUrl}${documentSlug && document ? document.url : ""}`
-      : undefined,
+    canonical:
+      share && share.canonicalUrl !== ctx.url
+        ? `${share.canonicalUrl}${documentSlug && document ? document.url : ""}`
+        : undefined,
     allowIndexing: share?.allowIndexing,
   });
 };

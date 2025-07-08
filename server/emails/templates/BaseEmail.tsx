@@ -35,7 +35,7 @@ export interface EmailProps {
 
 export default abstract class BaseEmail<
   T extends EmailProps,
-  S extends Record<string, any> | void = void
+  S extends Record<string, unknown> | void = void,
 > {
   private props: T;
   private metadata?: NotificationMetadata;
@@ -296,7 +296,12 @@ export default abstract class BaseEmail<
       return undefined;
     }
 
-    let content = ProsemirrorHelper.toHTML(node, {
+    // Process user mentions to ensure they are uptodate with database
+    const processedNode = ProsemirrorHelper.toProsemirror(
+      await ProsemirrorHelper.processMentions(node)
+    );
+
+    let content = ProsemirrorHelper.toHTML(processedNode, {
       centered: false,
     });
 

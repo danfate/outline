@@ -1,6 +1,6 @@
 import compact from "lodash/compact";
 import { observer } from "mobx-react";
-import React from "react";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Tab, TabPanel, useTabState } from "reakit";
 import { toast } from "sonner";
@@ -29,7 +29,7 @@ const ViewReactionsDialog: React.FC<Props> = ({ model }) => {
     const loadReactedUsersData = async () => {
       try {
         await model.loadReactedUsersData();
-      } catch (err) {
+      } catch (_err) {
         toast.error(t("Could not load reactions"));
       }
     };

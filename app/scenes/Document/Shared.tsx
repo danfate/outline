@@ -1,6 +1,6 @@
 import { Location } from "history";
 import { observer } from "mobx-react";
-import * as React from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { RouteComponentProps, useLocation } from "react-router-dom";
@@ -92,13 +92,13 @@ function SharedDocumentScene(props: Props) {
   const { ui } = useStores();
   const location = useLocation();
   const user = useCurrentUser({ rejectOnEmpty: false });
-  const searchParams = React.useMemo(
+  const searchParams = useMemo(
     () => new URLSearchParams(location.search),
     [location.search]
   );
   const { t, i18n } = useTranslation();
-  const [response, setResponse] = React.useState<Response>();
-  const [error, setError] = React.useState<Error | null | undefined>();
+  const [response, setResponse] = useState<Response>();
+  const [error, setError] = useState<Error | null | undefined>();
   const { documents } = useStores();
   const [, setPostLoginPath] = usePostLoginPath();
   const { shareId = env.ROOT_SHARE_ID, documentSlug } = props.match.params;
@@ -110,7 +110,7 @@ function SharedDocumentScene(props: Props) {
     : undefined;
   const theme = useBuildTheme(response?.team?.customTheme, themeOverride);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (shareId) {
       client.setShareId(shareId);
     }
@@ -120,24 +120,24 @@ function SharedDocumentScene(props: Props) {
     };
   }, [shareId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) {
       void changeLanguage(detectLanguage(), i18n);
     }
   }, [user, i18n]);
 
   // ensure the wider page color always matches the theme
-  React.useEffect(() => {
+  useEffect(() => {
     window.document.body.style.background = theme.background;
   }, [theme]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (documentId) {
       ui.setActiveDocument(documentId);
     }
   }, [ui, documentId]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     async function fetchData() {
       try {
         setResponse((state) => ({
@@ -195,6 +195,11 @@ function SharedDocumentScene(props: Props) {
           rel="canonical"
           href={canonicalOrigin + location.pathname.replace(/\/$/, "")}
         />
+        <link
+          rel="sitemap"
+          type="application/xml"
+          href={`${env.URL}/api/documents.sitemap?shareId=${shareId}`}
+        />
       </Helmet>
       <TeamContext.Provider value={response.team}>
         <ThemeProvider theme={theme}>
@@ -226,7 +231,7 @@ const SharedDocument = observer(
     }
 
     const tocPosition = hasHeadings
-      ? response.team?.tocPosition ?? TOCPosition.Left
+      ? (response.team?.tocPosition ?? TOCPosition.Left)
       : false;
     setDocument(response.document);
 

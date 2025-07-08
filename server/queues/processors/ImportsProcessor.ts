@@ -40,7 +40,7 @@ import BaseProcessor from "./BaseProcessor";
 export const PagePerImportTask = 3;
 
 export default abstract class ImportsProcessor<
-  T extends ImportableIntegrationService
+  T extends ImportableIntegrationService,
 > extends BaseProcessor {
   static applicableEvents: Event["name"][] = [
     "imports.create",
@@ -146,7 +146,9 @@ export default abstract class ImportsProcessor<
     importModel.state = ImportState.InProgress;
     await importModel.save({ transaction });
 
-    transaction.afterCommit(() => this.scheduleTask(importTasks[0]));
+    if (importTasks.length > 0) {
+      transaction.afterCommit(() => this.scheduleTask(importTasks[0]));
+    }
   }
 
   /**
@@ -179,10 +181,11 @@ export default abstract class ImportsProcessor<
           },
           async (documents) => {
             for (const document of documents) {
-              await collection.addDocumentToStructure(document, 0, {
+              await collection.addDocumentToStructure(document, undefined, {
                 save: false,
                 silent: true,
                 transaction,
+                insertOrder: "append",
               });
             }
           }
@@ -517,8 +520,8 @@ export default abstract class ImportsProcessor<
           node.type.name === "mention"
             ? transformMentionNode(node)
             : node.type.name === "attachment"
-            ? transformAttachmentNode(node)
-            : node.copy(transformFragment(node.content))
+              ? transformAttachmentNode(node)
+              : node.copy(transformFragment(node.content))
         );
       });
 

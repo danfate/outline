@@ -13,8 +13,13 @@ export type EmailReq = z.infer<typeof EmailSchema>;
 
 export const EmailCallbackSchema = BaseSchema.extend({
   query: z.object({
-    token: z.string(),
-    client: z.nativeEnum(Client).default(Client.Web),
+    token: z.string().optional(),
+    client: z.nativeEnum(Client).optional(),
+    follow: z.string().default(""),
+  }),
+  body: z.object({
+    token: z.string().optional(),
+    client: z.nativeEnum(Client).optional(),
     follow: z.string().default(""),
   }),
 });

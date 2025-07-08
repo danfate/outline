@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useEffect } from "react";
 import usePersistedState from "~/hooks/usePersistedState";
 import useStores from "./useStores";
 
@@ -17,11 +17,11 @@ export function usePinnedDocuments(urlId: UrlId, collectionId?: string) {
     return urlId === "home"
       ? pins.home
       : collectionId
-      ? pins.inCollection(collectionId)
-      : [];
+        ? pins.inCollection(collectionId)
+        : [];
   }
 
-  React.useEffect(() => {
+  useEffect(() => {
     void pins
       .fetchPage(urlId === "home" ? undefined : { collectionId })
       .then(() => {

@@ -707,6 +707,7 @@ img.ProseMirror-separator {
   resize: none;
   user-select: text;
   margin: 0 auto !important;
+  width: 100%;
   max-width: 100vw;
 }
 
@@ -790,7 +791,7 @@ h6:not(.placeholder)::before {
   h4,
   h5,
   h6 {
-    &:not(.placeholder):before {
+    &:not(.placeholder)::before {
       opacity: 1;
     }
   }
@@ -1750,8 +1751,9 @@ table {
   transition: border 250ms ease-in-out 0s;
 
   &:hover {
-    scrollbar-color: ${props.theme.scrollbarThumb} ${props.theme.scrollbarBackground
-  };
+    scrollbar-color: ${props.theme.scrollbarThumb} ${
+      props.theme.scrollbarBackground
+    };
   }
 
   & ::-webkit-scrollbar {

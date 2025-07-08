@@ -1,12 +1,12 @@
 import uniq from "lodash/uniq";
 import { observer } from "mobx-react";
-import * as React from "react";
+import { useMemo, useEffect, useCallback, Suspense } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Trans, useTranslation } from "react-i18next";
 import styled from "styled-components";
 import Icon from "@shared/components/Icon";
 import { randomElement } from "@shared/random";
-import { CollectionPermission } from "@shared/types";
+import { CollectionPermission, TeamPreference } from "@shared/types";
 import { IconLibrary } from "@shared/utils/IconLibrary";
 import { colorPalette } from "@shared/utils/collections";
 import { CollectionValidation } from "@shared/validations";
@@ -31,6 +31,7 @@ export interface FormData {
   color: string | null;
   sharing: boolean;
   permission: CollectionPermission | undefined;
+  commenting?: boolean | null;
 }
 
 const useIconColor = (collection?: Collection) => {
@@ -40,7 +41,7 @@ const useIconColor = (collection?: Collection) => {
     collections.orderedData.map((c) => c.color).filter(Boolean)
   ) as string[];
 
-  const iconColor = React.useMemo(
+  const iconColor = useMemo(
     () =>
       collection?.color ??
       // If all the existing collections have the same color, use that color,
@@ -83,6 +84,7 @@ export const CollectionForm = observer(function CollectionForm_({
       icon: collection?.icon,
       sharing: collection?.sharing ?? true,
       permission: collection?.permission,
+      commenting: collection?.commenting ?? true,
       color: iconColor,
     },
   });
@@ -90,11 +92,11 @@ export const CollectionForm = observer(function CollectionForm_({
   const values = watch();
 
   // Preload the IconPicker component on mount
-  React.useEffect(() => {
+  useEffect(() => {
     void IconPicker.preload();
   }, []);
 
-  React.useEffect(() => {
+  useEffect(() => {
     // If the user hasn't picked an icon yet, go ahead and suggest one based on
     // the name of the collection. It's the little things sometimes.
     if (!hasOpenedIconPicker && !collection) {
@@ -107,12 +109,12 @@ export const CollectionForm = observer(function CollectionForm_({
     }
   }, [collection, hasOpenedIconPicker, setValue, values.name, values.icon]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setTimeout(() => setFocus("name", { shouldSelect: true }), 100);
   }, [setFocus]);
 
-  const handleIconChange = React.useCallback(
-    (icon: string, color: string | null) => {
+  const handleIconChange = useCallback(
+    (icon: string, color: string) => {
       if (icon !== values.icon) {
         setFocus("name");
       }
@@ -129,7 +131,6 @@ export const CollectionForm = observer(function CollectionForm_({
         <Trans>
           Collections are used to group documents and choose permissions
         </Trans>
-        .
       </Text>
       <Flex gap={8}>
         <Input
@@ -140,7 +141,7 @@ export const CollectionForm = observer(function CollectionForm_({
             maxLength: CollectionValidation.maxNameLength,
           })}
           prefix={
-            <React.Suspense fallback={fallbackIcon}>
+            <Suspense fallback={fallbackIcon}>
               <StyledIconPicker
                 icon={values.icon}
                 color={values.color ?? iconColor}
@@ -149,7 +150,7 @@ export const CollectionForm = observer(function CollectionForm_({
                 onOpen={setHasOpenedIconPicker}
                 onChange={handleIconChange}
               />
-            </React.Suspense>
+            </Suspense>
           }
           autoComplete="off"
           autoFocus
@@ -180,13 +181,36 @@ export const CollectionForm = observer(function CollectionForm_({
       )}
 
       {team.sharing && (
-        <Switch
-          id="sharing"
-          label={t("Public document sharing")}
-          note={t(
-            "Allow documents within this collection to be shared publicly on the internet."
+        <Controller
+          control={control}
+          name="sharing"
+          render={({ field }) => (
+            <Switch
+              id="sharing"
+              label={t("Public document sharing")}
+              note={t(
+                "Allow documents within this collection to be shared publicly on the internet."
+              )}
+              checked={field.value}
+              onChange={field.onChange}
+            />
           )}
-          {...register("sharing")}
+        />
+      )}
+
+      {team.getPreference(TeamPreference.Commenting) && (
+        <Controller
+          control={control}
+          name="commenting"
+          render={({ field }) => (
+            <Switch
+              id="commenting"
+              label={t("Commenting")}
+              note={t("Allow commenting on documents within this collection.")}
+              checked={!!field.value}
+              onChange={field.onChange}
+            />
+          )}
         />
       )}
 
@@ -200,8 +224,8 @@ export const CollectionForm = observer(function CollectionForm_({
               ? `${t("Saving")}…`
               : t("Save")
             : formState.isSubmitting
-            ? `${t("Creating")}…`
-            : t("Create")}
+              ? `${t("Creating")}…`
+              : t("Create")}
         </Button>
       </Flex>
     </form>

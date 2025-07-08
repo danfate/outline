@@ -1,13 +1,19 @@
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import capitalize from "lodash/capitalize";
 import isEmpty from "lodash/isEmpty";
 import noop from "lodash/noop";
 import { observer } from "mobx-react";
-import { EditIcon, InputIcon, RestoreIcon, SearchIcon } from "outline-icons";
+import {
+  EditIcon,
+  InputIcon,
+  RestoreIcon,
+  SearchIcon,
+  ShapesIcon,
+} from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useHistory } from "react-router-dom";
-import { useMenuState, MenuButton, MenuButtonHTMLProps } from "reakit/Menu";
-import { VisuallyHidden } from "reakit/VisuallyHidden";
+import { MenuButton, MenuButtonHTMLProps } from "reakit/Menu";
 import { toast } from "sonner";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
@@ -53,10 +59,12 @@ import {
 import useActionContext from "~/hooks/useActionContext";
 import useBoolean from "~/hooks/useBoolean";
 import useCurrentUser from "~/hooks/useCurrentUser";
+import { useMenuState } from "~/hooks/useMenuState";
 import useMobile from "~/hooks/useMobile";
 import usePolicy from "~/hooks/usePolicy";
 import useRequest from "~/hooks/useRequest";
 import useStores from "~/hooks/useStores";
+import { useTemplateMenuItems } from "~/hooks/useTemplateMenuItems";
 import { MenuItem, MenuItemButton } from "~/types";
 import { documentEditPath } from "~/utils/routeHelpers";
 import { MenuContext, useMenuContext } from "./MenuContext";
@@ -76,6 +84,7 @@ type Props = {
   label?: (props: MenuButtonHTMLProps) => React.ReactNode;
   /** Invoked when the "Find and replace" menu item is clicked */
   onFindAndReplace?: () => void;
+  onSelectTemplate?: (template: Document) => void;
   /** Invoked when the "Rename" menu item is clicked */
   onRename?: () => void;
   /** Invoked when menu is opened */
@@ -147,6 +156,7 @@ type MenuContentProps = {
   onOpen?: () => void;
   onClose?: () => void;
   onFindAndReplace?: () => void;
+  onSelectTemplate?: (template: Document) => void;
   onRename?: () => void;
   showDisplayOptions?: boolean;
   showToggleEmbeds?: boolean;
@@ -156,6 +166,7 @@ const MenuContent: React.FC<MenuContentProps> = observer(function MenuContent_({
   onOpen,
   onClose,
   onFindAndReplace,
+  onSelectTemplate,
   onRename,
   showDisplayOptions,
   showToggleEmbeds,
@@ -216,6 +227,32 @@ const MenuContent: React.FC<MenuContentProps> = observer(function MenuContent_({
       }, []),
     ],
     [collections.orderedData, handleRestore, policies]
+  );
+
+  const templateMenuItems = useTemplateMenuItems({
+    document,
+    onSelectTemplate,
+  });
+
+  const handleEmbedsToggle = React.useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        document.enableEmbeds();
+      } else {
+        document.disableEmbeds();
+      }
+    },
+    [document]
+  );
+
+  const handleFullWidthToggle = React.useCallback(
+    (checked: boolean) => {
+      user.setPreference(UserPreference.FullWidthDocuments, checked);
+      void user.save();
+      document.fullWidth = checked;
+      void document.save({ fullWidth: checked });
+    },
+    [user, document]
   );
 
   return !isEmpty(can) ? (
@@ -310,6 +347,12 @@ const MenuContent: React.FC<MenuContentProps> = observer(function MenuContent_({
           actionToMenuItem(archiveDocument, context),
           actionToMenuItem(moveDocument, context),
           actionToMenuItem(moveTemplate, context),
+          {
+            type: "submenu",
+            title: t("Apply template"),
+            icon: <ShapesIcon />,
+            items: templateMenuItems,
+          },
           actionToMenuItem(pinDocument, context),
           actionToMenuItem(createDocumentFromTemplate, context),
           {
@@ -342,11 +385,7 @@ const MenuContent: React.FC<MenuContentProps> = observer(function MenuContent_({
                   label={t("Enable embeds")}
                   labelPosition="left"
                   checked={!document.embedsDisabled}
-                  onChange={
-                    document.embedsDisabled
-                      ? document.enableEmbeds
-                      : document.disableEmbeds
-                  }
+                  onChange={handleEmbedsToggle}
                 />
               </Style>
             )}
@@ -358,16 +397,7 @@ const MenuContent: React.FC<MenuContentProps> = observer(function MenuContent_({
                   label={t("Full width")}
                   labelPosition="left"
                   checked={document.fullWidth}
-                  onChange={(ev) => {
-                    const fullWidth = ev.currentTarget.checked;
-                    user.setPreference(
-                      UserPreference.FullWidthDocuments,
-                      fullWidth
-                    );
-                    void user.save();
-                    document.fullWidth = fullWidth;
-                    void document.save();
-                  }}
+                  onChange={handleFullWidthToggle}
                 />
               </Style>
             )}
@@ -383,6 +413,7 @@ function DocumentMenu({
   modal = true,
   showToggleEmbeds,
   showDisplayOptions,
+  onSelectTemplate,
   label,
   onRename,
   onOpen,
@@ -446,7 +477,7 @@ function DocumentMenu({
 
   return (
     <>
-      <VisuallyHidden>
+      <VisuallyHidden.Root>
         <label>
           {t("Import document")}
           <input
@@ -458,7 +489,7 @@ function DocumentMenu({
             tabIndex={-1}
           />
         </label>
-      </VisuallyHidden>
+      </VisuallyHidden.Root>
       <MenuContext.Provider value={{ model: document, menuState }}>
         <MenuTrigger label={label} onTrigger={showMenu} />
         {isMenuVisible ? (
@@ -466,6 +497,7 @@ function DocumentMenu({
             onOpen={onOpen}
             onClose={onClose}
             onRename={onRename}
+            onSelectTemplate={onSelectTemplate}
             showDisplayOptions={showDisplayOptions}
             showToggleEmbeds={showToggleEmbeds}
           />

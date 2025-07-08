@@ -1,6 +1,5 @@
 import { observer } from "mobx-react";
 import { SidebarIcon } from "outline-icons";
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { hover } from "@shared/styles";
@@ -122,7 +121,9 @@ const ToggleWrapper = styled.div`
   right: 0;
   opacity: 0;
   transform: translateX(10px);
-  transition: opacity 100ms ease-out, transform 100ms ease-out;
+  transition:
+    opacity 100ms ease-out,
+    transform 100ms ease-out;
 `;
 
 const StyledSidebar = styled(Sidebar)<{ $hoverTransition: boolean }>`

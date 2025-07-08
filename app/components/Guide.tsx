@@ -36,8 +36,8 @@ const Guide: React.FC<Props> = ({
 
   return (
     <DialogBackdrop {...dialog}>
-      {(props) => (
-        <Backdrop {...props}>
+      {(backdropProps) => (
+        <Backdrop {...backdropProps}>
           <Dialog
             {...dialog}
             aria-label={title}
@@ -45,8 +45,8 @@ const Guide: React.FC<Props> = ({
             hideOnEsc
             hide={onRequestClose}
           >
-            {(props) => (
-              <Scene {...props} {...rest}>
+            {(dialogProps) => (
+              <Scene {...dialogProps} {...rest}>
                 <Content>
                   {title && <Header>{title}</Header>}
                   {children}
@@ -98,7 +98,9 @@ const Scene = styled.div`
   outline: none;
   opacity: 0;
   transform: translateX(16px);
-  transition: transform 250ms ease, opacity 250ms ease;
+  transition:
+    transform 250ms ease,
+    opacity 250ms ease;
 
   &[data-enter] {
     opacity: 1;

@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useEffect } from "react";
 import { isModKey } from "@shared/utils/keyboard";
 import isTextInput from "~/utils/isTextInput";
 
@@ -28,10 +28,10 @@ const createKeyPredicate = (keyFilter: KeyFilter) =>
   typeof keyFilter === "function"
     ? keyFilter
     : typeof keyFilter === "string"
-    ? (event: KeyboardEvent) => event.key === keyFilter
-    : keyFilter
-    ? (_event: KeyboardEvent) => true
-    : (_event: KeyboardEvent) => false;
+      ? (event: KeyboardEvent) => event.key === keyFilter
+      : keyFilter
+        ? (_event: KeyboardEvent) => true
+        : (_event: KeyboardEvent) => false;
 
 export default function useKeyDown(
   key: KeyFilter,
@@ -40,7 +40,7 @@ export default function useKeyDown(
 ): void {
   const predicate = createKeyPredicate(key);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (predicate(event)) {
         fn(event);

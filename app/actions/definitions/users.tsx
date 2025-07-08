@@ -1,5 +1,4 @@
 import { PlusIcon } from "outline-icons";
-import * as React from "react";
 import { UserRole } from "@shared/types";
 import { UserRoleHelper } from "@shared/utils/UserRoleHelper";
 import stores from "~/stores";
@@ -46,8 +45,8 @@ export const updateUserRoleActionFactory = (user: User, role: UserRole) =>
       return UserRoleHelper.isRoleHigher(role, user.role)
         ? can.promote
         : UserRoleHelper.isRoleLower(role, user.role)
-        ? can.demote
-        : false;
+          ? can.demote
+          : false;
     },
     perform: ({ t }) => {
       stores.dialogs.openModal({

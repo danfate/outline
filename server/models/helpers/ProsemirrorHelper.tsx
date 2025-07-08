@@ -21,6 +21,7 @@ import { schema, parser } from "@server/editor";
 import Logger from "@server/logging/Logger";
 import { trace } from "@server/logging/tracing";
 import Attachment from "@server/models/Attachment";
+import User from "@server/models/User";
 import FileStorage from "@server/storage/files";
 
 export type HTMLOptions = {
@@ -280,7 +281,11 @@ export class ProsemirrorHelper {
     }
 
     function replaceUrl(url: string) {
-      return url.replace(`/doc/`, `${basePath}/doc/`);
+      // Only replace if the URL starts with /doc/ (not already in a share path)
+      if (url.startsWith("/doc/")) {
+        return `${basePath}${url}`;
+      }
+      return url;
     }
 
     function replaceInternalUrlsInner(node: ProsemirrorData) {
@@ -490,7 +495,7 @@ export class ProsemirrorHelper {
     // Render the Prosemirror document using virtual DOM and serialize the
     // result to a string
     const dom = new JSDOM(
-      `<!DOCTYPE html>${
+      `<!DOCTYPE html><meta charset="utf-8">${
         options?.includeStyles === false ? "" : styleTags
       }${html}`
     );
@@ -557,5 +562,80 @@ export class ProsemirrorHelper {
     }
 
     return dom.serialize();
+  }
+
+  /**
+   * Processes mentions in the Prosemirror data, ensuring that mentions
+   * for deleted users are displayed as "@unknown" and updated names are
+   * displayed correctly.
+   *
+   * @param data The ProsemirrorData object to process
+   * @returns The processed ProsemirrorData with updated mentions
+   */
+  static async processMentions(data: ProsemirrorData | Node) {
+    const json = "toJSON" in data ? (data.toJSON() as ProsemirrorData) : data;
+
+    // First pass: collect all user IDs from mentions
+    const userIds: string[] = [];
+
+    function collectUserIds(node: ProsemirrorData) {
+      if (
+        node.type === "mention" &&
+        node.attrs?.type === MentionType.User &&
+        node.attrs?.modelId
+      ) {
+        userIds.push(node.attrs.modelId as string);
+      }
+
+      if (node.content) {
+        for (const child of node.content) {
+          collectUserIds(child);
+        }
+      }
+    }
+
+    collectUserIds(json);
+
+    // Load all users in a single query
+    const uniqueUserIds = [...new Set(userIds)];
+    const users = uniqueUserIds.length
+      ? await User.findAll({
+          where: {
+            id: uniqueUserIds,
+          },
+          attributes: ["id", "name"],
+        })
+      : [];
+
+    // Create a map for quick lookup
+    const userMap = new Map();
+    users.forEach((user) => {
+      userMap.set(user.id, user.name);
+    });
+
+    // Second pass: transform mentions with loaded user data
+    function transformMentions(node: ProsemirrorData) {
+      if (
+        node.type === "mention" &&
+        node.attrs?.type === MentionType.User &&
+        node.attrs?.modelId
+      ) {
+        const userId = node.attrs.modelId as string;
+        node.attrs = {
+          ...node.attrs,
+          label: userMap.get(userId) || "Unknown",
+        };
+      }
+
+      if (node.content) {
+        for (const child of node.content) {
+          transformMentions(child);
+        }
+      }
+
+      return node;
+    }
+
+    return transformMentions(json);
   }
 }

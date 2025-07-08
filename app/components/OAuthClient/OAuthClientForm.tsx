@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import * as React from "react";
+import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { OAuthClientValidation } from "@shared/validations";
@@ -49,7 +49,7 @@ export const OAuthClientForm = observer(function OAuthClientForm_({
     },
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     setTimeout(() => setFocus("name", { shouldSelect: true }), 100);
   }, [setFocus]);
 
@@ -115,10 +115,17 @@ export const OAuthClientForm = observer(function OAuthClientForm_({
           )}
         />
         {isCloudHosted && (
-          <Switch
-            {...register("published")}
-            label={t("Published")}
-            note={t("Allow this app to be installed by other workspaces")}
+          <Controller
+            control={control}
+            name="published"
+            render={({ field }) => (
+              <Switch
+                label={t("Published")}
+                note={t("Allow this app to be installed by other workspaces")}
+                checked={field.value}
+                onChange={field.onChange}
+              />
+            )}
           />
         )}
       </>
@@ -133,8 +140,8 @@ export const OAuthClientForm = observer(function OAuthClientForm_({
               ? `${t("Saving")}…`
               : t("Save")
             : formState.isSubmitting
-            ? `${t("Creating")}…`
-            : t("Create")}
+              ? `${t("Creating")}…`
+              : t("Create")}
         </Button>
       </Flex>
     </form>

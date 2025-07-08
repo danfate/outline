@@ -148,7 +148,7 @@ if (env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET) {
         parsedState = SlackUtils.parseState<{
           collectionId: string;
         }>(state);
-      } catch (err) {
+      } catch (_err) {
         throw ValidationError("Invalid state");
       }
 
@@ -156,9 +156,9 @@ if (env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET) {
 
       switch (type) {
         case IntegrationType.Post: {
-          const collection = await Collection.scope({
-            method: ["withMembership", user.id],
-          }).findByPk(collectionId);
+          const collection = await Collection.findByPk(collectionId, {
+            userId: user.id,
+          });
           authorize(user, "read", collection);
           authorize(user, "update", user.team);
 

@@ -1,5 +1,4 @@
 import flattenDeep from "lodash/flattenDeep";
-import * as React from "react";
 import { toast } from "sonner";
 import { Optional } from "utility-types";
 import { v4 as uuidv4 } from "uuid";
@@ -28,8 +27,8 @@ export function createAction(definition: Optional<Action, "id">): Action {
               context: context.isButton
                 ? "button"
                 : context.isCommandBar
-                ? "commandbar"
-                : "contextmenu",
+                  ? "commandbar"
+                  : "contextmenu",
             });
           }
 
@@ -100,7 +99,7 @@ export function actionToKBar(
 
   const sectionPriority =
     typeof action.section !== "string" && "priority" in action.section
-      ? (action.section.priority as number) ?? 0
+      ? ((action.section.priority as number) ?? 0)
       : 0;
 
   return [

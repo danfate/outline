@@ -116,12 +116,10 @@ export default async function loadDocument({
 
     if (canReadDocument) {
       if (document.collectionId) {
-        collection = await Collection.scope("withDocumentStructure").findByPk(
-          document.collectionId,
-          {
-            rejectOnEmpty: true,
-          }
-        );
+        collection = await Collection.findByPk(document.collectionId, {
+          includeDocumentStructure: true,
+          rejectOnEmpty: true,
+        });
       }
 
       return {
@@ -140,12 +138,10 @@ export default async function loadDocument({
 
     // It is possible to disable sharing at the collection so we must check
     if (document.collectionId) {
-      collection = await Collection.scope("withDocumentStructure").findByPk(
-        document.collectionId,
-        {
-          rejectOnEmpty: true,
-        }
-      );
+      collection = await Collection.findByPk(document.collectionId, {
+        includeDocumentStructure: true,
+        rejectOnEmpty: true,
+      });
     }
 
     if (!collection?.sharing) {
@@ -198,9 +194,13 @@ export default async function loadDocument({
 
     if (document.deletedAt) {
       // don't send data if user cannot restore deleted doc
-      user && authorize(user, "restore", document);
+      if (user) {
+        authorize(user, "restore", document);
+      }
     } else {
-      user && authorize(user, "read", document);
+      if (user) {
+        authorize(user, "read", document);
+      }
     }
 
     if (document.isTrialImport) {

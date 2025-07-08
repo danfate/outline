@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 export default function useDictionary() {
   const { t } = useTranslation();
 
-  return React.useMemo(
+  return useMemo(
     () => ({
       addColumnAfter: t("Add column after"),
       addColumnBefore: t("Add column before"),
@@ -35,6 +35,7 @@ export default function useDictionary() {
       deleteRow: t("Delete"),
       deleteTable: t("Delete table"),
       deleteAttachment: t("Delete file"),
+      dimensions: t("Width x Height"),
       download: t("Download"),
       downloadAttachment: t("Download file"),
       replaceAttachment: t("Replace file"),
@@ -86,6 +87,8 @@ export default function useDictionary() {
       toggleHeader: t("Toggle header"),
       mathInline: t("Math inline (LaTeX)"),
       mathBlock: t("Math block (LaTeX)"),
+      mergeCells: t("Merge cells"),
+      splitCell: t("Split cell"),
       tip: t("Tip"),
       tipNotice: t("Tip notice"),
       warning: t("Warning"),

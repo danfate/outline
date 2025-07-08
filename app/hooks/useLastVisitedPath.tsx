@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useCallback } from "react";
 import { getCookie, removeCookie, setCookie } from "tiny-cookie";
 import usePersistedState from "~/hooks/usePersistedState";
 import Logger from "~/utils/Logger";
@@ -18,7 +18,7 @@ export function useLastVisitedPath(): [string, (path: string) => void] {
     { listen: false }
   );
 
-  const setPathAsLastVisitedPath = React.useCallback(
+  const setPathAsLastVisitedPath = useCallback(
     (path: string) => {
       if (isAllowedLoginRedirect(path) && path !== lastVisitedPath) {
         setLastVisitedPath(path);
@@ -43,7 +43,7 @@ export function setPostLoginPath(path: string) {
 
     try {
       sessionStorage.setItem(key, path);
-    } catch (e) {
+    } catch (_err) {
       // If the session storage is full or inaccessible, we can't do anything about it.
     }
   }
@@ -58,11 +58,11 @@ export function setPostLoginPath(path: string) {
 export function usePostLoginPath() {
   const key = "postLoginRedirectPath";
 
-  const getter = React.useCallback(() => {
+  const getter = useCallback(() => {
     let path;
     try {
       path = sessionStorage.getItem(key) || getCookie(key);
-    } catch (e) {
+    } catch (_err) {
       // Expected error if the session storage is full or inaccessible.
     }
 
@@ -74,7 +74,7 @@ export function usePostLoginPath() {
       const cleanup = history.listen(() => {
         try {
           sessionStorage.removeItem(key);
-        } catch (e) {
+        } catch (_err) {
           // Expected error if the session storage is full or inaccessible.
         }
         removeCookie(key);

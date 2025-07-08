@@ -1,5 +1,4 @@
 import { ArrowIcon, PlusIcon } from "outline-icons";
-import * as React from "react";
 import styled from "styled-components";
 import { stringToColor } from "@shared/utils/color";
 import RootStore from "~/stores/RootStore";
@@ -58,13 +57,15 @@ export const createTeam = createAction({
   perform: ({ t, event, stores }) => {
     event?.preventDefault();
     event?.stopPropagation();
+
     const { user } = stores.auth;
-    user &&
+    if (user) {
       stores.dialogs.openModal({
         title: t("Create a workspace"),
         fullscreen: true,
         content: <TeamNew user={user} />,
       });
+    }
   },
 });
 

@@ -23,12 +23,11 @@ export default class GroupMembershipsStore extends Store<GroupMembership> {
     collectionId,
     documentId,
     ...params
-  }:
-    | PaginationParams & {
-        documentId?: string;
-        collectionId?: string;
-        groupId?: string;
-      }): Promise<PaginatedResponse<GroupMembership>> => {
+  }: PaginationParams & {
+    documentId?: string;
+    collectionId?: string;
+    groupId?: string;
+  }): Promise<PaginatedResponse<GroupMembership>> => {
     this.isFetching = true;
 
     try {
@@ -38,11 +37,11 @@ export default class GroupMembershipsStore extends Store<GroupMembership> {
             ...params,
           })
         : documentId
-        ? await client.post(`/documents.group_memberships`, {
-            id: documentId,
-            ...params,
-          })
-        : await client.post(`/groupMemberships.list`, params);
+          ? await client.post(`/documents.group_memberships`, {
+              id: documentId,
+              ...params,
+            })
+          : await client.post(`/groupMemberships.list`, params);
       invariant(res?.data, "Data not available");
 
       let response: PaginatedResponse<GroupMembership> = [];
@@ -99,15 +98,17 @@ export default class GroupMembershipsStore extends Store<GroupMembership> {
     documentId?: string;
     groupId: string;
   }) {
-    collectionId
-      ? await client.post("/collections.remove_group", {
-          id: collectionId,
-          groupId,
-        })
-      : await client.post("/documents.remove_group", {
-          id: documentId,
-          groupId,
-        });
+    if (collectionId) {
+      await client.post("/collections.remove_group", {
+        id: collectionId,
+        groupId,
+      });
+    } else {
+      await client.post("/documents.remove_group", {
+        id: documentId,
+        groupId,
+      });
+    }
 
     this.removeAll(
       collectionId

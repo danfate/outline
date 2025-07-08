@@ -13,7 +13,6 @@ import {
   ShapesIcon,
   DraftsIcon,
 } from "outline-icons";
-import * as React from "react";
 import { UrlHelper } from "@shared/utils/UrlHelper";
 import { isMac } from "@shared/utils/browser";
 import stores from "~/stores";
@@ -21,7 +20,6 @@ import SearchQuery from "~/models/SearchQuery";
 import KeyboardShortcuts from "~/scenes/KeyboardShortcuts";
 import { createAction } from "~/actions";
 import { NavigationSection, RecentSearchesSection } from "~/actions/sections";
-import env from "~/env";
 import Desktop from "~/utils/Desktop";
 import history from "~/utils/history";
 import isCloudHosted from "~/utils/isCloudHosted";
@@ -232,12 +230,7 @@ export const logout = createAction({
   section: NavigationSection,
   icon: <LogoutIcon />,
   perform: async () => {
-    await stores.auth.logout();
-    if (env.OIDC_LOGOUT_URI) {
-      setTimeout(() => {
-        window.location.replace(env.OIDC_LOGOUT_URI);
-      }, 200);
-    }
+    await stores.auth.logout({ userInitiated: true });
   },
 });
 

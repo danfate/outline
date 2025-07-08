@@ -7,7 +7,6 @@ import {
   TrashIcon,
   UserIcon,
 } from "outline-icons";
-import * as React from "react";
 import { toast } from "sonner";
 import { createAction } from "~/actions";
 import { DeveloperSection } from "~/actions/sections";
@@ -107,8 +106,8 @@ export const startTyping = createAction({
     }, 250);
 
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        intervalId && clearInterval(intervalId);
+      if (event.key === "Escape" && intervalId) {
+        clearInterval(intervalId);
       }
     });
 

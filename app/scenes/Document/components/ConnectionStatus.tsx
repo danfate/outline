@@ -1,6 +1,5 @@
 import { observer } from "mobx-react";
 import { DisconnectedIcon } from "outline-icons";
-import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
@@ -75,10 +74,6 @@ function ConnectionStatus() {
 
 const Button = styled(NudeButton)`
   display: none;
-  position: fixed;
-  bottom: 0;
-  margin: 20px;
-  transform: translateX(-32px);
 
   ${breakpoint("tablet")`
     display: block;

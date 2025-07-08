@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { transparentize } from "polished";
-import React from "react";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import styled, { css } from "styled-components";
 import { s, hover } from "@shared/styles";
@@ -107,9 +107,11 @@ const Reaction: React.FC<Props> = ({
   const handleClick = React.useCallback(
     (event: React.SyntheticEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      active
-        ? void onRemoveReaction(reaction.emoji)
-        : void onAddReaction(reaction.emoji);
+      if (active) {
+        void onRemoveReaction(reaction.emoji);
+      } else {
+        void onAddReaction(reaction.emoji);
+      }
     },
     [reaction, active, onAddReaction, onRemoveReaction]
   );

@@ -13,6 +13,10 @@ export const languageOptions: LanguageOption[] = [
     value: "en_US",
   },
   {
+    label: "English (UK)",
+    value: "en_GB",
+  },
+  {
     label: "Čeština (Czech)",
     value: "cs_CZ",
   },
@@ -47,6 +51,10 @@ export const languageOptions: LanguageOption[] = [
   {
     label: "한국어 (Korean)",
     value: "ko_KR",
+  },
+  {
+    label: "Magyar (Hungarian)",
+    value: "hu_HU",
   },
   {
     label: "Nederland (Dutch, Netherlands)",

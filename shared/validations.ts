@@ -49,6 +49,9 @@ export const DocumentValidation = {
 
   /** The maximum size of the collaborative document state */
   maxStateLength: 1500 * 1024,
+
+  /** The maximum recommended size of the document content */
+  maxRecommendedLength: 250000,
 };
 
 export const ImportValidation = {
@@ -89,11 +92,32 @@ export const PinValidation = {
 export const TeamValidation = {
   /** The maximum number of domains per team on cloud hosted */
   maxDomains: 10,
+
+  /** The maximum length of the team name */
+  maxNameLength: 255,
+
+  /** The maximum length of the team description */
+  maxDescriptionLength: 1000,
+
+  /** The minimum length of the team subdomain */
+  minSubdomainLength: 2,
+
+  /** The maximum length of the team subdomain for cloud */
+  maxSubdomainLength: 32,
+
+  /** The maximum length of the team subdomain for self-hosted */
+  maxSubdomainSelfHostedLength: 255,
 };
 
 export const UserValidation = {
   /** The maximum number of invites per request */
   maxInvitesPerRequest: 20,
+
+  /** The maximum length of the user name */
+  maxNameLength: 255,
+
+  /** The maximum length of the user email */
+  maxEmailLength: 255,
 };
 
 export const WebhookSubscriptionValidation = {

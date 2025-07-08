@@ -1,5 +1,5 @@
 import { ReactionIcon } from "outline-icons";
-import React from "react";
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { PopoverDisclosure, usePopoverState } from "reakit";
 import EventBoundary from "@shared/components/EventBoundary";
@@ -99,7 +99,7 @@ const ReactionPicker: React.FC<Props> = ({
     <>
       <PopoverDisclosure {...popover}>
         {(props) => (
-          <Tooltip content={t("Add reaction")} placement="top" hideOnClick>
+          <Tooltip content={t("Add reaction")} placement="top">
             <NudeButton
               {...props}
               aria-label={t("Reaction picker")}

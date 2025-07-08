@@ -108,7 +108,7 @@ const AuthenticatedLayout: React.FC = ({ children }: Props) => {
     can.comment &&
     ui.activeDocumentId &&
     ui.commentsExpanded &&
-    team.getPreference(TeamPreference.Commenting);
+    !!team.getPreference(TeamPreference.Commenting);
 
   const sidebarRight = (
     <AnimatePresence

@@ -1,6 +1,6 @@
 import fractionalIndex from "fractional-index";
 import { observer } from "mobx-react";
-import * as React from "react";
+import { useMemo } from "react";
 import { useDrop } from "react-dnd";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
@@ -22,9 +22,9 @@ import SidebarContext from "./SidebarContext";
 function Collections() {
   const { documents, collections } = useStores();
   const { t } = useTranslation();
-  const orderedCollections = collections.orderedData;
+  const orderedCollections = collections.allActive;
 
-  const params = React.useMemo(
+  const params = useMemo(
     () => ({
       limit: 100,
     }),

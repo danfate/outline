@@ -51,13 +51,13 @@ import slugify from "@shared/utils/slugify";
 import { DocumentValidation } from "@shared/validations";
 import { ValidationError } from "@server/errors";
 import { generateUrlId } from "@server/utils/url";
-import Backlink from "./Backlink";
 import Collection from "./Collection";
 import FileOperation from "./FileOperation";
 import Group from "./Group";
 import GroupMembership from "./GroupMembership";
 import GroupUser from "./GroupUser";
 import Import from "./Import";
+import Relationship from "./Relationship";
 import Revision from "./Revision";
 import Star from "./Star";
 import Team from "./Team";
@@ -383,11 +383,10 @@ class Document extends ArchivableModel<
 
   /** The frontend path to this document. */
   get path() {
-    if (!this.title) {
-      return `/doc/untitled-${this.urlId}`;
-    }
-    const slugifiedTitle = slugify(this.title);
-    return `/doc/${slugifiedTitle}-${this.urlId}`;
+    return Document.getPath({
+      title: this.title,
+      urlId: this.urlId,
+    });
   }
 
   get tasks() {
@@ -400,7 +399,13 @@ class Document extends ArchivableModel<
     if (!title.length) {
       return `/doc/untitled-${urlId}`;
     }
-    return `/doc/${slugify(title)}-${urlId}`;
+    const slugifiedTitle = slugify(title);
+    // If the slugified title is empty (e.g., title only had special characters),
+    // use "untitled" as a fallback to prevent empty URL segments
+    if (!slugifiedTitle) {
+      return `/doc/untitled-${urlId}`;
+    }
+    return `/doc/${slugifiedTitle}-${urlId}`;
   }
 
   // hooks
@@ -426,13 +431,11 @@ class Document extends ArchivableModel<
       return;
     }
 
-    const collection = await Collection.scope("withDocumentStructure").findByPk(
-      model.collectionId,
-      {
-        transaction,
-        lock: Transaction.LOCK.UPDATE,
-      }
-    );
+    const collection = await Collection.findByPk(model.collectionId, {
+      includeDocumentStructure: true,
+      transaction,
+      lock: Transaction.LOCK.UPDATE,
+    });
     if (!collection) {
       return;
     }
@@ -453,9 +456,8 @@ class Document extends ArchivableModel<
     }
 
     return this.sequelize!.transaction(async (transaction: Transaction) => {
-      const collection = await Collection.scope(
-        "withDocumentStructure"
-      ).findByPk(model.collectionId!, {
+      const collection = await Collection.findByPk(model.collectionId!, {
+        includeDocumentStructure: true,
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
@@ -615,8 +617,8 @@ class Document extends ArchivableModel<
   @HasMany(() => Revision)
   revisions: Revision[];
 
-  @HasMany(() => Backlink)
-  backlinks: Backlink[];
+  @HasMany(() => Relationship)
+  relationships: Relationship[];
 
   @HasMany(() => Star)
   starred: Star[];
@@ -667,10 +669,11 @@ class Document extends ArchivableModel<
 
   /**
    * Overrides the standard findByPk behavior to allow also querying by urlId
+   * and loading memberships for a user passed in by `userId`
    *
    * @param id uuid or urlId
    * @param options FindOptions
-   * @returns A promise resolving to a collection instance or null
+   * @returns A promise resolving to a document instance or null
    */
   static async findByPk(
     id: Identifier,
@@ -695,7 +698,7 @@ class Document extends ArchivableModel<
     // almost every endpoint needs the collection membership to determine policy permissions.
     const scope = this.scope([
       "withDrafts",
-      options.includeState ? "withState" : "withoutState",
+      includeState ? "withState" : "withoutState",
       {
         method: ["withViews", userId],
       },
@@ -869,6 +872,7 @@ class Document extends ArchivableModel<
   /**
    * Find all of the child documents for this document
    *
+   * @param where Omit<WhereOptions<Document>, "parentDocumentId">
    * @param options FindOptions
    * @returns A promise that resolve to a list of documents
    */
@@ -943,9 +947,8 @@ class Document extends ArchivableModel<
     }
 
     if (!this.template && this.collectionId) {
-      const collection = await Collection.scope(
-        "withDocumentStructure"
-      ).findByPk(this.collectionId, {
+      const collection = await Collection.findByPk(this.collectionId, {
+        includeDocumentStructure: true,
         transaction,
         lock: Transaction.LOCK.UPDATE,
       });
@@ -1012,13 +1015,11 @@ class Document extends ArchivableModel<
 
     await this.sequelize.transaction(async (transaction: Transaction) => {
       const collection = this.collectionId
-        ? await Collection.scope("withDocumentStructure").findByPk(
-            this.collectionId,
-            {
-              transaction,
-              lock: transaction.LOCK.UPDATE,
-            }
-          )
+        ? await Collection.findByPk(this.collectionId, {
+            includeDocumentStructure: true,
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          })
         : undefined;
 
       if (collection) {
@@ -1049,13 +1050,11 @@ class Document extends ArchivableModel<
   archive = async (user: User, options?: FindOptions) => {
     const { transaction } = { ...options };
     const collection = this.collectionId
-      ? await Collection.scope("withDocumentStructure").findByPk(
-          this.collectionId,
-          {
-            transaction,
-            lock: transaction?.LOCK.UPDATE,
-          }
-        )
+      ? await Collection.findByPk(this.collectionId, {
+          includeDocumentStructure: true,
+          transaction,
+          lock: transaction?.LOCK.UPDATE,
+        })
       : undefined;
 
     if (collection) {
@@ -1076,7 +1075,8 @@ class Document extends ArchivableModel<
   ) => {
     const { transaction } = { ...options };
     const collection = collectionId
-      ? await Collection.scope("withDocumentStructure").findByPk(collectionId, {
+      ? await Collection.findByPk(collectionId, {
+          includeDocumentStructure: true,
           transaction,
           lock: transaction?.LOCK.UPDATE,
         })
@@ -1128,9 +1128,8 @@ class Document extends ArchivableModel<
       let deleted = false;
 
       if (!this.template && this.collectionId) {
-        const collection = await Collection.scope(
-          "withDocumentStructure"
-        ).findByPk(this.collectionId!, {
+        const collection = await Collection.findByPk(this.collectionId!, {
+          includeDocumentStructure: true,
           transaction,
           lock: transaction.LOCK.UPDATE,
           paranoid: false,

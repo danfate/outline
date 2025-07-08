@@ -8,7 +8,6 @@ import {
   AlignFullWidthIcon,
 } from "outline-icons";
 import { EditorState } from "prosemirror-state";
-import * as React from "react";
 import { isNodeActive } from "@shared/editor/queries/isNodeActive";
 import { MenuItem } from "@shared/editor/types";
 import { Dictionary } from "~/hooks/useDictionary";
@@ -56,6 +55,15 @@ export default function imageMenuItems(
       tooltip: dictionary.alignFullWidth,
       icon: <AlignFullWidthIcon />,
       active: isFullWidthAligned,
+    },
+    {
+      name: "separator",
+    },
+    {
+      name: "dimensions",
+      tooltip: dictionary.dimensions,
+      visible: !isFullWidthAligned(state),
+      skipIcon: true,
     },
     {
       name: "separator",

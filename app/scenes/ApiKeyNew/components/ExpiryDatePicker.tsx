@@ -1,6 +1,6 @@
 import { format as formatDate } from "date-fns";
 import { CalendarIcon } from "outline-icons";
-import React from "react";
+import * as React from "react";
 import { DayPicker } from "react-day-picker";
 import { useTranslation } from "react-i18next";
 import { usePopoverState, PopoverDisclosure } from "reakit";
@@ -35,7 +35,7 @@ const ExpiryDatePicker = ({ selectedDate, onSelect }: Props) => {
         "--rdp-accent-color-dark": theme.accent,
         "--rdp-background-color": theme.listItemHoverBackground,
         "--rdp-background-color-dark": theme.listItemHoverBackground,
-      } as React.CSSProperties),
+      }) as React.CSSProperties,
     [theme]
   );
 

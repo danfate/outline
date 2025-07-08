@@ -3,7 +3,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
-  useMenuState,
   MenuButton,
   MenuItem as BaseMenuItem,
   MenuStateReturn,
@@ -13,6 +12,7 @@ import MenuIconWrapper from "~/components/ContextMenu/MenuIconWrapper";
 import Flex from "~/components/Flex";
 import { actionToMenuItem } from "~/actions";
 import useActionContext from "~/hooks/useActionContext";
+import { useMenuState } from "~/hooks/useMenuState";
 import {
   Action,
   ActionContext,
@@ -52,7 +52,9 @@ const SubMenu = React.forwardRef(function _Template(
 ) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const menu = useMenuState();
+  const menu = useMenuState({
+    parentId: parentMenuState.baseId,
+  });
 
   return (
     <>
@@ -138,7 +140,7 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
               as={Link}
               id={`${item.title}-${index}`}
               to={item.to}
-              key={index}
+              key={`${item.type}-${item.title}-${index}`}
               disabled={item.disabled}
               selected={item.selected}
               icon={showIcons !== false ? item.icon : undefined}
@@ -154,7 +156,7 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
             <MenuItem
               id={`${item.title}-${index}`}
               href={item.href}
-              key={index}
+              key={`${item.type}-${item.title}-${index}`}
               disabled={item.disabled}
               selected={item.selected}
               level={item.level}
@@ -176,7 +178,7 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
               disabled={item.disabled}
               selected={item.selected}
               dangerous={item.dangerous}
-              key={index}
+              key={`${item.type}-${item.title}-${index}`}
               icon={showIcons !== false ? item.icon : undefined}
               {...menu}
             >
@@ -185,18 +187,25 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
           );
 
           return item.tooltip ? (
-            <Tooltip content={item.tooltip} placement={"bottom"}>
+            <Tooltip
+              content={item.tooltip}
+              placement={"bottom"}
+              key={`tooltip-${item.title}-${index}`}
+            >
               <div>{menuItem}</div>
             </Tooltip>
           ) : (
-            <>{menuItem}</>
+            <React.Fragment key={`${item.type}-${item.title}-${index}`}>
+              {menuItem}
+            </React.Fragment>
           );
         }
 
         if (item.type === "submenu") {
-          return (
+          // Skip rendering empty submenus
+          return item.items.length > 0 ? (
             <BaseMenuItem
-              key={index}
+              key={`${item.type}-${item.title}-${index}`}
               as={SubMenu}
               id={`${item.title}-${index}`}
               templateItems={item.items}
@@ -209,15 +218,17 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
               }
               {...menu}
             />
-          );
+          ) : null;
         }
 
         if (item.type === "separator") {
-          return <Separator key={index} />;
+          return <Separator key={`separator-${index}`} />;
         }
 
         if (item.type === "heading") {
-          return <Header key={index}>{item.title}</Header>;
+          return (
+            <Header key={`heading-${item.title}-${index}`}>{item.title}</Header>
+          );
         }
 
         const _exhaustiveCheck: never = item;

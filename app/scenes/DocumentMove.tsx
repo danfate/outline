@@ -1,6 +1,6 @@
 import flatten from "lodash/flatten";
 import { observer } from "mobx-react";
-import * as React from "react";
+import { useState, useMemo } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
 import styled from "styled-components";
@@ -23,11 +23,9 @@ function DocumentMove({ document }: Props) {
   const { dialogs, policies } = useStores();
   const { t } = useTranslation();
   const collectionTrees = useCollectionTrees();
-  const [selectedPath, selectPath] = React.useState<NavigationNode | null>(
-    null
-  );
+  const [selectedPath, selectPath] = useState<NavigationNode | null>(null);
 
-  const items = React.useMemo(() => {
+  const items = useMemo(() => {
     // Recursively filter out the document itself and its existing parent doc, if any.
     const filterSourceDocument = (node: NavigationNode): NavigationNode => ({
       ...node,
@@ -88,7 +86,7 @@ function DocumentMove({ document }: Props) {
       toast.success(t("Document moved"));
 
       dialogs.closeAllModals();
-    } catch (err) {
+    } catch (_err) {
       toast.error(t("Couldn’t move the document, try again?"));
     }
   };
