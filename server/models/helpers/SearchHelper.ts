@@ -480,17 +480,14 @@ export default class SearchHelper {
   private static buildFindOptions(query?: string): FindOptions {
     const attributes: FindAttributeOptions = ["id"];
     const replacements: BindOrReplacements = {};
-    const order: Order = [["updatedAt", "DESC"]];
+    let order: Order = [["updatedAt", "DESC"]];
 
     if (query) {
       attributes.push([
-        Sequelize.literal(
-          `ts_rank("searchVector", to_tsquery('english', :query))`
-        ),
+        Sequelize.literal(`pgroonga_score(tableoid, ctid)`),
         "searchRanking",
       ]);
-      replacements["query"] = this.webSearchQuery(query);
-      order.unshift(["searchRanking", "DESC"]);
+      order = [[Sequelize.literal("pgroonga_score(tableoid, ctid)"), "DESC"]];
     }
 
     return { attributes, replacements, order };
@@ -697,9 +694,17 @@ export default class SearchHelper {
       }
 
       if (limitedQuery || iLikeQueries.length === 0) {
-        const keywords = `${"'" + options.query + "'"}`;
+        // Escape the user's query to be safely used inside the Groonga query syntax.
+        const escapedTerm = limitedQuery.replace(/[\\"]/g, "\\$&");
+
+        // Construct the weighted query. Title gets a weight of 10, text gets the default of 1.
+        // This will make documents where the term appears in the title rank much higher.
+        const weightedQuery = `(title:@ "${escapedTerm}" * 3) OR (text:@ "${escapedTerm}")`;
+
+        // Use Sequelize.literal to pass the raw PGroonga query.
+        // It's important that the underlying index covers both `title` and `text` columns.
         const whereClause = `
-        (text &@~ ${keywords} OR title &@~ ${keywords})
+          (title, text) &@~ '${weightedQuery.replace(/'/g, "''")}'
         `;
 
         where[Op.and].push(Sequelize.literal(whereClause));
