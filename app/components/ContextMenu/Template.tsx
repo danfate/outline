@@ -155,12 +155,14 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
           return (
             <MenuItem
               id={`${item.title}-${index}`}
-              href={item.href}
+              href={typeof item.href === "string" ? item.href : item.href.url}
               key={`${item.type}-${item.title}-${index}`}
               disabled={item.disabled}
               selected={item.selected}
               level={item.level}
-              target={item.href.startsWith("#") ? undefined : "_blank"}
+              target={
+                typeof item.href === "string" ? undefined : item.href.target
+              }
               icon={showIcons !== false ? item.icon : undefined}
               {...menu}
             >
@@ -229,6 +231,12 @@ function Template({ items, actions, context, showIcons, ...menu }: Props) {
           return (
             <Header key={`heading-${item.title}-${index}`}>{item.title}</Header>
           );
+        }
+
+        // This should never be reached for Reakit dropdown menu.
+        // Added for exhaustiveness check.
+        if (item.type === "group") {
+          return null;
         }
 
         const _exhaustiveCheck: never = item;
