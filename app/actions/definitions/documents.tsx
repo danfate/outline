@@ -50,7 +50,6 @@ import DeleteDocumentsInTrash from "~/scenes/Trash/components/DeleteDocumentsInT
 import ConfirmationDialog from "~/components/ConfirmationDialog";
 import DocumentCopy from "~/components/DocumentCopy";
 import MarkdownIcon from "~/components/Icons/MarkdownIcon";
-import SharePopover from "~/components/Sharing/Document";
 import { getHeaderExpandedKey } from "~/components/Sidebar/components/Header";
 import DocumentTemplatizeDialog from "~/components/TemplatizeDialog";
 import {
@@ -82,7 +81,14 @@ import {
 import capitalize from "lodash/capitalize";
 import CollectionIcon from "~/components/Icons/CollectionIcon";
 import { ActionV2, ActionV2Group, ActionV2Separator } from "~/types";
-import Insights from "~/scenes/Document/components/Insights";
+import lazyWithRetry from "~/utils/lazyWithRetry";
+
+const Insights = lazyWithRetry(
+  () => import("~/scenes/Document/components/Insights")
+);
+const SharePopover = lazyWithRetry(
+  () => import("~/components/Sharing/Document/SharePopover")
+);
 
 export const openDocument = createAction({
   name: ({ t }) => t("Open document"),
@@ -384,8 +390,8 @@ export const subscribeDocument = createActionV2({
   analyticsName: "Subscribe to document",
   section: ActiveDocumentSection,
   icon: <SubscribeIcon />,
-  tooltip: ({ activeCollectionId, isContextMenu, stores, t }) => {
-    if (!isContextMenu || !activeCollectionId) {
+  tooltip: ({ activeCollectionId, isMenu, stores, t }) => {
+    if (!isMenu || !activeCollectionId) {
       return undefined;
     }
 
@@ -393,8 +399,8 @@ export const subscribeDocument = createActionV2({
       ? t("Subscription inherited from collection")
       : undefined;
   },
-  disabled: ({ activeCollectionId, isContextMenu, stores }) => {
-    if (!isContextMenu || !activeCollectionId) {
+  disabled: ({ activeCollectionId, isMenu, stores }) => {
+    if (!isMenu || !activeCollectionId) {
       return false;
     }
 
@@ -430,8 +436,8 @@ export const unsubscribeDocument = createActionV2({
   analyticsName: "Unsubscribe from document",
   section: ActiveDocumentSection,
   icon: <UnsubscribeIcon />,
-  tooltip: ({ activeCollectionId, isContextMenu, stores, t }) => {
-    if (!isContextMenu || !activeCollectionId) {
+  tooltip: ({ activeCollectionId, isMenu, stores, t }) => {
+    if (!isMenu || !activeCollectionId) {
       return undefined;
     }
 
@@ -439,8 +445,8 @@ export const unsubscribeDocument = createActionV2({
       ? t("Subscription inherited from collection")
       : undefined;
   },
-  disabled: ({ activeCollectionId, isContextMenu, stores }) => {
-    if (!isContextMenu || !activeCollectionId) {
+  disabled: ({ activeCollectionId, isMenu, stores }) => {
+    if (!isMenu || !activeCollectionId) {
       return false;
     }
 
@@ -571,8 +577,7 @@ export const downloadDocumentAsMarkdown = createActionV2({
 });
 
 export const downloadDocument = createActionV2WithChildren({
-  name: ({ t, isContextMenu }) =>
-    isContextMenu ? t("Download") : t("Download document"),
+  name: ({ t, isMenu }) => (isMenu ? t("Download") : t("Download document")),
   analyticsName: "Download document",
   section: ActiveDocumentSection,
   icon: <DownloadIcon />,
@@ -594,12 +599,15 @@ export const copyDocumentAsMarkdown = createActionV2({
   iconInContextMenu: false,
   visible: ({ activeDocumentId, stores }) =>
     !!activeDocumentId && stores.policies.abilities(activeDocumentId).download,
-  perform: ({ stores, activeDocumentId, t }) => {
+  perform: async ({ stores, activeDocumentId, t }) => {
     const document = activeDocumentId
       ? stores.documents.get(activeDocumentId)
       : undefined;
     if (document) {
-      copy(document.toMarkdown());
+      const { ProsemirrorHelper } = await import(
+        "~/models/helpers/ProsemirrorHelper"
+      );
+      copy(ProsemirrorHelper.toMarkdown(document));
       toast.success(t("Markdown copied to clipboard"));
     }
   },
@@ -613,12 +621,15 @@ export const copyDocumentAsPlainText = createActionV2({
   iconInContextMenu: false,
   visible: ({ activeDocumentId, stores }) =>
     !!activeDocumentId && stores.policies.abilities(activeDocumentId).download,
-  perform: ({ stores, activeDocumentId, t }) => {
+  perform: async ({ stores, activeDocumentId, t }) => {
     const document = activeDocumentId
       ? stores.documents.get(activeDocumentId)
       : undefined;
     if (document) {
-      copy(document.toPlainText());
+      const { ProsemirrorHelper } = await import(
+        "~/models/helpers/ProsemirrorHelper"
+      );
+      copy(ProsemirrorHelper.toPlainText(document));
       toast.success(t("Text copied to clipboard"));
     }
   },
@@ -678,8 +689,7 @@ export const copyDocument = createActionV2WithChildren({
 });
 
 export const duplicateDocument = createActionV2({
-  name: ({ t, isContextMenu }) =>
-    isContextMenu ? t("Duplicate") : t("Duplicate document"),
+  name: ({ t, isMenu }) => (isMenu ? t("Duplicate") : t("Duplicate document")),
   analyticsName: "Duplicate document",
   section: ActiveDocumentSection,
   icon: <DuplicateIcon />,
@@ -829,8 +839,7 @@ export const searchInDocument = createInternalLinkActionV2({
 });
 
 export const printDocument = createActionV2({
-  name: ({ t, isContextMenu }) =>
-    isContextMenu ? t("Print") : t("Print document"),
+  name: ({ t, isMenu }) => (isMenu ? t("Print") : t("Print document")),
   analyticsName: "Print document",
   section: ActiveDocumentSection,
   icon: <PrintIcon />,
@@ -852,7 +861,7 @@ export const importDocument = createActionV2({
     }
 
     if (activeCollectionId) {
-      return !!stores.policies.abilities(activeCollectionId).update;
+      return !!stores.policies.abilities(activeCollectionId).createDocument;
     }
 
     return false;
@@ -865,7 +874,6 @@ export const importDocument = createActionV2({
 
     input.onchange = async (ev) => {
       const files = getEventFiles(ev);
-
       const file = files[0];
 
       try {

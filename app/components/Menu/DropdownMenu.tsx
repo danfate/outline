@@ -14,7 +14,6 @@ import { actionV2ToMenuItem } from "~/actions";
 import useActionContext from "~/hooks/useActionContext";
 import useMobile from "~/hooks/useMobile";
 import {
-  ActionContext,
   ActionV2Variant,
   ActionV2WithChildren,
   MenuItem,
@@ -27,8 +26,6 @@ import { useComputed } from "~/hooks/useComputed";
 type Props = {
   /** Root action with children representing the menu items */
   action: ActionV2WithChildren;
-  /** Action context to use - new context will be created if not provided */
-  context?: ActionContext;
   /** Trigger for the menu */
   children: React.ReactNode;
   /** Alignment w.r.t trigger - defaults to start */
@@ -49,7 +46,6 @@ export const DropdownMenu = observer(
     (
       {
         action,
-        context,
         children,
         align = "start",
         ariaLabel,
@@ -64,12 +60,9 @@ export const DropdownMenu = observer(
       const isMobile = useMobile();
       const contentRef =
         React.useRef<React.ElementRef<typeof MenuContent>>(null);
-
-      const actionContext =
-        context ??
-        useActionContext({
-          isContextMenu: true,
-        });
+      const actionContext = useActionContext({
+        isMenu: true,
+      });
 
       const menuItems = useComputed(() => {
         if (!open) {
@@ -126,7 +119,7 @@ export const DropdownMenu = observer(
       const content = toMenuItems(menuItems);
 
       return (
-        <MenuProvider variant={"dropdown"}>
+        <MenuProvider variant="dropdown">
           <Menu open={open} onOpenChange={handleOpenChange}>
             <MenuTrigger ref={ref} aria-label={ariaLabel} {...rest}>
               {children}

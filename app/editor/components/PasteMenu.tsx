@@ -1,8 +1,8 @@
 import { observer } from "mobx-react";
+import { v4 as uuidv4 } from "uuid";
 import { EmailIcon, LinkIcon } from "outline-icons";
-import React from "react";
+import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { v4 } from "uuid";
 import { EmbedDescriptor } from "@shared/editor/embeds";
 import { MenuItem } from "@shared/editor/types";
 import { MentionType } from "@shared/types";
@@ -27,6 +27,18 @@ type Props = Omit<
 export const PasteMenu = observer(({ pastedText, embeds, ...props }: Props) => {
   const items = useItems({ pastedText, embeds });
 
+  const renderMenuItem = useCallback(
+    (item, _index, options) => (
+      <SuggestionsMenuItem
+        onClick={options.onClick}
+        selected={options.selected}
+        title={item.title}
+        icon={item.icon}
+      />
+    ),
+    []
+  );
+
   if (!items) {
     props.onClose();
     return null;
@@ -37,14 +49,7 @@ export const PasteMenu = observer(({ pastedText, embeds, ...props }: Props) => {
       {...props}
       trigger=""
       filterable={false}
-      renderMenuItem={(item, _index, options) => (
-        <SuggestionsMenuItem
-          onClick={options.onClick}
-          selected={options.selected}
-          title={item.title}
-          icon={item.icon}
-        />
-      )}
+      renderMenuItem={renderMenuItem}
       items={items}
     />
   );
@@ -82,7 +87,7 @@ function useItems({
 
       mentionType = integration
         ? determineMentionType({ url, integration })
-        : undefined;
+        : MentionType.URL;
     }
 
     return [
@@ -97,11 +102,11 @@ function useItems({
         icon: <EmailIcon />,
         visible: !!mentionType,
         attrs: {
-          id: v4(),
+          id: uuidv4(),
           type: mentionType,
           label: pastedText,
           href: pastedText,
-          modelId: v4(),
+          modelId: uuidv4(),
           actorId: user?.id,
         },
         appendSpace: true,

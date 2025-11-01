@@ -23,8 +23,10 @@ import { useDocumentContext } from "~/components/DocumentContext";
 import { PopoverButton } from "~/components/IconPicker/components/PopoverButton";
 import useBoolean from "~/hooks/useBoolean";
 import usePolicy from "~/hooks/usePolicy";
+import { useTranslation } from "react-i18next";
+import lazyWithRetry from "~/utils/lazyWithRetry";
 
-const IconPicker = React.lazy(() => import("~/components/IconPicker"));
+const IconPicker = lazyWithRetry(() => import("~/components/IconPicker"));
 
 type Props = {
   /** ID of the associated document */
@@ -70,6 +72,7 @@ const DocumentTitle = React.forwardRef(function _DocumentTitle(
   }: Props,
   externalRef: React.RefObject<RefHandle>
 ) {
+  const { t } = useTranslation();
   const ref = React.useRef<RefHandle>(null);
   const [iconPickerIsOpen, handleOpen, setIconPickerClosed] = useBoolean();
   const { editor } = useDocumentContext();
@@ -249,6 +252,7 @@ const DocumentTitle = React.forwardRef(function _DocumentTitle(
       autoFocus={!title}
       maxLength={DocumentValidation.maxTitleLength}
       readOnly={readOnly}
+      aria-label={t("Document title")}
       dir="auto"
       ref={mergeRefs([ref, externalRef])}
     >

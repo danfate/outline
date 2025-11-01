@@ -5,6 +5,8 @@ import {
   isInTable,
   selectedRect,
 } from "prosemirror-tables";
+import { ColumnSelection } from "../selection/ColumnSelection";
+import { RowSelection } from "../selection/RowSelection";
 
 /**
  * Checks if the current selection is a column selection.
@@ -12,7 +14,7 @@ import {
  * @returns True if the selection is a column selection, false otherwise.
  */
 export function isColSelection(state: EditorState): boolean {
-  if (state.selection instanceof CellSelection) {
+  if (state.selection instanceof ColumnSelection) {
     return state.selection.isColSelection();
   }
   return false;
@@ -24,14 +26,14 @@ export function isColSelection(state: EditorState): boolean {
  * @returns True if the selection is a row selection, false otherwise.
  */
 export function isRowSelection(state: EditorState): boolean {
-  if (state.selection instanceof CellSelection) {
+  if (state.selection instanceof RowSelection) {
     return state.selection.isRowSelection();
   }
   return false;
 }
 
 export function getColumnIndex(state: EditorState): number | undefined {
-  if (state.selection instanceof CellSelection) {
+  if (state.selection instanceof ColumnSelection) {
     if (state.selection.isColSelection()) {
       const rect = selectedRect(state);
       return rect.left;
@@ -42,7 +44,7 @@ export function getColumnIndex(state: EditorState): number | undefined {
 }
 
 export function getRowIndex(state: EditorState): number | undefined {
-  if (state.selection instanceof CellSelection) {
+  if (state.selection instanceof RowSelection) {
     if (state.selection.isRowSelection()) {
       const rect = selectedRect(state);
       return rect.top;
@@ -50,6 +52,42 @@ export function getRowIndex(state: EditorState): number | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Get the actual row index in the table map for a given visual row index
+ * when merged cells are present.
+ *
+ * @param visualRowIndex The visual row index (0-based)
+ * @param state The editor state
+ * @returns The actual row index in the table map, or -1 if not found
+ */
+export function getRowIndexInMap(
+  visualRowIndex: number,
+  state: EditorState
+): number {
+  if (!isInTable(state)) {
+    return -1;
+  }
+
+  const rect = selectedRect(state);
+  const cells = getCellsInColumn(0)(state);
+
+  if (visualRowIndex >= 0 && visualRowIndex < cells.length) {
+    const cellPos = cells[visualRowIndex] - rect.tableStart;
+
+    // Find the row index in the table map for this cell position
+    for (let row = 0; row < rect.map.height; row++) {
+      const rowStart = row * rect.map.width;
+      for (let col = 0; col < rect.map.width; col++) {
+        if (rect.map.map[rowStart + col] === cellPos) {
+          return row;
+        }
+      }
+    }
+  }
+
+  return -1;
 }
 
 export function getCellsInColumn(index: number) {

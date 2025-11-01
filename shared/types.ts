@@ -83,8 +83,10 @@ export enum MentionType {
   User = "user",
   Document = "document",
   Collection = "collection",
+  Group = "group",
   Issue = "issue",
   PullRequest = "pull_request",
+  URL = "url",
 }
 
 export type PublicEnv = {
@@ -257,6 +259,8 @@ export type SourceMetadata = {
   externalName?: string;
   /** Whether the item was created through a trial license. */
   trial?: boolean;
+  /** The ID of the original document when this document was duplicated. */
+  originalDocumentId?: string;
 };
 
 export type CustomTheme = {
@@ -297,6 +301,8 @@ export enum TeamPreference {
   CustomTheme = "customTheme",
   /** Side to display the document's table of contents in relation to the main content. */
   TocPosition = "tocPosition",
+  /** Whether to prevent shared documents from being embedded in iframes on external websites. */
+  PreventDocumentEmbedding = "preventDocumentEmbedding",
 }
 
 export type TeamPreferences = {
@@ -310,6 +316,7 @@ export type TeamPreferences = {
   [TeamPreference.Commenting]?: boolean;
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
   [TeamPreference.TocPosition]?: TOCPosition;
+  [TeamPreference.PreventDocumentEmbedding]?: boolean;
 };
 
 export enum NavigationNodeType {
@@ -355,6 +362,8 @@ export enum NotificationEventType {
   ReactionsCreate = "reactions.create",
   MentionedInDocument = "documents.mentioned",
   MentionedInComment = "comments.mentioned",
+  GroupMentionedInDocument = "documents.group_mentioned",
+  GroupMentionedInComment = "comments.group_mentioned",
   InviteAccepted = "emails.invite_accepted",
   Onboarding = "emails.onboarding",
   Features = "emails.features",
@@ -390,6 +399,8 @@ export const NotificationEventDefaults: Record<NotificationEventType, boolean> =
     [NotificationEventType.CreateRevision]: false,
     [NotificationEventType.MentionedInDocument]: true,
     [NotificationEventType.MentionedInComment]: true,
+    [NotificationEventType.GroupMentionedInDocument]: true,
+    [NotificationEventType.GroupMentionedInComment]: true,
     [NotificationEventType.InviteAccepted]: true,
     [NotificationEventType.Onboarding]: true,
     [NotificationEventType.Features]: true,
@@ -399,17 +410,18 @@ export const NotificationEventDefaults: Record<NotificationEventType, boolean> =
   };
 
 export enum UnfurlResourceType {
-  OEmbed = "oembed",
+  URL = "url",
   Mention = "mention",
+  Group = "group",
   Document = "document",
   Issue = "issue",
   PR = "pull",
 }
 
 export type UnfurlResponse = {
-  [UnfurlResourceType.OEmbed]: {
+  [UnfurlResourceType.URL]: {
     /** The resource type */
-    type: UnfurlResourceType.OEmbed;
+    type: UnfurlResourceType.URL;
     /** URL pointing to the resource */
     url: string;
     /** A text title, describing the resource */
@@ -418,6 +430,8 @@ export type UnfurlResponse = {
     description: string;
     /** A URL to a thumbnail image representing the resource */
     thumbnailUrl: string;
+    /** A URL to a favicon representing the resource */
+    faviconUrl: string;
   };
   [UnfurlResourceType.Mention]: {
     /** The resource type */
@@ -432,6 +446,21 @@ export type UnfurlResponse = {
     color: string;
     /** Mentiond user's recent activity */
     lastActive: string;
+  };
+  [UnfurlResourceType.Group]: {
+    /** The resource type */
+    type: UnfurlResourceType.Group;
+    /** Group name */
+    name: string;
+    /** Number of members in the group */
+    memberCount: number;
+    /** Array of group members (limited to display count) */
+    users: Array<{
+      id: string;
+      name: string;
+      avatarUrl: string | null;
+      color: string;
+    }>;
   };
   [UnfurlResourceType.Document]: {
     /** The resource type */

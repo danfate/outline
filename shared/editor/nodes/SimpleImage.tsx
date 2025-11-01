@@ -14,9 +14,10 @@ import uploadPlaceholderPlugin from "../lib/uploadPlaceholder";
 import { UploadPlugin } from "../plugins/UploadPlugin";
 import { ComponentProps } from "../types";
 import Node from "./Node";
+import { LightboxImageFactory } from "../lib/Lightbox";
 
 export default class SimpleImage extends Node {
-  options: Options;
+  options: Options & { userId?: string };
 
   get name() {
     return "image";
@@ -76,7 +77,17 @@ export default class SimpleImage extends Node {
     };
   }
 
-  component = (props: ComponentProps) => <ImageComponent {...props} />;
+  handleClick =
+    ({ view, getPos }: ComponentProps) =>
+    () => {
+      this.editor.updateActiveLightboxImage(
+        LightboxImageFactory.createLightboxImage(view, getPos())
+      );
+    };
+
+  component = (props: ComponentProps) => (
+    <ImageComponent {...props} onClick={this.handleClick(props)} />
+  );
 
   keys(): Record<string, Command> {
     return {

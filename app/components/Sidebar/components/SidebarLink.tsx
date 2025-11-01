@@ -3,7 +3,7 @@ import * as React from "react";
 import styled, { useTheme, css } from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import EventBoundary from "@shared/components/EventBoundary";
-import { s, truncateMultiline } from "@shared/styles";
+import { s } from "@shared/styles";
 import { isMobile } from "@shared/utils/browser";
 import NudeButton from "~/components/NudeButton";
 import { UnreadBadge } from "~/components/UnreadBadge";
@@ -11,6 +11,10 @@ import useClickIntent from "~/hooks/useClickIntent";
 import { undraggableOnDesktop } from "~/styles";
 import Disclosure from "./Disclosure";
 import NavLink, { Props as NavLinkProps } from "./NavLink";
+import { ActionV2WithChildren } from "~/types";
+import { ContextMenu } from "~/components/Menu/ContextMenu";
+import { useTranslation } from "react-i18next";
+import useBoolean from "~/hooks/useBoolean";
 
 type Props = Omit<NavLinkProps, "to"> & {
   to?: LocationDescriptor;
@@ -32,6 +36,7 @@ type Props = Omit<NavLinkProps, "to"> & {
   isDraft?: boolean;
   depth?: number;
   scrollIntoViewIfNeeded?: boolean;
+  contextAction?: ActionV2WithChildren;
 };
 
 const activeDropStyle = {
@@ -62,17 +67,27 @@ function SidebarLink(
     onDisclosureClick,
     disabled,
     unreadBadge,
+    contextAction,
     ...rest
   }: Props,
   ref: React.RefObject<HTMLAnchorElement>
 ) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const { handleMouseEnter, handleMouseLeave } = useClickIntent(onClickIntent);
   const style = React.useMemo(
     () => ({
       paddingLeft: `${(depth || 0) * 16 + 12}px`,
+      paddingRight: unreadBadge ? "32px" : undefined,
     }),
     [depth]
+  );
+
+  const unreadStyle = React.useMemo(
+    () => ({
+      right: -12,
+    }),
+    []
   );
 
   const activeStyle = React.useMemo(
@@ -84,41 +99,58 @@ function SidebarLink(
     [theme.text, theme.sidebarActiveBackground, style]
   );
 
+  const hoverStyle = React.useMemo(
+    () => ({
+      color: theme.text,
+      ...style,
+    }),
+    [theme.text, style]
+  );
+
+  const [openContextMenu, setOpen, setClosed] = useBoolean(false);
+
   return (
     <>
-      <Link
-        $isActiveDrop={isActiveDrop}
-        $isDraft={isDraft}
-        $disabled={disabled}
-        activeStyle={isActiveDrop ? activeDropStyle : activeStyle}
-        style={active ? activeStyle : style}
-        onClick={onClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        // @ts-expect-error exact does not exist on div
-        exact={exact !== false}
-        to={to}
-        as={to ? undefined : href ? "a" : "div"}
-        href={href}
-        className={className}
-        ref={ref}
-        {...rest}
+      <ContextMenu
+        action={contextAction}
+        ariaLabel={t("Link options")}
+        onOpen={setOpen}
+        onClose={setClosed}
       >
-        <Content>
-          {expanded !== undefined && (
-            <Disclosure
-              expanded={expanded}
-              onMouseDown={onDisclosureClick}
-              onClick={preventDefault}
-              root={depth === 0}
-              tabIndex={-1}
-            />
-          )}
-          {icon && <IconWrapper>{icon}</IconWrapper>}
-          <Label>{label}</Label>
-          {unreadBadge && <UnreadBadge />}
-        </Content>
-      </Link>
+        <Link
+          $isActiveDrop={isActiveDrop}
+          $isDraft={isDraft}
+          $disabled={disabled}
+          activeStyle={isActiveDrop ? activeDropStyle : activeStyle}
+          style={openContextMenu ? hoverStyle : active ? activeStyle : style}
+          onClick={onClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          // @ts-expect-error exact does not exist on div
+          exact={exact !== false}
+          to={to}
+          as={to ? undefined : href ? "a" : "div"}
+          href={href}
+          className={className}
+          ref={ref}
+          {...rest}
+        >
+          <Content>
+            {expanded !== undefined && (
+              <Disclosure
+                expanded={expanded}
+                onMouseDown={onDisclosureClick}
+                onClick={preventDefault}
+                root={depth === 0}
+                tabIndex={-1}
+              />
+            )}
+            {icon && <IconWrapper>{icon}</IconWrapper>}
+            <Label>{label}</Label>
+            {unreadBadge && <UnreadBadge style={unreadStyle} />}
+          </Content>
+        </Link>
+      </ContextMenu>
       {menu && <Actions showActions={showActions}>{menu}</Actions>}
     </>
   );
@@ -273,7 +305,6 @@ const Label = styled.div`
   position: relative;
   width: 100%;
   line-height: 24px;
-  ${truncateMultiline(3)}
 
   * {
     unicode-bidi: plaintext;

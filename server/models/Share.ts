@@ -46,6 +46,7 @@ import Length from "./validators/Length";
     },
     {
       association: "team",
+      required: true,
     },
   ],
 }))
@@ -148,6 +149,10 @@ class Share extends IdModel<
   @Default(false)
   @Column
   showLastUpdated: boolean;
+
+  @Default(false)
+  @Column
+  showTOC: boolean;
 
   // hooks
 

@@ -23,7 +23,6 @@ import Tooltip from "~/components/Tooltip";
 import { publishDocument } from "~/actions/definitions/documents";
 import { navigateToTemplateSettings } from "~/actions/definitions/navigation";
 import { restoreRevision } from "~/actions/definitions/revisions";
-import useActionContext from "~/hooks/useActionContext";
 import useCurrentTeam from "~/hooks/useCurrentTeam";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useEditingFocus from "~/hooks/useEditingFocus";
@@ -109,10 +108,6 @@ function DocumentHeader({
     }
   }, [ui, isShare]);
 
-  const context = useActionContext({
-    activeDocumentId: document?.id,
-  });
-
   const can = usePolicy(document);
   const { isDeleted, isTemplate } = document;
   const isTemplateEditable = can.update && isTemplate;
@@ -134,6 +129,7 @@ function DocumentHeader({
       placement="bottom"
     >
       <Button
+        aria-label={t("Show contents")}
         onClick={handleToggle}
         icon={<TableOfContentsIcon />}
         borderOnHover
@@ -278,7 +274,6 @@ function DocumentHeader({
                   placement="bottom"
                 >
                   <Button
-                    context={context}
                     action={isTemplate ? navigateToTemplateSettings : undefined}
                     onClick={isTemplate ? undefined : handleSave}
                     disabled={savingIsDisabled}
@@ -307,12 +302,7 @@ function DocumentHeader({
             {revision && revision.createdAt !== document.updatedAt && (
               <Action>
                 <Tooltip content={t("Restore version")} placement="bottom">
-                  <Button
-                    action={restoreRevision}
-                    context={context}
-                    neutral
-                    hideOnActionDisabled
-                  >
+                  <Button action={restoreRevision} neutral hideOnActionDisabled>
                     {t("Restore")}
                   </Button>
                 </Tooltip>
@@ -322,7 +312,6 @@ function DocumentHeader({
               <Action>
                 <Button
                   action={publishDocument}
-                  context={context}
                   disabled={publishingIsDisabled}
                   hideOnActionDisabled
                   hideIcon

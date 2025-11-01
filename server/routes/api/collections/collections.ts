@@ -5,6 +5,7 @@ import {
   CollectionStatusFilter,
   FileOperationState,
   FileOperationType,
+  UserRole,
 } from "@shared/types";
 import collectionExporter from "@server/commands/collectionExporter";
 import teamUpdater from "@server/commands/teamUpdater";
@@ -490,7 +491,7 @@ router.post(
 router.post(
   "collections.export",
   rateLimiter(RateLimiterStrategy.FiftyPerHour),
-  auth(),
+  auth({ role: UserRole.Member }),
   validate(T.CollectionsExportSchema),
   transaction(),
   async (ctx: APIContext<T.CollectionsExportReq>) => {
@@ -528,11 +529,11 @@ router.post(
 router.post(
   "collections.export_all",
   rateLimiter(RateLimiterStrategy.FivePerHour),
-  auth(),
+  auth({ role: UserRole.Admin }),
   validate(T.CollectionsExportAllSchema),
   transaction(),
   async (ctx: APIContext<T.CollectionsExportAllReq>) => {
-    const { format, includeAttachments } = ctx.input.body;
+    const { format, includeAttachments, includePrivate } = ctx.input.body;
     const { user } = ctx.state.auth;
     const { transaction } = ctx.state;
     const team = await Team.findByPk(user.teamId, { transaction });
@@ -543,6 +544,7 @@ router.post(
       team,
       format,
       includeAttachments,
+      includePrivate,
       ctx,
     });
 

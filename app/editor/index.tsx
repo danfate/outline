@@ -52,8 +52,16 @@ import Logger from "~/utils/Logger";
 import ComponentView from "./components/ComponentView";
 import EditorContext from "./components/EditorContext";
 import { NodeViewRenderer } from "./components/NodeViewRenderer";
-import SelectionToolbar from "./components/SelectionToolbar";
+
 import WithTheme from "./components/WithTheme";
+import isNull from "lodash/isNull";
+import { isArray, map } from "lodash";
+import {
+  LightboxImage,
+  LightboxImageFactory,
+} from "@shared/editor/lib/Lightbox";
+import Lightbox from "~/components/Lightbox";
+import { anchorPlugin } from "@shared/editor/plugins/anchorPlugin";
 
 export type Props = {
   /** An optional identifier for the editor context. It is used to persist local settings */
@@ -143,8 +151,8 @@ type State = {
   isRTL: boolean;
   /** If the editor is currently focused */
   isEditorFocused: boolean;
-  /** If the toolbar for a text selection is visible */
-  selectionToolbarOpen: boolean;
+  /** Image that's being currently viewed in Lightbox */
+  activeLightboxImage: LightboxImage | null;
 };
 
 /**
@@ -173,7 +181,7 @@ export class Editor extends React.PureComponent<
   state: State = {
     isRTL: false,
     isEditorFocused: false,
-    selectionToolbarOpen: false,
+    activeLightboxImage: null,
   };
 
   isInitialized = false;
@@ -260,19 +268,12 @@ export class Editor extends React.PureComponent<
       this.calculateDir();
     }
 
-    if (
-      !this.isBlurred &&
-      !this.state.isEditorFocused &&
-      !this.state.selectionToolbarOpen
-    ) {
+    if (!this.isBlurred && !this.state.isEditorFocused) {
       this.isBlurred = true;
       this.props.onBlur?.();
     }
 
-    if (
-      this.isBlurred &&
-      (this.state.isEditorFocused || this.state.selectionToolbarOpen)
-    ) {
+    if (this.isBlurred && this.state.isEditorFocused) {
       this.isBlurred = false;
       this.props.onFocus?.();
     }
@@ -406,6 +407,7 @@ export class Editor extends React.PureComponent<
       plugins: [
         ...this.keymaps,
         ...this.plugins,
+        anchorPlugin(),
         dropCursor({
           color: this.props.theme.cursor,
         }),
@@ -494,6 +496,7 @@ export class Editor extends React.PureComponent<
 
     // Tell third-party libraries and screen-readers that this is an input
     view.dom.setAttribute("role", "textbox");
+    view.dom.setAttribute("aria-label", "Editor content");
 
     return view;
   }
@@ -635,6 +638,16 @@ export class Editor extends React.PureComponent<
    */
   public getImages = () => ProsemirrorHelper.getImages(this.view.state.doc);
 
+  public getLightboxImages = (): LightboxImage[] => {
+    const lightboxNodes = ProsemirrorHelper.getLightboxNodes(
+      this.view.state.doc
+    );
+
+    return map(lightboxNodes, (node) =>
+      LightboxImageFactory.createLightboxImage(this.view, node.pos)
+    );
+  };
+
   /**
    * Return the tasks/checkmarks in the current editor.
    *
@@ -657,19 +670,36 @@ export class Editor extends React.PureComponent<
   public removeComment = (commentId: string) => {
     const { state, dispatch } = this.view;
     const tr = state.tr;
+    let markRemoved = false;
 
     state.doc.descendants((node, pos) => {
-      if (!node.isInline) {
-        return;
+      if (markRemoved) {
+        return false;
       }
-
       const mark = node.marks.find(
         (m) => m.type === state.schema.marks.comment && m.attrs.id === commentId
       );
 
       if (mark) {
         tr.removeMark(pos, pos + node.nodeSize, mark);
+        markRemoved = true;
+        return;
       }
+
+      if (isArray(node.attrs?.marks)) {
+        const existingMarks = node.attrs.marks;
+        const updatedMarks = existingMarks.filter(
+          (mark: any) => mark.attrs.id !== commentId
+        );
+        const attrs = {
+          ...node.attrs,
+          marks: updatedMarks,
+        };
+        tr.setNodeMarkup(pos, undefined, attrs);
+        markRemoved = true;
+      }
+
+      return;
     });
 
     dispatch(tr);
@@ -678,7 +708,7 @@ export class Editor extends React.PureComponent<
   /**
    * Update all marks related to a specific comment in the document.
    *
-   * @param commentId The id of the comment to remove
+   * @param commentId The id of the comment to update
    * @param attrs The attributes to update
    */
   public updateComment = (
@@ -687,10 +717,11 @@ export class Editor extends React.PureComponent<
   ) => {
     const { state, dispatch } = this.view;
     const tr = state.tr;
+    let markUpdated = false;
 
     state.doc.descendants((node, pos) => {
-      if (!node.isInline) {
-        return;
+      if (markUpdated) {
+        return false;
       }
 
       const mark = node.marks.find(
@@ -704,12 +735,37 @@ export class Editor extends React.PureComponent<
           ...mark.attrs,
           ...attrs,
         });
-
         tr.removeMark(from, to, mark).addMark(from, to, newMark);
+        markUpdated = true;
+        return;
       }
+
+      if (isArray(node.attrs?.marks)) {
+        const existingMarks = node.attrs.marks;
+        const updatedMarks = existingMarks.map((mark: any) =>
+          mark.type === "comment" && mark.attrs.id === commentId
+            ? { ...mark, attrs: { ...mark.attrs, ...attrs } }
+            : mark
+        );
+        const newAttrs = {
+          ...node.attrs,
+          marks: updatedMarks,
+        };
+        tr.setNodeMarkup(pos, undefined, newAttrs);
+        markUpdated = true;
+      }
+
+      return;
     });
 
     dispatch(tr);
+  };
+
+  public updateActiveLightboxImage = (activeImage: LightboxImage | null) => {
+    this.setState((state) => ({
+      ...state,
+      activeLightboxImage: activeImage,
+    }));
   };
 
   /**
@@ -763,23 +819,6 @@ export class Editor extends React.PureComponent<
     return false;
   };
 
-  private handleOpenSelectionToolbar = () => {
-    this.setState((state) => ({
-      ...state,
-      selectionToolbarOpen: true,
-    }));
-  };
-
-  private handleCloseSelectionToolbar = () => {
-    if (!this.state.selectionToolbarOpen) {
-      return;
-    }
-    this.setState((state) => ({
-      ...state,
-      selectionToolbarOpen: false,
-    }));
-  };
-
   public render() {
     const { readOnly, canUpdate, grow, style, className, onKeyDown } =
       this.props;
@@ -809,18 +848,7 @@ export class Editor extends React.PureComponent<
               ref={this.elementRef}
               lang=""
             />
-            {this.view && (
-              <SelectionToolbar
-                rtl={isRTL}
-                readOnly={readOnly}
-                canUpdate={this.props.canUpdate}
-                canComment={this.props.canComment}
-                isTemplate={this.props.template === true}
-                onOpen={this.handleOpenSelectionToolbar}
-                onClose={this.handleCloseSelectionToolbar}
-                onClickLink={this.props.onClickLink}
-              />
-            )}
+
             {this.widgets &&
               Object.values(this.widgets).map((Widget, index) => (
                 <Widget key={String(index)} rtl={isRTL} readOnly={readOnly} />
@@ -831,6 +859,14 @@ export class Editor extends React.PureComponent<
               )}
             </Observer>
           </Flex>
+          {!isNull(this.state.activeLightboxImage) && (
+            <Lightbox
+              images={this.getLightboxImages()}
+              activeImage={this.state.activeLightboxImage}
+              onUpdate={this.updateActiveLightboxImage}
+              onClose={() => this.view.focus()}
+            />
+          )}
         </EditorContext.Provider>
       </PortalContext.Provider>
     );
@@ -844,9 +880,14 @@ const EditorContainer = styled(Styles)<{
   ${(props) =>
     props.focusedCommentId &&
     css`
-      #comment-${props.focusedCommentId} {
+      span#comment-${props.focusedCommentId} {
         background: ${transparentize(0.5, props.theme.brand.marine)};
         border-bottom: 2px solid ${props.theme.commentMarkBackground};
+      }
+      a#comment-${props.focusedCommentId}
+        ~ span.component-image
+        div.image-wrapper {
+        outline: ${props.theme.commentMarkBackground} solid 2px;
       }
     `}
 

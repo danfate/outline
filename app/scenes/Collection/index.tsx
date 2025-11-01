@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import { lazy, useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useParams,
@@ -47,9 +47,12 @@ import Empty from "./components/Empty";
 import MembershipPreview from "./components/MembershipPreview";
 import Notices from "./components/Notices";
 import Overview from "./components/Overview";
-import ShareButton from "./components/ShareButton";
+import first from "lodash/first";
+import lazyWithRetry from "~/utils/lazyWithRetry";
 
-const IconPicker = lazy(() => import("~/components/IconPicker"));
+const IconPicker = lazyWithRetry(() => import("~/components/IconPicker"));
+
+const ShareButton = lazyWithRetry(() => import("./components/ShareButton"));
 
 enum CollectionPath {
   Overview = "overview",
@@ -206,7 +209,7 @@ const CollectionScene = observer(function _CollectionScene() {
                 <Suspense fallback={fallbackIcon}>
                   <IconPicker
                     icon={collection.icon ?? "collection"}
-                    color={collection.color ?? colorPalette[0]}
+                    color={collection.color ?? (first(colorPalette) as string)}
                     initial={collection.initial}
                     size={40}
                     popoverPosition="bottom-start"

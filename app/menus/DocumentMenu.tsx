@@ -10,7 +10,7 @@ import Document from "~/models/Document";
 import { DropdownMenu } from "~/components/Menu/DropdownMenu";
 import { OverflowMenuButton } from "~/components/Menu/OverflowMenuButton";
 import Switch from "~/components/Switch";
-import useActionContext from "~/hooks/useActionContext";
+import { ActionContextProvider } from "~/hooks/useActionContext";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useMobile from "~/hooks/useMobile";
 import usePolicy from "~/hooks/usePolicy";
@@ -126,17 +126,10 @@ function DocumentMenu({
   );
 
   const rootAction = useDocumentMenuAction({
-    document,
+    documentId: document.id,
     onFindAndReplace,
     onRename,
     onSelectTemplate,
-  });
-
-  const context = useActionContext({
-    isContextMenu: true,
-    activeDocumentId: document.id,
-    activeCollectionId:
-      !isShared && document.collectionId ? document.collectionId : undefined,
   });
 
   const toggleSwitches = React.useMemo<React.ReactNode>(() => {
@@ -203,20 +196,29 @@ function DocumentMenu({
   ]);
 
   return (
-    <DropdownMenu
-      action={rootAction}
-      context={context}
-      align={align}
-      onOpen={onOpen}
-      onClose={onClose}
-      ariaLabel={t("Document options")}
-      append={toggleSwitches}
+    <ActionContextProvider
+      value={{
+        activeDocumentId: document.id,
+        activeCollectionId:
+          !isShared && document.collectionId
+            ? document.collectionId
+            : undefined,
+      }}
     >
-      <OverflowMenuButton
-        neutral={neutral}
-        onPointerEnter={handlePointerEnter}
-      />
-    </DropdownMenu>
+      <DropdownMenu
+        action={rootAction}
+        align={align}
+        onOpen={onOpen}
+        onClose={onClose}
+        ariaLabel={t("Document options")}
+        append={toggleSwitches}
+      >
+        <OverflowMenuButton
+          neutral={neutral}
+          onPointerEnter={handlePointerEnter}
+        />
+      </DropdownMenu>
+    </ActionContextProvider>
   );
 }
 
