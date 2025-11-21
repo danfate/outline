@@ -144,6 +144,7 @@ export type Props = {
   style?: React.CSSProperties;
   /** Optional style overrides for the contenteeditable */
   editorStyle?: React.CSSProperties;
+  lang?: string;
 };
 
 type State = {
@@ -846,12 +847,17 @@ export class Editor extends React.PureComponent<
               editorStyle={this.props.editorStyle}
               commenting={!!this.props.onClickCommentMark}
               ref={this.elementRef}
-              lang=""
+              lang={this.props.lang ?? ""}
             />
 
             {this.widgets &&
               Object.values(this.widgets).map((Widget, index) => (
-                <Widget key={String(index)} rtl={isRTL} readOnly={readOnly} />
+                <Widget
+                  key={String(index)}
+                  rtl={isRTL}
+                  readOnly={readOnly}
+                  selection={this.view.state.selection}
+                />
               ))}
             <Observer>
               {() => (
