@@ -1,0 +1,102 @@
+name: Build CJK release image
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Upstream tag used as the release baseline, for example v1.9.2.
+        required: true
+        type: string
+      revision:
+        description: CJK image revision for this upstream tag.
+        default: cjk.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cjk-release-${{ inputs.upstream_tag }}
+  cancel-in-progress: false
+
+env:
+  BASE_IMAGE_NAME: ghcr.io/danfate/outline-base
+  IMAGE_NAME: ghcr.io/danfate/outline
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: release/${{ inputs.upstream_tag }}-cjk
+
+      - name: Verify release baseline
+        env:
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          if ! [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "upstream_tag must be a stable version tag such as v1.9.2"
+            exit 1
+          fi
+          git fetch --no-tags https://github.com/outline/outline.git "+refs/tags/${UPSTREAM_TAG}:refs/tags/${UPSTREAM_TAG}"
+          git rev-parse --verify "${UPSTREAM_TAG}^{commit}"
+          git merge-base --is-ancestor "${UPSTREAM_TAG}" HEAD
+
+      - name: Set image tags
+        id: image
+        env:
+          REVISION: ${{ inputs.revision }}
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          if ! [[ "$REVISION" =~ ^cjk\.[0-9]+$ ]]; then
+            echo "revision must use the form cjk.N, for example cjk.1"
+            exit 1
+          fi
+          tag="${UPSTREAM_TAG}-${REVISION}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push base image
+        id: base
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.base
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.BASE_IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+          cache-from: type=gha,scope=cjk-base-${{ inputs.upstream_tag }}
+          cache-to: type=gha,mode=max,scope=cjk-base-${{ inputs.upstream_tag }}
+
+      - name: Build and push application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+            ${{ env.IMAGE_NAME }}:cjk-stable
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE_NAME }}@${{ steps.base.outputs.digest }}
+          cache-from: type=gha,scope=cjk-app-${{ inputs.upstream_tag }}
+          cache-to: type=gha,mode=max,scope=cjk-app-${{ inputs.upstream_tag }}
