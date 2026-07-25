@@ -624,7 +624,14 @@ export default class PostgresSearchProvider extends BaseSearchProvider {
     return { operator: "AND", filters: [filter, publishedShape] };
   }
 
-  private static async buildWhere(model: User | Team, options: SearchOptions) {
+  /**
+   * Builds the shared visibility and metadata filters for document searches.
+   *
+   * @param model - the user or team executing the search.
+   * @param options - search options excluding the provider-specific query condition.
+   * @returns a Sequelize where clause for accessible documents.
+   */
+  public static async buildWhere(model: User | Team, options: SearchOptions) {
     const teamId = model instanceof Team ? model.id : model.teamId;
     const where: WhereOptions<Document> & {
       [Op.or]: WhereOptions<Document>[];
