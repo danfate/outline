@@ -52,14 +52,21 @@ export default class MeilisearchIndexProcessor extends BaseProcessor {
 
     const documentId = (event as DocumentUserEvent | DocumentGroupEvent)
       .documentId;
-    const document = await Document.findByPk(documentId, { paranoid: false });
+    const document = await Document.unscoped().findByPk(documentId, {
+      paranoid: false,
+    });
     if (!document) {
       return;
     }
 
-    const childDocumentIds = await document.findAllChildDocumentIds();
+    const childDocumentIds = await document.findAllChildDocumentIds(undefined, {
+      paranoid: false,
+    });
     const childDocuments = childDocumentIds.length
-      ? await Document.findAll({ where: { id: childDocumentIds } })
+      ? await Document.unscoped().findAll({
+          paranoid: false,
+          where: { id: childDocumentIds },
+        })
       : [];
     for (const indexedDocument of [document, ...childDocuments]) {
       await provider.index(SearchableModel.Document, indexedDocument);

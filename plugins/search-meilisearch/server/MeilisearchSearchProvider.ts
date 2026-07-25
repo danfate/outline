@@ -31,6 +31,8 @@ interface DocumentIndexRecord {
   isArchived: boolean;
   isDeleted: boolean;
   isDraft: boolean;
+  isTemplate: boolean;
+  isTrialImport: boolean;
   memberGroupIds: string[];
   memberUserIds: string[];
   previousTitles: string[];
@@ -418,6 +420,8 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         "isArchived",
         "isDeleted",
         "isDraft",
+        "isTemplate",
+        "isTrialImport",
         "memberGroupIds",
         "memberUserIds",
         "teamId",
@@ -507,6 +511,8 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     const filters = [
       `teamId = ${this.filterValue(teamId)}`,
       "isDeleted = false",
+      "isTemplate = false",
+      "isTrialImport = false",
     ];
     if (options.collectionId) {
       filters.push(`collectionId = ${this.filterValue(options.collectionId)}`);
@@ -515,7 +521,9 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       filters.push(this.inFilter("id", options.documentIds));
     }
     if (options.collaboratorIds?.length) {
-      filters.push(this.inFilter("collaboratorIds", options.collaboratorIds));
+      filters.push(
+        this.containsAllFilter("collaboratorIds", options.collaboratorIds)
+      );
     }
     if (options.dateFilter) {
       const milliseconds = {
@@ -572,6 +580,8 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       isArchived: !!document.archivedAt,
       isDeleted: !!document.deletedAt,
       isDraft: !document.publishedAt,
+      isTemplate: document.template,
+      isTrialImport: !!document.sourceMetadata?.trial,
       memberGroupIds: document.groupMemberships.map(
         (membership) => membership.groupId
       ),
@@ -705,6 +715,12 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
 
   private inFilter(field: string, values: string[]) {
     return `${field} IN [${values.map((value) => this.filterValue(value)).join(", ")}]`;
+  }
+
+  private containsAllFilter(field: string, values: string[]) {
+    return values
+      .map((value) => `${field} = ${this.filterValue(value)}`)
+      .join(" AND ");
   }
 
   private filterValue(value: string) {
