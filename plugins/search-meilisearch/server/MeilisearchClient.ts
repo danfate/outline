@@ -31,6 +31,7 @@ interface MeilisearchTask {
   status: "enqueued" | "failed" | "processing" | "succeeded";
   taskUid: number;
   error?: {
+    code?: string;
     message: string;
   };
 }
@@ -69,7 +70,7 @@ export class MeilisearchClient {
       allowConflict: true,
     });
     if (response) {
-      await this.waitForTask(response.taskUid);
+      await this.waitForTask(response.taskUid, true);
     }
   }
 
@@ -252,7 +253,10 @@ export class MeilisearchClient {
     return (await response.json()) as T;
   }
 
-  private async waitForTask(taskUid: number): Promise<void> {
+  private async waitForTask(
+    taskUid: number,
+    allowExistingIndex = false
+  ): Promise<void> {
     const timeoutAt = Date.now() + MeilisearchClient.TASK_TIMEOUT;
 
     while (Date.now() < timeoutAt) {
@@ -263,6 +267,13 @@ export class MeilisearchClient {
         return;
       }
       if (task?.status === "failed") {
+        if (
+          allowExistingIndex &&
+          (task.error?.code === "index_already_exists" ||
+            task.error?.message.endsWith("already exists."))
+        ) {
+          return;
+        }
         throw new Error(task.error?.message ?? "Meilisearch task failed");
       }
       await new Promise<void>((resolve) =>
