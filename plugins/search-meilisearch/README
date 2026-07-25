@@ -1,0 +1,86 @@
+# Meilisearch 搜索插件
+
+该插件使用 Meilisearch 为 Outline 提供 CJK 全文搜索，不需要修改
+PostgreSQL 扩展、镜像或 schema。文档和集合的权限仍由 Outline 与
+PostgreSQL 复核，Meilisearch 仅保存搜索索引。
+
+## 配置
+
+在 Outline 服务的环境变量中设置：
+
+```dotenv
+SEARCH_PROVIDER=meilisearch
+MEILISEARCH_URL=http://meilisearch:7700
+MEILISEARCH_API_KEY=<服务端专用密钥>
+MEILISEARCH_INDEX_PREFIX=outline
+```
+
+`MEILISEARCH_URL` 与 `MEILISEARCH_API_KEY` 必填；未同时设置时插件不会
+注册。`MEILISEARCH_INDEX_PREFIX` 可选，默认值为 `outline`。同一个
+Meilisearch 实例服务多个环境时，应为每个环境使用不同前缀，例如
+`outline-prod` 与 `outline-staging`。
+
+`MEILISEARCH_API_KEY` 只能配置在服务端，不要暴露给浏览器。开发或小型
+自托管部署可以使用 Meilisearch 的 `MEILI_MASTER_KEY`；生产环境建议创建
+仅供此服务使用的 API key。
+
+Meilisearch 服务需要持久化其数据目录。Docker Compose 中的示例：
+
+```yaml
+meilisearch:
+  image: getmeili/meilisearch:v1
+  environment:
+    MEILI_MASTER_KEY: <长随机密钥>
+  volumes:
+    - meilisearch_data:/meili_data
+```
+
+生产环境应固定实际使用的 `v1.x.y` 镜像版本，并将 Meilisearch 仅暴露给
+Outline 服务所在的内部网络。
+
+## 首次部署与重建索引
+
+从源码运行 Outline 时，先编译插件，再建立现有文档的索引：
+
+```bash
+yarn build
+yarn search:reindex
+```
+
+`yarn search:reindex` 会扫描 PostgreSQL 中已有的文档和集合，写入临时索引，
+完成后原子交换到正式索引。它不是每次启动都会自动执行，避免每次部署都对
+数据库和 Meilisearch 做一次完整扫描。
+
+首次索引后，文档、集合及其成员权限变更会通过 Outline 队列自动更新索引。
+仅在首次部署、索引损坏或需要全量修复时重新执行该命令。重建期间索引写入
+会通过 Redis 锁串行化，避免并发更新被旧扫描结果覆盖。
+
+## Docker 镜像部署
+
+通过本 fork 的 Dockerfile 或 GitHub Actions 构建镜像时，`yarn build` 已在
+镜像构建阶段执行，运行中的容器不需要再次执行它。首次部署后，在 Outline
+容器内执行：
+
+```bash
+node build/plugins/search-meilisearch/server/reindex.js
+```
+
+使用 Docker Compose 时可写为：
+
+```bash
+docker compose exec outline node build/plugins/search-meilisearch/server/reindex.js
+```
+
+将 `outline` 替换为实际的 Compose 服务名。命令运行时必须带有与 Outline
+服务相同的数据库、Redis 与 Meilisearch 环境变量。
+
+## Fork 维护约定
+
+- `main`：仅同步官方上游。
+- `cjk/meilisearch`：持续开发分支，用于构建开发镜像。
+- `release/vX.Y.Z-cjk`：从对应上游 tag 创建，再移植 CJK 补丁；用于稳定镜像
+  `vX.Y.Z-cjk.N`。
+
+GitHub Actions 工作流位于 `.github/workflows/build-cjk-image.yml`。它只从
+`release/<upstream_tag>-cjk` 构建稳定镜像，并在构建前重新验证该 tag 来自
+官方上游。
