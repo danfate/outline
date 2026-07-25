@@ -84,7 +84,7 @@ export class MeilisearchClient {
       `/indexes/${this.indexName(index)}/settings`,
       {
         body: JSON.stringify(settings),
-        method: "PUT",
+        method: "PATCH",
       }
     );
     if (!task) {
@@ -224,7 +224,7 @@ export class MeilisearchClient {
     options: {
       allowConflict?: boolean;
       body?: string;
-      method: "DELETE" | "GET" | "POST" | "PUT";
+      method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
     }
   ): Promise<T | undefined> {
     const response = await fetch(`${this.url}${path}`, {
