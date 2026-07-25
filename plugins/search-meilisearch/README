@@ -84,3 +84,44 @@ docker compose exec outline node build/plugins/search-meilisearch/server/reindex
 GitHub Actions 工作流位于 `.github/workflows/build-cjk-image.yml`。它只从
 `release/<upstream_tag>-cjk` 构建稳定镜像，并在构建前重新验证该 tag 来自
 官方上游。
+
+## 同步新的上游 tag
+
+当上游发布新稳定 tag（以下以 `v1.10.0` 为例）时，先拉取上游 tag，并将
+`main` 快进到上游开发分支：
+
+```bash
+git fetch upstream --tags
+git switch main
+git merge --ff-only upstream/main
+git push origin main
+```
+
+然后将新的 `main` 合并到开发分支。若有冲突，在该分支解决、提交并推送：
+
+```bash
+git switch cjk/meilisearch
+git merge main
+git push origin cjk/meilisearch
+```
+
+新稳定发布分支应从上一个 CJK 发布分支创建，并将完整补丁栈重放到新 tag。以
+当前 `v1.9.2` 发布分支为例：
+
+```bash
+git switch release/v1.9.2-cjk
+git switch -c release/v1.10.0-cjk
+git rebase --onto v1.10.0 v1.9.2
+```
+
+如果 rebase 冲突，解决文件后执行 `git add <文件>` 与 `git rebase --continue`。
+完成静态检查后推送发布分支：
+
+```bash
+git push -u origin release/v1.10.0-cjk
+```
+
+最后手动运行 GitHub Actions，填写 `upstream_tag=v1.10.0` 与
+`revision=cjk.1`。发布分支承载完整 CJK 补丁栈，因此会包含已同步到当前稳定
+分支的所有 CJK 修复。后续新增 CJK 修复时，应同时提交到
+`cjk/meilisearch` 与最新的 `release/*-cjk` 分支。
