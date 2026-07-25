@@ -1,4 +1,5 @@
 import Logger from "@server/logging/Logger";
+import Redis from "@server/storage/redis";
 import env from "./env";
 import MeilisearchSearchProvider from "./MeilisearchSearchProvider";
 
@@ -9,8 +10,12 @@ async function main() {
     );
   }
 
-  await new MeilisearchSearchProvider().rebuild();
-  Logger.info("plugins", "Meilisearch indexes rebuilt");
+  try {
+    await new MeilisearchSearchProvider().rebuild();
+    Logger.info("plugins", "Meilisearch indexes rebuilt");
+  } finally {
+    Redis.defaultClient.disconnect();
+  }
 }
 
 void main().catch((error: Error) => {
