@@ -24,6 +24,43 @@ Meilisearch 实例服务多个环境时，应为每个环境使用不同前缀�
 自托管部署可以使用 Meilisearch 的 `MEILI_MASTER_KEY`；生产环境建议创建
 仅供此服务使用的 API key。
 
+## 可选的语义增强搜索
+
+语义搜索默认关闭。开启后，插件仍以 CJK 关键词搜索为主，同时使用自建的
+OpenAI 兼容 Embeddings 服务补充语义相近的文档；它不调用生成式 LLM，也不
+生成回答。
+
+```dotenv
+MEILISEARCH_SEMANTIC_SEARCH_ENABLED=true
+MEILISEARCH_EMBEDDING_URL=http://infinity:7997
+MEILISEARCH_EMBEDDING_API_KEY=<Embedding 服务密钥>
+MEILISEARCH_EMBEDDING_MODEL=BAAI/bge-m3
+MEILISEARCH_EMBEDDING_DIMENSIONS=1024
+```
+
+`MEILISEARCH_EMBEDDING_URL` 必须是服务基址，不要包含 `/v1` 或
+`/embeddings`；插件会固定请求 `POST /embeddings`。启用语义功能时，上述
+Embedding 配置必须完整；
+`bge-m3` 的 dense 向量默认是 1024 维，若实际服务使用其他维度，必须同步
+设置 `MEILISEARCH_EMBEDDING_DIMENSIONS`。
+
+Meilisearch 必须使用支持 vector search 的 `v1.x.y` 版本。插件会为
+`document_chunks` 索引配置 `userProvided` embedder：Infinity 只负责编码，
+Meilisearch 保存向量并完成向量检索，因此不需要 pgvector、Qdrant 或 Milvus。
+
+文档正文会按约 1,000 个字符切片（相邻片段重叠约 150 个字符），并将标题
+附入每个片段的 Embedding 输入。标题搜索和集合搜索仍是原有的 CJK 关键词
+搜索。文档更新会异步重建该文档的向量；移动、归档和成员权限变化只更新索引
+元数据，不重复编码正文。
+
+全文搜索会并行查询关键词索引与向量索引，再使用偏向关键词结果的 RRF 排名
+融合。精确标题、编号、URL 和 CJK 关键词命中优先，向量结果仅补充措辞不同但
+语义相近的文档。两路候选都会经过 Meilisearch 过滤，并始终由 Outline 和
+PostgreSQL 再次复核权限。
+
+Embedding 服务暂时不可用时，文档索引任务会失败并由 Outline 队列重试；已有
+的 CJK 索引不受影响。查询时会自动退化为纯关键词搜索，并记录服务端错误。
+
 Meilisearch 服务需要持久化其数据目录。Docker Compose 中的示例：
 
 ```yaml
@@ -50,6 +87,10 @@ yarn search:reindex
 `yarn search:reindex` 会扫描 PostgreSQL 中已有的文档和集合，写入临时索引，
 完成后原子交换到正式索引。它不是每次启动都会自动执行，避免每次部署都对
 数据库和 Meilisearch 做一次完整扫描。
+
+启用语义增强后，该命令还会建立临时的文档片段向量索引，并在文档、集合与
+向量索引均完成后一次性交换。首次启用或更换 Embedding 模型、维度时都必须
+重新执行该命令；如果编码或向量索引失败，正式索引不会被替换。
 
 首次索引后，文档、集合及其成员权限变更会通过 Outline 队列自动更新索引。
 仅在首次部署、索引损坏或需要全量修复时重新执行该命令。重建期间索引写入
