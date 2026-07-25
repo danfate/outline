@@ -65,7 +65,10 @@ export class MeilisearchClient {
    */
   public async createIndex(index: string): Promise<void> {
     const response = await this.request<MeilisearchTask>("/indexes", {
-      body: JSON.stringify({ uid: this.indexName(index) }),
+      body: JSON.stringify({
+        primaryKey: "id",
+        uid: this.indexName(index),
+      }),
       method: "POST",
       allowConflict: true,
     });
