@@ -1,0 +1,6 @@
+{
+  "id": "search-meilisearch",
+  "name": "Meilisearch",
+  "priority": 0,
+  "description": "Full-text search powered by Meilisearch."
+}
