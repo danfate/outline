@@ -69,7 +69,11 @@ export default class MeilisearchIndexProcessor extends BaseProcessor {
         })
       : [];
     for (const indexedDocument of [document, ...childDocuments]) {
-      await provider.index(SearchableModel.Document, indexedDocument);
+      await provider.updateMetadata(
+        SearchableModel.Document,
+        indexedDocument.id,
+        {}
+      );
     }
   }
 }

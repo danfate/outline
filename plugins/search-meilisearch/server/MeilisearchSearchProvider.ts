@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import invariant from "invariant";
 import { Op } from "sequelize";
 import { DirectionFilter, SearchableModel, StatusFilter } from "@shared/types";
+import { toError } from "@shared/utils/error";
 import { sleep } from "@shared/utils/timers";
 import type { SortFilter } from "@shared/types";
 import type Collection from "@server/models/Collection";
@@ -11,6 +12,7 @@ import type Team from "@server/models/Team";
 import type User from "@server/models/User";
 import { DocumentHelper } from "@server/models/helpers/DocumentHelper";
 import type Share from "@server/models/Share";
+import Logger from "@server/logging/Logger";
 import Redis from "@server/storage/redis";
 import type {
   SearchOptions,
@@ -18,8 +20,14 @@ import type {
 } from "@server/utils/BaseSearchProvider";
 import { BaseSearchProvider } from "@server/utils/BaseSearchProvider";
 import PostgresSearchProvider from "plugins/search-postgres/server/PostgresSearchProvider";
+import { EmbeddingClient } from "./EmbeddingClient";
 import env from "./env";
-import { MeilisearchClient, type MeilisearchHit } from "./MeilisearchClient";
+import {
+  MeilisearchClient,
+  type MeilisearchHit,
+  type MeilisearchIndexSettings,
+  type MeilisearchSearchResponse,
+} from "./MeilisearchClient";
 
 interface DocumentIndexRecord {
   ancestorDocumentIds: string[];
@@ -42,6 +50,32 @@ interface DocumentIndexRecord {
   updatedAt: number;
 }
 
+interface DocumentChunkIndexRecord extends DocumentIndexRecord {
+  chunkIndex: number;
+  documentId: string;
+  _vectors: {
+    default: number[];
+  };
+}
+
+interface DocumentChunkMetadata {
+  ancestorDocumentIds: string[];
+  collectionId: string | null;
+  collaboratorIds: string[];
+  createdAt: number;
+  createdById: string;
+  id: string;
+  isArchived: boolean;
+  isDeleted: boolean;
+  isDraft: boolean;
+  isTemplate: boolean;
+  isTrialImport: boolean;
+  memberGroupIds: string[];
+  memberUserIds: string[];
+  teamId: string;
+  updatedAt: number;
+}
+
 interface CollectionIndexRecord {
   description: string;
   id: string;
@@ -54,7 +88,19 @@ interface CollectionIndexRecord {
  * Search provider backed by Meilisearch with PostgreSQL authorization checks.
  */
 export default class MeilisearchSearchProvider extends BaseSearchProvider {
+  private static readonly EMBEDDING_BATCH_SIZE = 32;
+
   private static readonly INDEX_LOCK_TTL = 60_000;
+
+  private static readonly KEYWORD_RRF_WEIGHT = 1.5;
+
+  private static readonly RRF_CONSTANT = 60;
+
+  private static readonly SEMANTIC_RRF_WEIGHT = 1;
+
+  private static readonly TEXT_CHUNK_OVERLAP = 150;
+
+  private static readonly TEXT_CHUNK_SIZE = 1_000;
 
   public id = "meilisearch";
 
@@ -63,6 +109,15 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     indexPrefix: env.MEILISEARCH_INDEX_PREFIX,
     url: env.MEILISEARCH_URL ?? "",
   });
+
+  private readonly embeddings = env.semanticSearchEnabled
+    ? new EmbeddingClient({
+        apiKey: env.MEILISEARCH_EMBEDDING_API_KEY ?? "",
+        dimensions: env.MEILISEARCH_EMBEDDING_DIMENSIONS,
+        model: env.MEILISEARCH_EMBEDDING_MODEL,
+        url: env.MEILISEARCH_EMBEDDING_URL ?? "",
+      })
+    : undefined;
 
   private initialization: Promise<void> | undefined;
 
@@ -78,7 +133,6 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     options: SearchOptions = {}
   ): Promise<SearchResponse> {
     await this.ensureIndexes();
-    const { limit = 15, offset = 0, query } = options;
     const filters = this.documentFilters(team.id, options);
     filters.push("isDeleted = false", "isDraft = false");
 
@@ -90,15 +144,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       filters.push(this.inFilter("collectionId", collectionIds));
     }
 
-    const response = await this.client.search("documents", {
-      attributesToCrop: ["text:45"],
-      attributesToHighlight: ["text"],
-      filter: filters,
-      limit,
-      offset,
-      query,
-      sort: this.sort(options.sort, options.direction),
-    });
+    const response = await this.searchDocuments(filters, options);
     const ids = response.hits.map((hit) => hit.id);
     if (!ids.length) {
       return { results: [], total: response.estimatedTotalHits };
@@ -199,16 +245,10 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     options: SearchOptions = {}
   ): Promise<SearchResponse> {
     await this.ensureIndexes();
-    const { limit = 15, offset = 0, query } = options;
-    const response = await this.client.search("documents", {
-      attributesToCrop: ["text:45"],
-      attributesToHighlight: ["text"],
-      filter: await this.userDocumentFilters(user, options),
-      limit,
-      offset,
-      query,
-      sort: this.sort(options.sort, options.direction),
-    });
+    const response = await this.searchDocuments(
+      await this.userDocumentFilters(user, options),
+      options
+    );
     const documents = await this.authorizedDocuments(
       user,
       response.hits,
@@ -258,11 +298,20 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       });
       if (!document || document.deletedAt) {
         await this.client.deleteDocument("documents", item.id);
+        if (this.embeddings) {
+          await this.client.deleteDocumentsByFilter(
+            "document_chunks",
+            `documentId = ${this.filterValue(item.id)}`
+          );
+        }
         return;
       }
       await this.client.addDocuments("documents", [
         this.documentRecord(document),
       ]);
+      if (this.embeddings) {
+        await this.replaceDocumentChunks(document);
+      }
     });
   }
 
@@ -282,6 +331,12 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       await this.ensureIndexes();
       if (model === SearchableModel.Document) {
         await this.client.deleteDocument("documents", id);
+        if (this.embeddings) {
+          await this.client.deleteDocumentsByFilter(
+            "document_chunks",
+            `documentId = ${this.filterValue(id)}`
+          );
+        }
         return;
       }
       if (model === SearchableModel.Collection) {
@@ -307,13 +362,29 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     }
     if (model === SearchableModel.Document) {
       const document = await Document.unscoped().findByPk(id, {
+        include: [
+          { association: "memberships", required: false },
+          { association: "groupMemberships", required: false },
+        ],
         paranoid: false,
       });
       if (!document) {
         await this.remove(model, id, "");
         return;
       }
-      await this.index(model, document);
+      if (document.deletedAt) {
+        await this.remove(model, id, "");
+        return;
+      }
+      await this.withIndexLock(async () => {
+        await this.ensureIndexes();
+        await this.client.addDocuments("documents", [
+          this.documentRecord(document),
+        ]);
+        if (this.embeddings) {
+          await this.updateDocumentChunkMetadata(document);
+        }
+      });
       return;
     }
 
@@ -329,7 +400,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
   }
 
   /**
-   * Rebuilds both Meilisearch indexes and atomically publishes them.
+   * Rebuilds the Meilisearch indexes and atomically publishes them.
    *
    * @returns a promise that resolves after the new indexes are active.
    */
@@ -339,22 +410,153 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       const suffix = `rebuild_${Date.now()}`;
       const documentIndex = `documents_${suffix}`;
       const collectionIndex = `collections_${suffix}`;
+      const chunkIndex = `document_chunks_${suffix}`;
+      const indexes: [string, string][] = [
+        ["documents", documentIndex],
+        ["collections", collectionIndex],
+      ];
+      if (this.embeddings) {
+        indexes.push(["document_chunks", chunkIndex]);
+      }
 
-      await Promise.all([
-        this.prepareIndex(documentIndex, this.documentSettings()),
-        this.prepareIndex(collectionIndex, this.collectionSettings()),
-      ]);
-      await Promise.all([
-        this.rebuildDocuments(documentIndex),
-        this.rebuildCollections(collectionIndex),
-      ]);
-      await this.client.swapIndexes("documents", documentIndex);
-      await this.client.swapIndexes("collections", collectionIndex);
-      await Promise.all([
-        this.client.deleteIndex(documentIndex),
-        this.client.deleteIndex(collectionIndex),
-      ]);
+      try {
+        await Promise.all([
+          this.prepareIndex(documentIndex, this.documentSettings()),
+          this.prepareIndex(collectionIndex, this.collectionSettings()),
+          this.embeddings
+            ? this.prepareIndex(chunkIndex, this.documentChunkSettings())
+            : Promise.resolve(),
+        ]);
+        await Promise.all([
+          this.rebuildDocuments(documentIndex),
+          this.rebuildCollections(collectionIndex),
+          this.embeddings
+            ? this.rebuildDocumentChunks(chunkIndex)
+            : Promise.resolve(),
+        ]);
+        await this.client.swapIndexes(indexes);
+      } finally {
+        await Promise.all(
+          indexes.map(([, temporaryIndex]) =>
+            this.client.deleteIndex(temporaryIndex).catch(() => undefined)
+          )
+        );
+      }
     });
+  }
+
+  private async searchDocuments(
+    filters: string[],
+    options: SearchOptions
+  ): Promise<MeilisearchSearchResponse> {
+    const { limit = 15, offset = 0, query } = options;
+    const shouldUseSemanticSearch =
+      !!this.embeddings && !!query?.trim() && !options.sort;
+    const candidateLimit = shouldUseSemanticSearch
+      ? Math.max(50, (offset + limit) * 3)
+      : limit;
+    const keywordResponse = await this.client.search("documents", {
+      attributesToCrop: ["text:45"],
+      attributesToHighlight: ["text"],
+      filter: filters,
+      limit: candidateLimit,
+      offset: shouldUseSemanticSearch ? 0 : offset,
+      query,
+      sort: this.sort(options.sort, options.direction),
+    });
+    if (!shouldUseSemanticSearch || !this.embeddings || !query) {
+      return keywordResponse;
+    }
+
+    try {
+      const [vector] = await this.embed([query]);
+      const semanticResponse = await this.client.search("document_chunks", {
+        attributesToCrop: ["text:45"],
+        attributesToHighlight: ["text"],
+        filter: this.documentChunkFilters(filters),
+        hybrid: {
+          embedder: "default",
+          semanticRatio: 1,
+        },
+        limit: candidateLimit,
+        offset: 0,
+        vector,
+      });
+      const hits = this.fuseHits(
+        keywordResponse.hits,
+        semanticResponse.hits,
+        query
+      ).slice(offset, offset + limit);
+      return {
+        estimatedTotalHits: Math.max(
+          keywordResponse.estimatedTotalHits,
+          hits.length
+        ),
+        hits,
+      };
+    } catch (error) {
+      Logger.error(
+        "Meilisearch semantic search failed, using keyword search",
+        toError(error)
+      );
+      return {
+        ...keywordResponse,
+        hits: keywordResponse.hits.slice(offset, offset + limit),
+      };
+    }
+  }
+
+  private fuseHits(
+    keywordHits: MeilisearchHit[],
+    semanticHits: MeilisearchHit[],
+    query: string
+  ): MeilisearchHit[] {
+    const results = new Map<
+      string,
+      {
+        hit: MeilisearchHit;
+        score: number;
+      }
+    >();
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+
+    keywordHits.forEach((hit, index) => {
+      const exactTitle =
+        hit.title?.trim().toLocaleLowerCase() === normalizedQuery ? 1 : 0;
+      results.set(hit.id, {
+        hit,
+        score:
+          MeilisearchSearchProvider.KEYWORD_RRF_WEIGHT /
+            (MeilisearchSearchProvider.RRF_CONSTANT + index + 1) +
+          exactTitle,
+      });
+    });
+
+    const semanticDocuments = new Map<string, MeilisearchHit>();
+    for (const hit of semanticHits) {
+      if (hit.documentId && !semanticDocuments.has(hit.documentId)) {
+        semanticDocuments.set(hit.documentId, {
+          _formatted: hit._formatted,
+          id: hit.documentId,
+          text: hit.text,
+        });
+      }
+    }
+    for (const [index, hit] of [...semanticDocuments.values()].entries()) {
+      const existing = results.get(hit.id);
+      const score =
+        MeilisearchSearchProvider.SEMANTIC_RRF_WEIGHT /
+        (MeilisearchSearchProvider.RRF_CONSTANT + index + 1);
+      if (existing) {
+        existing.score += score;
+      } else {
+        results.set(hit.id, { hit, score });
+      }
+    }
+
+    return [...results.values()]
+      .sort((a, b) => b.score - a.score)
+      .map((result) => result.hit);
   }
 
   private async authorizedDocuments(
@@ -400,16 +602,19 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     await Promise.all([
       this.prepareIndex("documents", this.documentSettings()),
       this.prepareIndex("collections", this.collectionSettings()),
+      this.embeddings
+        ? this.prepareIndex("document_chunks", this.documentChunkSettings())
+        : Promise.resolve(),
     ]);
   }
 
-  private prepareIndex(index: string, settings: Record<string, string[]>) {
+  private prepareIndex(index: string, settings: MeilisearchIndexSettings) {
     return this.client
       .createIndex(index)
       .then(() => this.client.updateSettings(index, settings));
   }
 
-  private documentSettings(): Record<string, string[]> {
+  private documentSettings(): MeilisearchIndexSettings {
     return {
       filterableAttributes: [
         "collectionId",
@@ -432,7 +637,36 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     };
   }
 
-  private collectionSettings(): Record<string, string[]> {
+  private documentChunkSettings(): MeilisearchIndexSettings {
+    return {
+      embedders: {
+        default: {
+          dimensions: env.MEILISEARCH_EMBEDDING_DIMENSIONS,
+          source: "userProvided",
+        },
+      },
+      filterableAttributes: [
+        "collectionId",
+        "collaboratorIds",
+        "createdAt",
+        "createdById",
+        "documentId",
+        "isArchived",
+        "isDeleted",
+        "isDraft",
+        "isTemplate",
+        "isTrialImport",
+        "memberGroupIds",
+        "memberUserIds",
+        "teamId",
+        "updatedAt",
+      ],
+      searchableAttributes: ["title", "text"],
+      sortableAttributes: ["createdAt", "title", "updatedAt"],
+    };
+  }
+
+  private collectionSettings(): MeilisearchIndexSettings {
     return {
       filterableAttributes: ["id", "teamId"],
       searchableAttributes: ["name", "description"],
@@ -485,6 +719,155 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       }
       offset += batchSize;
     }
+  }
+
+  private async rebuildDocumentChunks(index: string): Promise<void> {
+    const batchSize = 50;
+    let offset = 0;
+
+    while (true) {
+      const documents = await Document.unscoped().findAll({
+        include: [
+          { association: "memberships", required: false },
+          { association: "groupMemberships", required: false },
+        ],
+        limit: batchSize,
+        offset,
+        order: [["id", "ASC"]],
+      });
+      const chunks = await Promise.all(
+        documents.map((document) => this.documentChunkRecords(document))
+      );
+      await this.client.addDocuments(index, chunks.flat());
+      if (documents.length < batchSize) {
+        return;
+      }
+      offset += batchSize;
+    }
+  }
+
+  private async replaceDocumentChunks(document: Document): Promise<void> {
+    const chunks = await this.documentChunkRecords(document);
+    await this.client.deleteDocumentsByFilter(
+      "document_chunks",
+      `documentId = ${this.filterValue(document.id)}`
+    );
+    await this.client.addDocuments("document_chunks", chunks);
+  }
+
+  private async updateDocumentChunkMetadata(document: Document): Promise<void> {
+    const batchSize = 1_000;
+    let offset = 0;
+
+    while (true) {
+      const response = await this.client.search("document_chunks", {
+        attributesToRetrieve: ["id"],
+        filter: [`documentId = ${this.filterValue(document.id)}`],
+        limit: batchSize,
+        offset,
+        query: "",
+      });
+      await this.client.updateDocuments(
+        "document_chunks",
+        response.hits.map((hit) => ({
+          ...this.documentChunkMetadata(document),
+          id: hit.id,
+        }))
+      );
+      if (response.hits.length < batchSize) {
+        return;
+      }
+      offset += batchSize;
+    }
+  }
+
+  private async documentChunkRecords(
+    document: Document
+  ): Promise<DocumentChunkIndexRecord[]> {
+    const chunks = this.textChunks(DocumentHelper.toPlainText(document));
+    const vectors = await this.embed(
+      chunks.map((chunk) => `${document.title}\n\n${chunk}`)
+    );
+    const record = this.documentRecord(document);
+    return chunks.map((text, chunkIndex) => ({
+      ...record,
+      _vectors: { default: vectors[chunkIndex] },
+      chunkIndex,
+      documentId: document.id,
+      id: `${document.id}_${chunkIndex}`,
+      text,
+    }));
+  }
+
+  private documentChunkMetadata(document: Document): DocumentChunkMetadata {
+    const record = this.documentRecord(document);
+    return {
+      ancestorDocumentIds: record.ancestorDocumentIds,
+      collectionId: record.collectionId,
+      collaboratorIds: record.collaboratorIds,
+      createdAt: record.createdAt,
+      createdById: record.createdById,
+      id: "",
+      isArchived: record.isArchived,
+      isDeleted: record.isDeleted,
+      isDraft: record.isDraft,
+      isTemplate: record.isTemplate,
+      isTrialImport: record.isTrialImport,
+      memberGroupIds: record.memberGroupIds,
+      memberUserIds: record.memberUserIds,
+      teamId: record.teamId,
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  private async embed(input: string[]): Promise<number[][]> {
+    if (!this.embeddings) {
+      throw new Error("Semantic search is not enabled");
+    }
+
+    const vectors: number[][] = [];
+    for (
+      let offset = 0;
+      offset < input.length;
+      offset += MeilisearchSearchProvider.EMBEDDING_BATCH_SIZE
+    ) {
+      vectors.push(
+        ...(await this.embeddings.embed(
+          input.slice(
+            offset,
+            offset + MeilisearchSearchProvider.EMBEDDING_BATCH_SIZE
+          )
+        ))
+      );
+    }
+    return vectors;
+  }
+
+  private textChunks(text: string): string[] {
+    const chunks: string[] = [];
+    let start = 0;
+
+    while (start < text.length) {
+      let end = Math.min(
+        start + MeilisearchSearchProvider.TEXT_CHUNK_SIZE,
+        text.length
+      );
+      if (end < text.length) {
+        const boundary = text.lastIndexOf(" ", end);
+        if (boundary > start + MeilisearchSearchProvider.TEXT_CHUNK_SIZE / 2) {
+          end = boundary;
+        }
+      }
+      const chunk = text.slice(start, end).trim();
+      if (chunk) {
+        chunks.push(chunk);
+      }
+      start = Math.max(
+        end - MeilisearchSearchProvider.TEXT_CHUNK_OVERLAP,
+        start + 1
+      );
+    }
+    return chunks;
   }
 
   private async userDocumentFilters(user: User, options: SearchOptions) {
@@ -547,6 +930,14 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       filters.push(`(${statuses.join(" OR ")})`);
     }
     return filters;
+  }
+
+  private documentChunkFilters(filters: string[]) {
+    return filters.map((filter) =>
+      filter.startsWith("id IN [")
+        ? filter.replace("id IN [", "documentId IN [")
+        : filter
+    );
   }
 
   private async shareDocumentIds(share: Share | undefined) {
@@ -687,7 +1078,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       }
       return [
         {
-          context: hit._formatted?.text,
+          context: hit._formatted?.text ?? hit.text,
           document,
           ranking: hits.length - index,
         },

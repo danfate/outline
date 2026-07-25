@@ -7,24 +7,48 @@ export interface MeilisearchClientOptions {
 export interface MeilisearchSearchOptions {
   attributesToCrop?: string[];
   attributesToHighlight?: string[];
+  attributesToRetrieve?: string[];
   attributesToSearch?: string[];
   filter?: string[];
+  hybrid?: {
+    embedder: string;
+    semanticRatio: number;
+  };
   limit: number;
   offset: number;
   query?: string;
   sort?: string[];
+  vector?: number[];
 }
 
 export interface MeilisearchHit {
+  chunkIndex?: number;
+  documentId?: string;
   _formatted?: {
     text?: string;
   };
   id: string;
+  text?: string;
+  title?: string;
 }
 
-export interface MeilisearchSearchResponse {
+export interface MeilisearchSearchResponse<
+  THit extends MeilisearchHit = MeilisearchHit,
+> {
   estimatedTotalHits: number;
-  hits: MeilisearchHit[];
+  hits: THit[];
+}
+
+export interface MeilisearchEmbedderSettings {
+  dimensions: number;
+  source: "userProvided";
+}
+
+export interface MeilisearchIndexSettings {
+  embedders?: Record<string, MeilisearchEmbedderSettings>;
+  filterableAttributes: string[];
+  searchableAttributes: string[];
+  sortableAttributes: string[];
 }
 
 interface MeilisearchTask {
@@ -86,7 +110,7 @@ export class MeilisearchClient {
    */
   public async updateSettings(
     index: string,
-    settings: Record<string, string[]>
+    settings: MeilisearchIndexSettings
   ): Promise<void> {
     const task = await this.request<MeilisearchTask>(
       `/indexes/${this.indexName(index)}/settings`,
@@ -130,6 +154,34 @@ export class MeilisearchClient {
   }
 
   /**
+   * Updates fields on existing documents without replacing unspecified fields.
+   *
+   * @param index - the unprefixed index name.
+   * @param documents - partial document records to update.
+   * @returns a promise that resolves after the documents are indexed.
+   */
+  public async updateDocuments<T extends object>(
+    index: string,
+    documents: T[]
+  ): Promise<void> {
+    if (!documents.length) {
+      return;
+    }
+
+    const task = await this.request<MeilisearchTask>(
+      `/indexes/${this.indexName(index)}/documents`,
+      {
+        body: JSON.stringify(documents),
+        method: "PUT",
+      }
+    );
+    if (!task) {
+      throw new Error("Meilisearch document update task was not created");
+    }
+    await this.waitForTask(task.taskUid);
+  }
+
+  /**
    * Deletes a document from an index.
    *
    * @param index - the unprefixed index name.
@@ -140,6 +192,30 @@ export class MeilisearchClient {
     const task = await this.request<MeilisearchTask>(
       `/indexes/${this.indexName(index)}/documents/${encodeURIComponent(id)}`,
       { method: "DELETE" }
+    );
+    if (!task) {
+      throw new Error("Meilisearch document deletion task was not created");
+    }
+    await this.waitForTask(task.taskUid);
+  }
+
+  /**
+   * Deletes every document matching a filter expression.
+   *
+   * @param index - the unprefixed index name.
+   * @param filter - Meilisearch filter expression.
+   * @returns a promise that resolves after matching documents are removed.
+   */
+  public async deleteDocumentsByFilter(
+    index: string,
+    filter: string
+  ): Promise<void> {
+    const task = await this.request<MeilisearchTask>(
+      `/indexes/${this.indexName(index)}/documents/delete`,
+      {
+        body: JSON.stringify({ filter }),
+        method: "POST",
+      }
     );
     if (!task) {
       throw new Error("Meilisearch document deletion task was not created");
@@ -165,19 +241,18 @@ export class MeilisearchClient {
   }
 
   /**
-   * Atomically exchanges two index UIDs.
+   * Atomically exchanges index UID pairs.
    *
-   * @param first - the first unprefixed index name.
-   * @param second - the second unprefixed index name.
+   * @param indexes - unprefixed index name pairs to exchange.
    * @returns a promise that resolves after the indexes are swapped.
    */
-  public async swapIndexes(first: string, second: string): Promise<void> {
+  public async swapIndexes(indexes: [string, string][]): Promise<void> {
     const task = await this.request<MeilisearchTask>("/swap-indexes", {
-      body: JSON.stringify([
-        {
+      body: JSON.stringify(
+        indexes.map(([first, second]) => ({
           indexes: [this.indexName(first), this.indexName(second)],
-        },
-      ]),
+        }))
+      ),
       method: "POST",
     });
     if (!task) {
@@ -193,25 +268,28 @@ export class MeilisearchClient {
    * @param options - the query options.
    * @returns matching documents and Meilisearch's estimated total.
    */
-  public search(
+  public search<THit extends MeilisearchHit = MeilisearchHit>(
     index: string,
     options: MeilisearchSearchOptions
-  ): Promise<MeilisearchSearchResponse> {
-    return this.request<MeilisearchSearchResponse>(
+  ): Promise<MeilisearchSearchResponse<THit>> {
+    return this.request<MeilisearchSearchResponse<THit>>(
       `/indexes/${this.indexName(index)}/search`,
       {
         body: JSON.stringify({
           attributesToCrop: options.attributesToCrop,
           attributesToHighlight: options.attributesToHighlight,
+          attributesToRetrieve: options.attributesToRetrieve,
           attributesToSearch: options.attributesToSearch,
           cropMarker: "…",
           filter: options.filter,
           highlightPostTag: "</b>",
           highlightPreTag: "<b>",
+          hybrid: options.hybrid,
           limit: options.limit,
           offset: options.offset,
           q: options.query,
           sort: options.sort,
+          vector: options.vector,
         }),
         method: "POST",
       }
