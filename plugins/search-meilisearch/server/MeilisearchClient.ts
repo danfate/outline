@@ -39,6 +39,10 @@ interface MeilisearchTask {
  * Minimal Meilisearch HTTP client used by the search provider.
  */
 export class MeilisearchClient {
+  private static readonly TASK_POLL_INTERVAL = 100;
+
+  private static readonly TASK_TIMEOUT = 300_000;
+
   private readonly apiKey: string;
   private readonly indexPrefix: string;
   private readonly url: string;
@@ -249,7 +253,9 @@ export class MeilisearchClient {
   }
 
   private async waitForTask(taskUid: number): Promise<void> {
-    for (let attempts = 0; attempts < 150; attempts++) {
+    const timeoutAt = Date.now() + MeilisearchClient.TASK_TIMEOUT;
+
+    while (Date.now() < timeoutAt) {
       const task = await this.request<MeilisearchTask>(`/tasks/${taskUid}`, {
         method: "GET",
       });
@@ -259,7 +265,9 @@ export class MeilisearchClient {
       if (task?.status === "failed") {
         throw new Error(task.error?.message ?? "Meilisearch task failed");
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, MeilisearchClient.TASK_POLL_INTERVAL)
+      );
     }
 
     throw new Error("Meilisearch task timed out");
