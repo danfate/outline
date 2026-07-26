@@ -103,6 +103,34 @@ yarn search:reindex
 向量索引均完成后一次性交换。首次启用或更换 Embedding 模型、维度时都必须
 重新执行该命令；如果编码或向量索引失败，正式索引不会被替换。
 
+重建进度保存在 Redis，按 `MEILISEARCH_INDEX_PREFIX` 隔离。进程、容器或
+Embedding 服务中断后，直接再次执行相同命令会从上次成功的 ID checkpoint
+继续；文档 chunk 以单篇文档为单位提交 checkpoint，中断时最多重做当前或已
+并发完成但尚未 checkpoint 的文档。恢复期间始终继续使用旧正式索引，只有
+所有临时索引完成后才会 swap 发布。
+
+查看未完成任务而不改动任何索引：
+
+```bash
+node build/plugins/search-meilisearch/server/reindex.js --status
+```
+
+需要明确废弃未完成任务并从头开始时，使用：
+
+```bash
+node build/plugins/search-meilisearch/server/reindex.js --fresh
+```
+
+`--fresh` 会删除该重建任务引用的临时索引与 Redis 进度。恢复时会校验是否启用
+语义搜索、Embedding 模型、向量维度和 chunk 格式版本；这些配置发生变化时会
+拒绝恢复并提示使用 `--fresh`，避免将不同向量空间的数据混入同一索引。Redis
+被清空时无法找回临时任务进度，也应使用 `--fresh` 重新建立索引。
+
+重建提供“原子发布、尽力收敛”而不是 PostgreSQL 严格快照：若容器中断后索引
+锁过期，极少数文档变更可能先写入旧正式索引；后续索引事件或下一次全量重建会
+收敛该窗口。Outline 的 PostgreSQL 授权复核始终保留，重建过程不会因此返回未
+授权文档。
+
 首次索引后，文档、集合及其成员权限变更会通过 Outline 队列自动更新索引。
 仅在首次部署、索引损坏或需要全量修复时重新执行该命令。重建期间索引写入
 会通过 Redis 锁串行化，避免并发更新被旧扫描结果覆盖。
