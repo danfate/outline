@@ -13,6 +13,7 @@ SEARCH_PROVIDER=meilisearch
 MEILISEARCH_URL=http://meilisearch:7700
 MEILISEARCH_API_KEY=<服务端专用密钥>
 MEILISEARCH_INDEX_PREFIX=outline
+MEILISEARCH_LOCALES=zho,eng
 ```
 
 `MEILISEARCH_URL` 与 `MEILISEARCH_API_KEY` 必填；未同时设置时插件不会
@@ -23,6 +24,12 @@ Meilisearch 实例服务多个环境时，应为每个环境使用不同前缀�
 `MEILISEARCH_API_KEY` 只能配置在服务端，不要暴露给浏览器。开发或小型
 自托管部署可以使用 Meilisearch 的 `MEILI_MASTER_KEY`；生产环境建议创建
 仅供此服务使用的 API key。
+
+文档索引会为标题、历史标题与正文启用 Meilisearch 的中文（`zho`）与英文
+（`eng`）本地化分词，关键词查询也使用同一组语言，适用于中英文混合内容。
+通过 `MEILISEARCH_LOCALES` 以逗号分隔的 ISO 639-3 代码调整，默认值为
+`zho,eng`；空项会被忽略，列表顺序不代表语言优先级。它不是任意子串索引，
+例如 `程间通信` 不保证匹配 `进程间通信`。
 
 Meilisearch 服务需要持久化其数据目录。Docker Compose 中的示例：
 
