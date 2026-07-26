@@ -20,6 +20,7 @@ import type {
 } from "@server/utils/BaseSearchProvider";
 import { BaseSearchProvider } from "@server/utils/BaseSearchProvider";
 import PostgresSearchProvider from "plugins/search-postgres/server/PostgresSearchProvider";
+import { batchByByteSize } from "./batchByByteSize";
 import { EmbeddingClient } from "./EmbeddingClient";
 import env from "./env";
 import { mapWithConcurrency } from "./mapWithConcurrency";
@@ -741,7 +742,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         env.MEILISEARCH_EMBEDDING_CONCURRENCY,
         (document) => this.documentChunkRecords(document)
       );
-      await this.client.addDocuments(index, chunks.flat());
+      await this.addDocumentChunks(index, chunks.flat());
       if (documents.length < batchSize) {
         return;
       }
@@ -755,7 +756,19 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       "document_chunks",
       `documentId = ${this.filterValue(document.id)}`
     );
-    await this.client.addDocuments("document_chunks", chunks);
+    await this.addDocumentChunks("document_chunks", chunks);
+  }
+
+  private async addDocumentChunks(
+    index: string,
+    chunks: DocumentChunkIndexRecord[]
+  ): Promise<void> {
+    for (const batch of batchByByteSize(
+      chunks,
+      env.MEILISEARCH_DOCUMENT_CHUNK_MAX_PAYLOAD_BYTES
+    )) {
+      await this.client.addDocuments(index, batch);
+    }
   }
 
   private async updateDocumentChunkMetadata(document: Document): Promise<void> {
