@@ -66,6 +66,14 @@ class MeilisearchPluginEnvironment extends Environment {
   public MEILISEARCH_EMBEDDING_CONCURRENCY =
     this.toOptionalNumber(environment.MEILISEARCH_EMBEDDING_CONCURRENCY) ?? 1;
 
+  /** Maximum byte size for a document chunk indexing request. */
+  @IsInt()
+  @Min(1)
+  public MEILISEARCH_DOCUMENT_CHUNK_MAX_PAYLOAD_BYTES =
+    this.toOptionalNumber(
+      environment.MEILISEARCH_DOCUMENT_CHUNK_MAX_PAYLOAD_BYTES
+    ) ?? 5 * 1024 * 1024;
+
   /**
    * Whether the complete semantic search configuration is available.
    *

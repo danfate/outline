@@ -37,6 +37,7 @@ MEILISEARCH_EMBEDDING_API_KEY=<Embedding 服务密钥>
 MEILISEARCH_EMBEDDING_MODEL=BAAI/bge-m3
 MEILISEARCH_EMBEDDING_DIMENSIONS=1024
 MEILISEARCH_EMBEDDING_CONCURRENCY=1
+MEILISEARCH_DOCUMENT_CHUNK_MAX_PAYLOAD_BYTES=5242880
 ```
 
 `MEILISEARCH_EMBEDDING_URL` 必须是服务基址，不要包含 `/v1` 或
@@ -48,6 +49,11 @@ Embedding 配置必须完整；
 `MEILISEARCH_EMBEDDING_CONCURRENCY` 只控制全量 `search:reindex` 时的并行
 Embedding 请求数，默认值为 `1`。CPU 推理建议保持 `1`，避免请求排队超过
 Node 的网络超时；仅在 GPU 服务已验证可稳定处理并发请求后再逐步调高。
+
+`MEILISEARCH_DOCUMENT_CHUNK_MAX_PAYLOAD_BYTES` 控制单次向 Meilisearch 写入
+文档 chunk 的最大 JSON 请求体大小，默认值为 5 MiB（`5242880`）。插件会按
+实际字节大小自动拆分请求，以低于 Meilisearch 默认的 100 MB 限制；通常无需
+修改。
 
 Meilisearch 必须使用支持 vector search 的 `v1.x.y` 版本。插件会为
 `document_chunks` 索引配置 `userProvided` embedder：Infinity 只负责编码，
