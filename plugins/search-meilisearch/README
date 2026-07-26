@@ -36,6 +36,7 @@ MEILISEARCH_EMBEDDING_URL=http://infinity:7997
 MEILISEARCH_EMBEDDING_API_KEY=<Embedding 服务密钥>
 MEILISEARCH_EMBEDDING_MODEL=BAAI/bge-m3
 MEILISEARCH_EMBEDDING_DIMENSIONS=1024
+MEILISEARCH_EMBEDDING_CONCURRENCY=1
 ```
 
 `MEILISEARCH_EMBEDDING_URL` 必须是服务基址，不要包含 `/v1` 或
@@ -43,6 +44,10 @@ MEILISEARCH_EMBEDDING_DIMENSIONS=1024
 Embedding 配置必须完整；
 `bge-m3` 的 dense 向量默认是 1024 维，若实际服务使用其他维度，必须同步
 设置 `MEILISEARCH_EMBEDDING_DIMENSIONS`。
+
+`MEILISEARCH_EMBEDDING_CONCURRENCY` 只控制全量 `search:reindex` 时的并行
+Embedding 请求数，默认值为 `1`。CPU 推理建议保持 `1`，避免请求排队超过
+Node 的网络超时；仅在 GPU 服务已验证可稳定处理并发请求后再逐步调高。
 
 Meilisearch 必须使用支持 vector search 的 `v1.x.y` 版本。插件会为
 `document_chunks` 索引配置 `userProvided` embedder：Infinity 只负责编码，

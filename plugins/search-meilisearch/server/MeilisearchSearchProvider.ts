@@ -22,6 +22,7 @@ import { BaseSearchProvider } from "@server/utils/BaseSearchProvider";
 import PostgresSearchProvider from "plugins/search-postgres/server/PostgresSearchProvider";
 import { EmbeddingClient } from "./EmbeddingClient";
 import env from "./env";
+import { mapWithConcurrency } from "./mapWithConcurrency";
 import {
   MeilisearchClient,
   type MeilisearchHit,
@@ -735,8 +736,10 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         offset,
         order: [["id", "ASC"]],
       });
-      const chunks = await Promise.all(
-        documents.map((document) => this.documentChunkRecords(document))
+      const chunks = await mapWithConcurrency(
+        documents,
+        env.MEILISEARCH_EMBEDDING_CONCURRENCY,
+        (document) => this.documentChunkRecords(document)
       );
       await this.client.addDocuments(index, chunks.flat());
       if (documents.length < batchSize) {
