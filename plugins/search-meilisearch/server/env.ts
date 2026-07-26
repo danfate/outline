@@ -2,6 +2,21 @@ import { IsOptional, IsUrl } from "class-validator";
 import { Environment } from "@server/env";
 import environment from "@server/utils/environment";
 
+/**
+ * Parses the configured Meilisearch locales.
+ *
+ * @param value - a comma-separated locale configuration value.
+ * @returns the configured locales or the default Chinese and English locales.
+ */
+export function parseMeilisearchLocales(value: string | undefined): string[] {
+  const locales = value
+    ?.split(",")
+    .map((locale) => locale.trim())
+    .filter(Boolean);
+
+  return locales?.length ? locales : ["zho", "eng"];
+}
+
 class MeilisearchPluginEnvironment extends Environment {
   /** The Meilisearch service URL. */
   @IsOptional()
@@ -23,6 +38,11 @@ class MeilisearchPluginEnvironment extends Environment {
   @IsOptional()
   public MEILISEARCH_INDEX_PREFIX =
     this.toOptionalString(environment.MEILISEARCH_INDEX_PREFIX) ?? "outline";
+
+  /** Locales used to tokenize indexed documents and keyword queries. */
+  public MEILISEARCH_LOCALES = parseMeilisearchLocales(
+    environment.MEILISEARCH_LOCALES
+  );
 }
 
 export default new MeilisearchPluginEnvironment();

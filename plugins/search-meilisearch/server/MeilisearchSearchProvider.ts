@@ -19,7 +19,11 @@ import type {
 import { BaseSearchProvider } from "@server/utils/BaseSearchProvider";
 import PostgresSearchProvider from "plugins/search-postgres/server/PostgresSearchProvider";
 import env from "./env";
-import { MeilisearchClient, type MeilisearchHit } from "./MeilisearchClient";
+import {
+  MeilisearchClient,
+  type MeilisearchHit,
+  type MeilisearchIndexSettings,
+} from "./MeilisearchClient";
 
 interface DocumentIndexRecord {
   ancestorDocumentIds: string[];
@@ -95,6 +99,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       attributesToHighlight: ["text"],
       filter: filters,
       limit,
+      locales: env.MEILISEARCH_LOCALES,
       offset,
       query,
       sort: this.sort(options.sort, options.direction),
@@ -132,9 +137,10 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     await this.ensureIndexes();
     const { limit = 15, offset = 0, query } = options;
     const response = await this.client.search("documents", {
-      attributesToSearch: ["title", "previousTitles"],
+      attributesToSearchOn: ["title", "previousTitles"],
       filter: await this.userDocumentFilters(user, options),
       limit,
+      locales: env.MEILISEARCH_LOCALES,
       offset,
       query,
       sort: this.sort(options.sort, options.direction),
@@ -205,6 +211,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       attributesToHighlight: ["text"],
       filter: await this.userDocumentFilters(user, options),
       limit,
+      locales: env.MEILISEARCH_LOCALES,
       offset,
       query,
       sort: this.sort(options.sort, options.direction),
@@ -403,13 +410,13 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     ]);
   }
 
-  private prepareIndex(index: string, settings: Record<string, string[]>) {
+  private prepareIndex(index: string, settings: MeilisearchIndexSettings) {
     return this.client
       .createIndex(index)
       .then(() => this.client.updateSettings(index, settings));
   }
 
-  private documentSettings(): Record<string, string[]> {
+  private documentSettings(): MeilisearchIndexSettings {
     return {
       filterableAttributes: [
         "collectionId",
@@ -427,12 +434,18 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         "teamId",
         "updatedAt",
       ],
+      localizedAttributes: [
+        {
+          attributePatterns: ["title", "previousTitles", "text"],
+          locales: env.MEILISEARCH_LOCALES,
+        },
+      ],
       searchableAttributes: ["title", "previousTitles", "text"],
       sortableAttributes: ["createdAt", "title", "updatedAt"],
     };
   }
 
-  private collectionSettings(): Record<string, string[]> {
+  private collectionSettings(): MeilisearchIndexSettings {
     return {
       filterableAttributes: ["id", "teamId"],
       searchableAttributes: ["name", "description"],
