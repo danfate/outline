@@ -76,4 +76,35 @@ describe("MeilisearchClient", () => {
       ])
     ).resolves.toBe(42);
   });
+
+  it("sends configured locales with a search query", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          estimatedTotalHits: 0,
+          hits: [],
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetch);
+    const client = new MeilisearchClient({
+      apiKey: "test-key",
+      indexPrefix: "test",
+      url: "http://meilisearch.test",
+    });
+
+    await client.search("documents", {
+      attributesToSearchOn: ["title"],
+      limit: 10,
+      locales: ["eng", "zho"],
+      offset: 0,
+      query: "Python 进程间通信",
+    });
+
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({
+      attributesToSearchOn: ["title"],
+      locales: ["eng", "zho"],
+    });
+  });
 });

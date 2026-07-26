@@ -189,9 +189,10 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     await this.ensureIndexes();
     const { limit = 15, offset = 0, query } = options;
     const response = await this.client.search("documents", {
-      attributesToSearch: ["title", "previousTitles"],
+      attributesToSearchOn: ["title", "previousTitles"],
       filter: await this.userDocumentFilters(user, options),
       limit,
+      locales: env.MEILISEARCH_LOCALES,
       offset,
       query,
       sort: this.sort(options.sort, options.direction),
@@ -491,6 +492,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       attributesToHighlight: ["text"],
       filter: filters,
       limit: candidateLimit,
+      locales: env.MEILISEARCH_LOCALES,
       offset: shouldUseSemanticSearch ? 0 : offset,
       query,
       sort: this.sort(options.sort, options.direction),
@@ -663,6 +665,12 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         "teamId",
         "updatedAt",
       ],
+      localizedAttributes: [
+        {
+          attributePatterns: ["title", "previousTitles", "text"],
+          locales: env.MEILISEARCH_LOCALES,
+        },
+      ],
       searchableAttributes: ["title", "previousTitles", "text"],
       sortableAttributes: ["createdAt", "title", "updatedAt"],
     };
@@ -691,6 +699,12 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         "memberUserIds",
         "teamId",
         "updatedAt",
+      ],
+      localizedAttributes: [
+        {
+          attributePatterns: ["title", "text"],
+          locales: env.MEILISEARCH_LOCALES,
+        },
       ],
       searchableAttributes: ["title", "text"],
       sortableAttributes: ["createdAt", "title", "updatedAt"],

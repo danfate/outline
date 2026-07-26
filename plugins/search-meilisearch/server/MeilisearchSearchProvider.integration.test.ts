@@ -75,6 +75,24 @@ describeSemanticSearch("Meilisearch semantic search", () => {
     await provider.index(SearchableModel.Document, document);
     await provider.updateMetadata(SearchableModel.Document, document.id, {});
 
+    const settingsResponse = await fetch(
+      `${env.MEILISEARCH_URL}/indexes/${env.MEILISEARCH_INDEX_PREFIX}_documents/settings`,
+      {
+        headers: {
+          Authorization: `Bearer ${env.MEILISEARCH_API_KEY}`,
+        },
+      }
+    );
+    expect(settingsResponse.ok).toBe(true);
+    await expect(settingsResponse.json()).resolves.toMatchObject({
+      localizedAttributes: [
+        {
+          attributePatterns: ["title", "previousTitles", "text"],
+          locales: env.MEILISEARCH_LOCALES,
+        },
+      ],
+    });
+
     const embeddings = new EmbeddingClient({
       apiKey: env.MEILISEARCH_EMBEDDING_API_KEY ?? "",
       dimensions: env.MEILISEARCH_EMBEDDING_DIMENSIONS,
@@ -98,10 +116,14 @@ describeSemanticSearch("Meilisearch semantic search", () => {
       vector,
     });
     const results = await provider.searchForUser(user, { query });
+    const titleResults = await provider.searchTitlesForUser(user, {
+      query: "语义搜索测试",
+    });
 
     expect(chunks.hits.map((hit) => hit.documentId)).toContain(document.id);
     expect(results.results.map((result) => result.document.id)).toContain(
       document.id
     );
+    expect(titleResults.map((result) => result.id)).toContain(document.id);
   }, 15_000);
 });

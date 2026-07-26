@@ -8,13 +8,14 @@ export interface MeilisearchSearchOptions {
   attributesToCrop?: string[];
   attributesToHighlight?: string[];
   attributesToRetrieve?: string[];
-  attributesToSearch?: string[];
+  attributesToSearchOn?: string[];
   filter?: string[];
   hybrid?: {
     embedder: string;
     semanticRatio: number;
   };
   limit: number;
+  locales?: string[];
   offset: number;
   query?: string;
   sort?: string[];
@@ -47,6 +48,10 @@ export interface MeilisearchEmbedderSettings {
 export interface MeilisearchIndexSettings {
   embedders?: Record<string, MeilisearchEmbedderSettings>;
   filterableAttributes: string[];
+  localizedAttributes?: {
+    attributePatterns: string[];
+    locales: string[];
+  }[];
   searchableAttributes: string[];
   sortableAttributes: string[];
 }
@@ -376,13 +381,14 @@ export class MeilisearchClient {
           attributesToCrop: options.attributesToCrop,
           attributesToHighlight: options.attributesToHighlight,
           attributesToRetrieve: options.attributesToRetrieve,
-          attributesToSearch: options.attributesToSearch,
+          attributesToSearchOn: options.attributesToSearchOn,
           cropMarker: "…",
           filter: options.filter,
           highlightPostTag: "</b>",
           highlightPreTag: "<b>",
           hybrid: options.hybrid,
           limit: options.limit,
+          locales: options.locales,
           offset: options.offset,
           q: options.query,
           sort: options.sort,

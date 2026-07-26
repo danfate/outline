@@ -13,6 +13,7 @@ SEARCH_PROVIDER=meilisearch
 MEILISEARCH_URL=http://meilisearch:7700
 MEILISEARCH_API_KEY=<服务端专用密钥>
 MEILISEARCH_INDEX_PREFIX=outline
+MEILISEARCH_LOCALES=zho,eng
 ```
 
 `MEILISEARCH_URL` 与 `MEILISEARCH_API_KEY` 必填；未同时设置时插件不会
@@ -63,6 +64,12 @@ Meilisearch 保存向量并完成向量检索，因此不需要 pgvector、Qdran
 附入每个片段的 Embedding 输入。标题搜索和集合搜索仍是原有的 CJK 关键词
 搜索。文档更新会异步重建该文档的向量；移动、归档和成员权限变化只更新索引
 元数据，不重复编码正文。
+
+文档和文档片段索引会为标题、历史标题与正文启用 Meilisearch 的英文（`eng`）
+和中文（`zho`）本地化分词，关键词查询也使用同一组语言，适用于中英文混合
+内容。通过 `MEILISEARCH_LOCALES` 以逗号分隔的 ISO 639-3 代码调整，默认值为
+`zho,eng`；列表顺序不代表语言优先级。它不是任意子串索引，例如 `程间通信`
+不保证匹配 `进程间通信`。
 
 全文搜索会并行查询关键词索引与向量索引，再使用偏向关键词结果的 RRF 排名
 融合。精确标题、编号、URL 和 CJK 关键词命中优先，向量结果仅补充措辞不同但
