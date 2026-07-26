@@ -60,6 +60,12 @@ class MeilisearchPluginEnvironment extends Environment {
   public MEILISEARCH_EMBEDDING_DIMENSIONS =
     this.toOptionalNumber(environment.MEILISEARCH_EMBEDDING_DIMENSIONS) ?? 1024;
 
+  /** Maximum concurrent embedding requests during a full index rebuild. */
+  @IsInt()
+  @Min(1)
+  public MEILISEARCH_EMBEDDING_CONCURRENCY =
+    this.toOptionalNumber(environment.MEILISEARCH_EMBEDDING_CONCURRENCY) ?? 1;
+
   /**
    * Whether the complete semantic search configuration is available.
    *
