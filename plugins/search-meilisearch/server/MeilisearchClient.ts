@@ -7,9 +7,10 @@ export interface MeilisearchClientOptions {
 export interface MeilisearchSearchOptions {
   attributesToCrop?: string[];
   attributesToHighlight?: string[];
-  attributesToSearch?: string[];
+  attributesToSearchOn?: string[];
   filter?: string[];
   limit: number;
+  locales?: string[];
   offset: number;
   query?: string;
   sort?: string[];
@@ -25,6 +26,16 @@ export interface MeilisearchHit {
 export interface MeilisearchSearchResponse {
   estimatedTotalHits: number;
   hits: MeilisearchHit[];
+}
+
+export interface MeilisearchIndexSettings {
+  filterableAttributes: string[];
+  localizedAttributes?: {
+    attributePatterns: string[];
+    locales: string[];
+  }[];
+  searchableAttributes: string[];
+  sortableAttributes: string[];
 }
 
 interface MeilisearchTask {
@@ -86,7 +97,7 @@ export class MeilisearchClient {
    */
   public async updateSettings(
     index: string,
-    settings: Record<string, string[]>
+    settings: MeilisearchIndexSettings
   ): Promise<void> {
     const task = await this.request<MeilisearchTask>(
       `/indexes/${this.indexName(index)}/settings`,
@@ -203,12 +214,13 @@ export class MeilisearchClient {
         body: JSON.stringify({
           attributesToCrop: options.attributesToCrop,
           attributesToHighlight: options.attributesToHighlight,
-          attributesToSearch: options.attributesToSearch,
+          attributesToSearchOn: options.attributesToSearchOn,
           cropMarker: "…",
           filter: options.filter,
           highlightPostTag: "</b>",
           highlightPreTag: "<b>",
           limit: options.limit,
+          locales: options.locales,
           offset: options.offset,
           q: options.query,
           sort: options.sort,
