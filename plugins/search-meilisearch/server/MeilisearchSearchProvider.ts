@@ -23,7 +23,12 @@ import PostgresSearchProvider from "plugins/search-postgres/server/PostgresSearc
 import { batchByByteSize } from "./batchByByteSize";
 import { EmbeddingClient } from "./EmbeddingClient";
 import env from "./env";
+import {
+  MeilisearchReindexStateStore,
+  type MeilisearchReindexState,
+} from "./ReindexState";
 import { mapWithConcurrency } from "./mapWithConcurrency";
+import { textChunks } from "./textChunks";
 import {
   MeilisearchClient,
   type MeilisearchHit,
@@ -86,6 +91,10 @@ interface CollectionIndexRecord {
   updatedAt: number;
 }
 
+interface RebuildOptions {
+  fresh?: boolean;
+}
+
 /**
  * Search provider backed by Meilisearch with PostgreSQL authorization checks.
  */
@@ -99,10 +108,6 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
   private static readonly RRF_CONSTANT = 60;
 
   private static readonly SEMANTIC_RRF_WEIGHT = 1;
-
-  private static readonly TEXT_CHUNK_OVERLAP = 150;
-
-  private static readonly TEXT_CHUNK_SIZE = 1_000;
 
   public id = "meilisearch";
 
@@ -120,6 +125,10 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         url: env.MEILISEARCH_EMBEDDING_URL ?? "",
       })
     : undefined;
+
+  private readonly reindexState = new MeilisearchReindexStateStore(
+    env.MEILISEARCH_INDEX_PREFIX
+  );
 
   private initialization: Promise<void> | undefined;
 
@@ -406,45 +415,65 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
    *
    * @returns a promise that resolves after the new indexes are active.
    */
-  public async rebuild(): Promise<void> {
+  public async rebuild(options: RebuildOptions = {}): Promise<void> {
     await this.withIndexLock(async () => {
       await this.ensureIndexes();
-      const suffix = `rebuild_${Date.now()}`;
-      const documentIndex = `documents_${suffix}`;
-      const collectionIndex = `collections_${suffix}`;
-      const chunkIndex = `document_chunks_${suffix}`;
-      const indexes: [string, string][] = [
-        ["documents", documentIndex],
-        ["collections", collectionIndex],
-      ];
-      if (this.embeddings) {
-        indexes.push(["document_chunks", chunkIndex]);
+      let state: MeilisearchReindexState | undefined;
+      if (options.fresh) {
+        try {
+          state = await this.reindexState.get();
+        } catch {
+          await this.reindexState.clear();
+        }
+        if (state) {
+          await this.discardRebuild(state);
+        }
+        await this.reindexState.clear();
+        state = undefined;
+      } else {
+        state = await this.reindexState.get();
       }
 
-      try {
-        await Promise.all([
-          this.prepareIndex(documentIndex, this.documentSettings()),
-          this.prepareIndex(collectionIndex, this.collectionSettings()),
-          this.embeddings
-            ? this.prepareIndex(chunkIndex, this.documentChunkSettings())
-            : Promise.resolve(),
-        ]);
-        await Promise.all([
-          this.rebuildDocuments(documentIndex),
-          this.rebuildCollections(collectionIndex),
-          this.embeddings
-            ? this.rebuildDocumentChunks(chunkIndex)
-            : Promise.resolve(),
-        ]);
-        await this.client.swapIndexes(indexes);
-      } finally {
-        await Promise.all(
-          indexes.map(([, temporaryIndex]) =>
-            this.client.deleteIndex(temporaryIndex).catch(() => undefined)
-          )
-        );
+      if (state) {
+        this.assertRebuildConfiguration(state);
+      } else {
+        state = this.newRebuildState();
+        await this.reindexState.save(state);
+      }
+
+      await this.prepareRebuildIndexes(state);
+
+      if (state.phase === "collections") {
+        await this.rebuildCollections(state);
+        state.phase = "documents";
+        await this.reindexState.save(state);
+      }
+      if (state.phase === "documents") {
+        await this.rebuildDocuments(state);
+        state.phase = this.embeddings ? "documentChunks" : "swapping";
+        await this.reindexState.save(state);
+      }
+      if (state.phase === "documentChunks") {
+        await this.rebuildDocumentChunks(state);
+        state.phase = "swapping";
+        await this.reindexState.save(state);
+      }
+      if (state.phase === "swapping") {
+        await this.publishRebuild(state);
+      }
+      if (state.phase === "cleanup") {
+        await this.cleanupRebuild(state);
       }
     });
+  }
+
+  /**
+   * Reads the pending rebuild state without changing any index.
+   *
+   * @returns the pending rebuild state or undefined when no rebuild is active.
+   */
+  public getRebuildStatus(): Promise<MeilisearchReindexState | undefined> {
+    return this.reindexState.get();
   }
 
   private async searchDocuments(
@@ -676,9 +705,118 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     };
   }
 
-  private async rebuildDocuments(index: string): Promise<void> {
+  private newRebuildState(): MeilisearchReindexState {
+    const runId = randomUUID();
+    const suffix = `rebuild_${runId}`;
+    return {
+      configurationFingerprint: this.rebuildConfigurationFingerprint(),
+      createdAt: new Date().toISOString(),
+      cursors: {
+        collections: undefined,
+        documentChunks: undefined,
+        documents: undefined,
+      },
+      indexes: {
+        collections: `collections_${suffix}`,
+        documentChunks: this.embeddings
+          ? `document_chunks_${suffix}`
+          : undefined,
+        documents: `documents_${suffix}`,
+      },
+      phase: "collections",
+      runId,
+      version: 1,
+    };
+  }
+
+  private rebuildConfigurationFingerprint(): string {
+    return JSON.stringify({
+      chunkFormatVersion: 2,
+      dimensions: this.embeddings
+        ? env.MEILISEARCH_EMBEDDING_DIMENSIONS
+        : undefined,
+      model: this.embeddings ? env.MEILISEARCH_EMBEDDING_MODEL : undefined,
+      semanticSearchEnabled: !!this.embeddings,
+    });
+  }
+
+  private assertRebuildConfiguration(state: MeilisearchReindexState): void {
+    if (
+      state.configurationFingerprint !== this.rebuildConfigurationFingerprint()
+    ) {
+      throw new Error(
+        "Meilisearch reindex configuration has changed; run reindex with --fresh"
+      );
+    }
+  }
+
+  private async prepareRebuildIndexes(
+    state: MeilisearchReindexState
+  ): Promise<void> {
+    await Promise.all([
+      this.prepareIndex(state.indexes.documents, this.documentSettings()),
+      this.prepareIndex(state.indexes.collections, this.collectionSettings()),
+      state.indexes.documentChunks
+        ? this.prepareIndex(
+            state.indexes.documentChunks,
+            this.documentChunkSettings()
+          )
+        : Promise.resolve(),
+    ]);
+  }
+
+  private async discardRebuild(state: MeilisearchReindexState): Promise<void> {
+    const indexes = [
+      state.indexes.collections,
+      state.indexes.documents,
+      state.indexes.documentChunks,
+    ].filter((index): index is string => !!index);
+    await Promise.all(
+      indexes.map((index) => this.client.deleteIndexIfExists(index))
+    );
+  }
+
+  private async publishRebuild(state: MeilisearchReindexState): Promise<void> {
+    if (state.swapTaskUid === undefined) {
+      const indexes = this.rebuildIndexPairs(state);
+      state.swapTaskUid =
+        (await this.client.findSwapTask(indexes)) ??
+        (await this.client.startSwapIndexes(indexes));
+      await this.reindexState.save(state);
+    }
+
+    const taskUid = state.swapTaskUid;
+    await this.client.waitForTask(taskUid);
+    state.phase = "cleanup";
+    await this.reindexState.save(state);
+  }
+
+  private async cleanupRebuild(state: MeilisearchReindexState): Promise<void> {
+    await this.discardRebuild(state);
+    await this.reindexState.clear();
+  }
+
+  private rebuildIndexPairs(
+    state: MeilisearchReindexState
+  ): [string, string][] {
+    const indexes: [string, string][] = [
+      ["documents", state.indexes.documents],
+      ["collections", state.indexes.collections],
+    ];
+    if (state.indexes.documentChunks) {
+      indexes.push(["document_chunks", state.indexes.documentChunks]);
+    }
+    return indexes;
+  }
+
+  private afterCursor(cursor: string | undefined) {
+    return cursor ? { id: { [Op.gt]: cursor } } : undefined;
+  }
+
+  private async rebuildDocuments(
+    state: MeilisearchReindexState
+  ): Promise<void> {
     const batchSize = 500;
-    let offset = 0;
 
     while (true) {
       const documents = await Document.unscoped().findAll({
@@ -687,45 +825,59 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
           { association: "groupMemberships", required: false },
         ],
         limit: batchSize,
-        offset,
+        where: this.afterCursor(state.cursors.documents),
         order: [["id", "ASC"]],
       });
       await this.client.addDocuments(
-        index,
+        state.indexes.documents,
         documents.map((document) => this.documentRecord(document))
       );
+      const lastDocument = documents.at(-1);
+      if (lastDocument) {
+        state.cursors.documents = lastDocument.id;
+        await this.reindexState.save(state);
+      }
       if (documents.length < batchSize) {
         return;
       }
-      offset += batchSize;
     }
   }
 
-  private async rebuildCollections(index: string): Promise<void> {
+  private async rebuildCollections(
+    state: MeilisearchReindexState
+  ): Promise<void> {
     const CollectionModel = (await import("@server/models/Collection")).default;
     const batchSize = 500;
-    let offset = 0;
 
     while (true) {
       const collections = await CollectionModel.unscoped().findAll({
         limit: batchSize,
-        offset,
+        where: this.afterCursor(state.cursors.collections),
         order: [["id", "ASC"]],
       });
       await this.client.addDocuments(
-        index,
+        state.indexes.collections,
         collections.map((collection) => this.collectionRecord(collection))
       );
+      const lastCollection = collections.at(-1);
+      if (lastCollection) {
+        state.cursors.collections = lastCollection.id;
+        await this.reindexState.save(state);
+      }
       if (collections.length < batchSize) {
         return;
       }
-      offset += batchSize;
     }
   }
 
-  private async rebuildDocumentChunks(index: string): Promise<void> {
+  private async rebuildDocumentChunks(
+    state: MeilisearchReindexState
+  ): Promise<void> {
+    const index = state.indexes.documentChunks;
+    if (!index) {
+      throw new Error("Meilisearch rebuild state is missing its chunk index");
+    }
     const batchSize = 50;
-    let offset = 0;
 
     while (true) {
       const documents = await Document.unscoped().findAll({
@@ -734,19 +886,38 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
           { association: "groupMemberships", required: false },
         ],
         limit: batchSize,
-        offset,
+        where: this.afterCursor(state.cursors.documentChunks),
         order: [["id", "ASC"]],
       });
-      const chunks = await mapWithConcurrency(
+      const results = await mapWithConcurrency(
         documents,
         env.MEILISEARCH_EMBEDDING_CONCURRENCY,
-        (document) => this.documentChunkRecords(document)
+        async (document) => {
+          try {
+            await this.client.deleteDocumentsByFilter(
+              index,
+              `documentId = ${this.filterValue(document.id)}`
+            );
+            await this.addDocumentChunks(
+              index,
+              await this.documentChunkRecords(document)
+            );
+            return { document };
+          } catch (error) {
+            return { document, error: toError(error) };
+          }
+        }
       );
-      await this.addDocumentChunks(index, chunks.flat());
+      for (const result of results) {
+        if (result.error) {
+          throw result.error;
+        }
+        state.cursors.documentChunks = result.document.id;
+        await this.reindexState.save(state);
+      }
       if (documents.length < batchSize) {
         return;
       }
-      offset += batchSize;
     }
   }
 
@@ -800,7 +971,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
   private async documentChunkRecords(
     document: Document
   ): Promise<DocumentChunkIndexRecord[]> {
-    const chunks = this.textChunks(DocumentHelper.toPlainText(document));
+    const chunks = textChunks(DocumentHelper.toPlainText(document));
     const vectors = await this.embed(
       chunks.map((chunk) => `${document.title}\n\n${chunk}`)
     );
@@ -857,33 +1028,6 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       );
     }
     return vectors;
-  }
-
-  private textChunks(text: string): string[] {
-    const chunks: string[] = [];
-    let start = 0;
-
-    while (start < text.length) {
-      let end = Math.min(
-        start + MeilisearchSearchProvider.TEXT_CHUNK_SIZE,
-        text.length
-      );
-      if (end < text.length) {
-        const boundary = text.lastIndexOf(" ", end);
-        if (boundary > start + MeilisearchSearchProvider.TEXT_CHUNK_SIZE / 2) {
-          end = boundary;
-        }
-      }
-      const chunk = text.slice(start, end).trim();
-      if (chunk) {
-        chunks.push(chunk);
-      }
-      start = Math.max(
-        end - MeilisearchSearchProvider.TEXT_CHUNK_OVERLAP,
-        start + 1
-      );
-    }
-    return chunks;
   }
 
   private async userDocumentFilters(user: User, options: SearchOptions) {

@@ -60,6 +60,20 @@ interface MeilisearchTask {
   };
 }
 
+interface MeilisearchSwapTask {
+  details?: {
+    swaps?: {
+      indexes: string[];
+    }[];
+  };
+  taskUid?: number;
+  uid?: number;
+}
+
+interface MeilisearchTaskList {
+  results: MeilisearchSwapTask[];
+}
+
 /**
  * Minimal Meilisearch HTTP client used by the search provider.
  */
@@ -241,12 +255,41 @@ export class MeilisearchClient {
   }
 
   /**
+   * Deletes an index when it exists.
+   *
+   * @param index - the unprefixed index name.
+   * @returns a promise that resolves after the index is absent.
+   */
+  public async deleteIndexIfExists(index: string): Promise<void> {
+    const task = await this.request<MeilisearchTask>(
+      `/indexes/${this.indexName(index)}`,
+      {
+        method: "DELETE",
+        allowNotFound: true,
+      }
+    );
+    if (task) {
+      await this.waitForTask(task.taskUid, false, true);
+    }
+  }
+
+  /**
    * Atomically exchanges index UID pairs.
    *
    * @param indexes - unprefixed index name pairs to exchange.
    * @returns a promise that resolves after the indexes are swapped.
    */
   public async swapIndexes(indexes: [string, string][]): Promise<void> {
+    await this.waitForTask(await this.startSwapIndexes(indexes));
+  }
+
+  /**
+   * Submits an atomic index exchange without waiting for it to finish.
+   *
+   * @param indexes - unprefixed index name pairs to exchange.
+   * @returns the submitted Meilisearch task identifier.
+   */
+  public async startSwapIndexes(indexes: [string, string][]): Promise<number> {
     const task = await this.request<MeilisearchTask>("/swap-indexes", {
       body: JSON.stringify(
         indexes.map(([first, second]) => ({
@@ -258,7 +301,61 @@ export class MeilisearchClient {
     if (!task) {
       throw new Error("Meilisearch index swap task was not created");
     }
-    await this.waitForTask(task.taskUid);
+    return task.taskUid;
+  }
+
+  /**
+   * Finds an existing atomic index exchange for exactly the supplied pairs.
+   *
+   * @param indexes - unprefixed index name pairs to match.
+   * @returns the Meilisearch task identifier or undefined when no matching task exists.
+   */
+  public async findSwapTask(
+    indexes: [string, string][]
+  ): Promise<number | undefined> {
+    const tasks = await this.request<MeilisearchTaskList>(
+      "/tasks?types=indexSwap&limit=1000",
+      { method: "GET" }
+    );
+    const expected = this.swapPairsKey(
+      indexes.map(([first, second]) => [
+        this.indexName(first),
+        this.indexName(second),
+      ])
+    );
+
+    for (const task of tasks?.results ?? []) {
+      const swaps = task.details?.swaps;
+      const taskUid = task.uid ?? task.taskUid;
+      if (!swaps || taskUid === undefined) {
+        continue;
+      }
+      if (this.swapPairsKey(swaps.map((swap) => swap.indexes)) === expected) {
+        return taskUid;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Waits for a previously submitted Meilisearch task.
+   *
+   * @param taskUid - the Meilisearch task identifier.
+   * @param allowExistingIndex - whether an existing index task failure is accepted.
+   * @param allowMissingIndex - whether a missing index task failure is accepted.
+   * @returns a promise that resolves after the task succeeds.
+   */
+  public async waitForTask(
+    taskUid: number,
+    allowExistingIndex = false,
+    allowMissingIndex = false
+  ): Promise<void> {
+    await this.waitForTaskResult(
+      taskUid,
+      allowExistingIndex,
+      allowMissingIndex
+    );
   }
 
   /**
@@ -305,10 +402,23 @@ export class MeilisearchClient {
     return `${this.indexPrefix}_${index}`;
   }
 
+  private swapPairsKey(indexes: string[][]): string {
+    return JSON.stringify(
+      indexes
+        .map((pair) => [...pair].sort())
+        .sort((first, second) => {
+          const firstKey = JSON.stringify(first);
+          const secondKey = JSON.stringify(second);
+          return firstKey.localeCompare(secondKey);
+        })
+    );
+  }
+
   private async request<T>(
     path: string,
     options: {
       allowConflict?: boolean;
+      allowNotFound?: boolean;
       body?: string;
       method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
     }
@@ -325,6 +435,9 @@ export class MeilisearchClient {
     if (options.allowConflict && response.status === 409) {
       return undefined;
     }
+    if (options.allowNotFound && response.status === 404) {
+      return undefined;
+    }
     if (!response.ok) {
       throw new Error(
         `Meilisearch request failed with status ${response.status}`
@@ -334,9 +447,10 @@ export class MeilisearchClient {
     return (await response.json()) as T;
   }
 
-  private async waitForTask(
+  private async waitForTaskResult(
     taskUid: number,
-    allowExistingIndex = false
+    allowExistingIndex = false,
+    allowMissingIndex = false
   ): Promise<void> {
     const timeoutAt = Date.now() + MeilisearchClient.TASK_TIMEOUT;
 
@@ -352,6 +466,13 @@ export class MeilisearchClient {
           allowExistingIndex &&
           (task.error?.code === "index_already_exists" ||
             task.error?.message.endsWith("already exists."))
+        ) {
+          return;
+        }
+        if (
+          allowMissingIndex &&
+          (task.error?.code === "index_not_found" ||
+            task.error?.message.endsWith("not found."))
         ) {
           return;
         }
