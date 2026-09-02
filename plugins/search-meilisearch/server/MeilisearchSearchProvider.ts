@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import invariant from "invariant";
 import { Op } from "sequelize";
-import { DirectionFilter, SearchableModel, StatusFilter } from "@shared/types";
+import type { Filter } from "@shared/helpers/FilterHelper";
+import { DirectionFilter, SearchableModel } from "@shared/types";
 import { sleep } from "@shared/utils/timers";
 import type { SortFilter } from "@shared/types";
 import type Collection from "@server/models/Collection";
@@ -24,9 +25,14 @@ import {
   type MeilisearchHit,
   type MeilisearchIndexSettings,
 } from "./MeilisearchClient";
+import {
+  isMeilisearchFilterSupported,
+  toMeilisearchFilter,
+} from "./MeilisearchFilter";
 
 interface DocumentIndexRecord {
   ancestorDocumentIds: string[];
+  archivedAt: number | null;
   collectionId: string | null;
   collaboratorIds: string[];
   createdAt: number;
@@ -39,9 +45,12 @@ interface DocumentIndexRecord {
   isTrialImport: boolean;
   memberGroupIds: string[];
   memberUserIds: string[];
+  parentDocumentId: string | null;
   previousTitles: string[];
+  publishedAt: number | null;
   teamId: string;
   text: string;
+  templateId: string;
   title: string;
   updatedAt: number;
 }
@@ -81,10 +90,13 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     team: Team,
     options: SearchOptions = {}
   ): Promise<SearchResponse> {
+    if (options.filter && !isMeilisearchFilterSupported(options.filter)) {
+      return new PostgresSearchProvider().searchForTeam(team, options);
+    }
     await this.ensureIndexes();
     const { limit = 15, offset = 0, query } = options;
     const filters = this.documentFilters(team.id, options);
-    filters.push("isDeleted = false", "isDraft = false");
+    filters.push("isDeleted = false", "isDraft = false", "isArchived = false");
 
     const documentIds = await this.shareDocumentIds(options.share);
     if (documentIds) {
@@ -112,7 +124,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     const where = await PostgresSearchProvider.buildWhere(team, {
       ...options,
       query: undefined,
-      statusFilter: [...(options.statusFilter ?? []), StatusFilter.Published],
+      filter: this.withPublishedConstraint(options.filter),
     });
     where[Op.and].push({ id: ids });
     const documents = await Document.unscoped().findAll({ where });
@@ -134,6 +146,9 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     user: User,
     options: SearchOptions = {}
   ): Promise<Document[]> {
+    if (options.filter && !isMeilisearchFilterSupported(options.filter)) {
+      return new PostgresSearchProvider().searchTitlesForUser(user, options);
+    }
     await this.ensureIndexes();
     const { limit = 15, offset = 0, query } = options;
     const response = await this.client.search("documents", {
@@ -204,6 +219,9 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
     user: User,
     options: SearchOptions = {}
   ): Promise<SearchResponse> {
+    if (options.filter && !isMeilisearchFilterSupported(options.filter)) {
+      return new PostgresSearchProvider().searchForUser(user, options);
+    }
     await this.ensureIndexes();
     const { limit = 15, offset = 0, query } = options;
     const response = await this.client.search("documents", {
@@ -419,6 +437,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
   private documentSettings(): MeilisearchIndexSettings {
     return {
       filterableAttributes: [
+        "archivedAt",
         "collectionId",
         "collaboratorIds",
         "createdAt",
@@ -431,7 +450,11 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
         "isTrialImport",
         "memberGroupIds",
         "memberUserIds",
+        "parentDocumentId",
+        "publishedAt",
         "teamId",
+        "templateId",
+        "title",
         "updatedAt",
       ],
       localizedAttributes: [
@@ -509,12 +532,8 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       collectionIds.length ? this.inFilter("collectionId", collectionIds) : "",
       `memberUserIds = ${this.filterValue(user.id)}`,
       groupIds.length ? this.inFilter("memberGroupIds", groupIds) : "",
+      `createdById = ${this.filterValue(user.id)} AND collectionId IS NULL`,
     ].filter(Boolean);
-    if (options.statusFilter?.includes(StatusFilter.Draft)) {
-      accessFilters.push(
-        `isDraft = true AND collectionId IS NULL AND createdById = ${this.filterValue(user.id)}`
-      );
-    }
     const filters = this.documentFilters(user.teamId, options);
     filters.push(`(${accessFilters.join(" OR ")})`);
     return filters;
@@ -527,39 +546,24 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       "isTemplate = false",
       "isTrialImport = false",
     ];
-    if (options.collectionId) {
-      filters.push(`collectionId = ${this.filterValue(options.collectionId)}`);
-    }
-    if (options.documentIds?.length) {
-      filters.push(this.inFilter("id", options.documentIds));
-    }
-    if (options.collaboratorIds?.length) {
-      filters.push(
-        this.containsAllFilter("collaboratorIds", options.collaboratorIds)
-      );
-    }
-    if (options.dateFilter) {
-      const milliseconds = {
-        day: 86_400_000,
-        week: 604_800_000,
-        month: 2_592_000_000,
-        year: 31_536_000_000,
-      }[options.dateFilter];
-      filters.push(`updatedAt > ${Date.now() - milliseconds}`);
-    }
-    if (options.statusFilter?.length) {
-      const statuses = options.statusFilter.map((status) => {
-        if (status === StatusFilter.Archived) {
-          return "isArchived = true";
-        }
-        if (status === StatusFilter.Draft) {
-          return "isDraft = true AND isArchived = false";
-        }
-        return "isDraft = false AND isArchived = false";
-      });
-      filters.push(`(${statuses.join(" OR ")})`);
+    if (options.filter) {
+      filters.push(toMeilisearchFilter(options.filter));
     }
     return filters;
+  }
+
+  private withPublishedConstraint(filter: Filter | undefined): Filter {
+    const publishedFilter: Filter = {
+      operator: "AND",
+      filters: [
+        { field: "archivedAt", operator: "isNull" },
+        { field: "publishedAt", operator: "isNotNull" },
+      ],
+    };
+    if (!filter) {
+      return publishedFilter;
+    }
+    return { operator: "AND", filters: [filter, publishedFilter] };
   }
 
   private async shareDocumentIds(share: Share | undefined) {
@@ -585,6 +589,7 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
   private documentRecord(document: Document): DocumentIndexRecord {
     return {
       ancestorDocumentIds: [],
+      archivedAt: document.archivedAt?.getTime() ?? null,
       collectionId: document.collectionId ?? null,
       collaboratorIds: document.collaboratorIds,
       createdAt: document.createdAt.getTime(),
@@ -601,9 +606,12 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
       memberUserIds: document.memberships.map(
         (membership) => membership.userId
       ),
+      parentDocumentId: document.parentDocumentId,
       previousTitles: document.previousTitles ?? [],
+      publishedAt: document.publishedAt?.getTime() ?? null,
       teamId: document.teamId,
       text: DocumentHelper.toPlainText(document),
+      templateId: document.templateId,
       title: document.title,
       updatedAt: document.updatedAt.getTime(),
     };
@@ -728,12 +736,6 @@ export default class MeilisearchSearchProvider extends BaseSearchProvider {
 
   private inFilter(field: string, values: string[]) {
     return `${field} IN [${values.map((value) => this.filterValue(value)).join(", ")}]`;
-  }
-
-  private containsAllFilter(field: string, values: string[]) {
-    return values
-      .map((value) => `${field} = ${this.filterValue(value)}`)
-      .join(" AND ");
   }
 
   private filterValue(value: string) {
